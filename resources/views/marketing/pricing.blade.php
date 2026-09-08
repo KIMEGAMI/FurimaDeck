@@ -2,14 +2,14 @@
     $pageSeo = config('seo.pages')['marketing.pricing'] ?? [];
     $pricingFaqs = [
         ['Freeプランはいくらですか？', 'Freeプランは月額0円です。商品登録50件、カテゴリ登録5件まで利用できます。'],
-        ['Premiumプランはいくらですか？', 'Premiumプランは7日間無料お試し後、月額480円（税込）です。商品登録数とカテゴリ数の制限を外し、CSV管理、売上分析、ジャンル別分析、重複チェックまでまとめて使えるため、古着販売の毎日の作業を短くできます。'],
+        ['Premiumプランはいくらですか？', 'Premiumプランは7日間無料お試し後、月額480円（税込）です。商品登録数とカテゴリ数の制限を外し、CSV管理、売上分析、ジャンル別分析、重複チェックまでまとめて使えるため、フリマ販売の毎日の作業を短くできます。'],
         ['Premiumは解約できますか？', 'ログイン後の契約管理画面からStripeの契約管理画面へ進み、解約できます。7日間無料お試し中に使い心地を確認してから継続を判断できます。'],
     ];
     $schema = [
         [
             '@context' => 'https://schema.org',
             '@type' => 'Product',
-            'name' => 'FURUPRO Premium',
+            'name' => 'FurimaDeck Premium',
             'description' => $pageSeo['description'],
             'brand' => [
                 '@type' => 'Brand',
@@ -47,7 +47,7 @@
             <p class="text-sm font-black tracking-[0.24em] text-cyan-200">PRICING</p>
             <h1 class="mt-4 max-w-4xl text-4xl font-black leading-tight md:text-5xl">料金体系</h1>
             <p class="mt-5 max-w-3xl text-base font-semibold leading-8 text-cyan-100">
-                Freeは小さく試すための無料プランです。Premiumは7日間無料お試し後、月額480円（税込）で登録制限をなくし、CSV、売上分析、ジャンル別分析など古着販売の運用に必要な機能をまとめて利用できます。
+                Freeは小さく試すための無料プランです。Premiumは7日間無料お試し後、月額480円（税込）で登録制限をなくし、CSV、売上分析、ジャンル別分析などフリマ販売の運用に必要な機能をまとめて利用できます。
             </p>
         </div>
     </section>
@@ -109,7 +109,7 @@
                             <li>カテゴリ登録数の制限なし</li>
                             <li>画像付き商品登録</li>
                             <li>出品中・SOLD管理</li>
-                            <li>FURUPRO CSVの一括登録</li>
+                            <li>FurimaDeck形式CSVの一括登録</li>
                             <li>ヤフオク売上CSV・メルカリShops CSVの変換登録</li>
                             <li>売上CSV、全商品バックアップCSV、復元用CSVの出力</li>
                             <li>売上、利益、利益率の分析</li>

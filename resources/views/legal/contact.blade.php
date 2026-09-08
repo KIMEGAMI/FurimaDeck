@@ -6,7 +6,7 @@
     :description="$pageSeo['description']"
 >
     <h2>お問い合わせフォーム</h2>
-    <p>FURUPROの使い方、不具合、アカウント、個人情報の取り扱いに関するお問い合わせを受け付けています。</p>
+    <p>FurimaDeckの使い方、不具合、アカウント、個人情報の取り扱いに関するお問い合わせを受け付けています。</p>
     <p>状況が分かるように、発生した画面、操作内容、表示されたエラーの概要を添えてください。パスワード、APIキー、決済カード番号などの機密情報は入力しないでください。</p>
 
     <form method="POST" action="{{ route('legal.contact.store') }}" class="not-prose mt-8 space-y-6 rounded-lg border border-slate-200 bg-slate-50 p-5">

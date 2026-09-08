@@ -43,7 +43,7 @@ class PwaController extends Controller
         return response()
             ->view('pwa.service-worker', [
                 'cacheName' => config('pwa.cache_name'),
-                'offlineTitle' => 'FURUPRO',
+                'offlineTitle' => 'FurimaDeck',
                 'offlineMessage' => '現在オフラインです。通信状況を確認してから再度お試しください。',
             ], 200)
             ->header('Content-Type', 'application/javascript; charset=UTF-8')

@@ -114,7 +114,7 @@ return [
 
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', env('ADMIN_MAIL_FROM_ADDRESS', $mailFromFallback)),
-        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'FURUPRO')),
+        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'FurimaDeck')),
     ],
 
 ];

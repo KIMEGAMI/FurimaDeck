@@ -86,7 +86,7 @@
                         <p class="text-sm font-black tracking-[0.18em] text-cyan-700">STRIPE BILLING</p>
                         <h1 class="mt-2 text-3xl font-black text-slate-900 md:text-4xl">契約・解約</h1>
                         <p class="mt-4 max-w-2xl text-sm font-bold leading-7 text-slate-600">
-                            Premium登録、支払い方法の変更、領収書確認、解約はStripeの安全な画面で行います。FURUPROはカード番号を保存しません。
+                            Premium登録、支払い方法の変更、領収書確認、解約はStripeの安全な画面で行います。FurimaDeckはカード番号を保存しません。
                         </p>
                     </div>
 
@@ -234,7 +234,7 @@
                         <dl class="mt-4 grid gap-3 text-sm font-bold text-slate-700 sm:grid-cols-2">
                             <div class="rounded-lg bg-white p-4">
                                 <dt class="text-slate-950">サービス名</dt>
-                                <dd class="mt-1">FURUPRO Premium</dd>
+                                <dd class="mt-1">FurimaDeck Premium</dd>
                             </div>
                             <div class="rounded-lg bg-white p-4">
                                 <dt class="text-slate-950">料金</dt>
