@@ -599,8 +599,8 @@ class SubscriptionController extends Controller
                 'unit_amount' => (int) config('services.stripe.subscription_amount', 480),
                 'recurring' => ['interval' => 'month'],
                 'product_data' => [
-                    'name' => config('services.stripe.subscription_product_name', 'FURUPRO Premium'),
-                    'description' => config('services.stripe.subscription_product_description', 'FURUPRO paid subscription.'),
+                    'name' => config('services.stripe.subscription_product_name', 'FurimaDeck Premium'),
+                    'description' => config('services.stripe.subscription_product_description', 'FurimaDeck paid subscription.'),
                 ],
             ],
         ];

@@ -28,8 +28,8 @@ class SuspiciousLoginNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('FURUPRO 不審なログインの可能性があります')
-            ->greeting('FURUPROをご利用いただきありがとうございます。')
+            ->subject('FurimaDeck 不審なログインの可能性があります')
+            ->greeting('FurimaDeckをご利用いただきありがとうございます。')
             ->line('普段と異なる環境からログインされた可能性があります。')
             ->line('ログイン方法: '.$this->loginMethod)
             ->line('ログイン日時: '.$this->loggedInAt)

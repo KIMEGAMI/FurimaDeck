@@ -30,8 +30,8 @@ return [
         'checkout_locale' => env('STRIPE_CHECKOUT_LOCALE', 'ja'),
         'trial_period_days' => (int) env('STRIPE_TRIAL_PERIOD_DAYS', 7),
         'portal_configuration_id' => env('STRIPE_PORTAL_CONFIGURATION_ID'),
-        'subscription_product_name' => env('STRIPE_PREMIUM_PRODUCT_NAME', 'FURUPRO Premium'),
-        'subscription_product_description' => env('STRIPE_PREMIUM_PRODUCT_DESCRIPTION', 'FURUPRO paid subscription.'),
+        'subscription_product_name' => env('STRIPE_PREMIUM_PRODUCT_NAME', 'FurimaDeck Premium'),
+        'subscription_product_description' => env('STRIPE_PREMIUM_PRODUCT_DESCRIPTION', 'FurimaDeck paid subscription.'),
     ],
 
     'postmark' => [

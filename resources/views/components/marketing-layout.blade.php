@@ -6,8 +6,8 @@
 ])
 
 @php
-    $siteName = config('seo.site_name', 'FURUPRO');
-    $image = asset(ltrim(config('seo.image', '/images/furugi-manager-hero.png'), '/'));
+    $siteName = config('seo.site_name', 'FurimaDeck');
+    $image = asset(ltrim(config('seo.image', '/images/furimadeck-hero.png'), '/'));
     $homeUrl = route('home');
     $organizationId = $homeUrl.'#organization';
     $websiteId = $homeUrl.'#website';
@@ -108,8 +108,8 @@
 <body class="bg-white text-slate-950 antialiased">
     <header class="border-b border-slate-200 bg-white">
         <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-            <a href="{{ route('home') }}" class="flex items-center gap-3 font-black" aria-label="FURUPRO トップページ">
-                <span>FURUPRO</span>
+            <a href="{{ route('home') }}" class="flex items-center gap-3 font-black" aria-label="FurimaDeck トップページ">
+                <span>FurimaDeck</span>
             </a>
             <nav class="flex flex-wrap justify-end gap-x-4 gap-y-2 text-sm font-bold text-slate-700" aria-label="公開ページ">
                 <a href="{{ route('marketing.features') }}" class="hover:text-slate-950">機能</a>
@@ -135,7 +135,7 @@
                 <a href="{{ route('legal.commercial') }}" class="hover:text-slate-950">特定商取引法に基づく表記</a>
                 <a href="{{ route('legal.contact') }}" class="hover:text-slate-950">お問い合わせ</a>
             </nav>
-            <p>&copy; 2026 FURUPRO. All rights reserved.</p>
+            <p>&copy; 2026 FurimaDeck. All rights reserved.</p>
         </div>
     </footer>
 </body>

@@ -11,9 +11,9 @@ class ExampleTest extends TestCase
         $response = $this->get('/');
 
         $response->assertOk();
-        $response->assertSee('古着販売の在庫管理', false);
-        $response->assertSee('images/furugi-manager-hero.png?v=', false);
-        $response->assertSee('images/furugi-manager-value.png?v=', false);
+        $response->assertSee('フリマ販売の収益管理', false);
+        $response->assertSee('images/furimadeck-hero.png?v=', false);
+        $response->assertSee('images/furimadeck-value.png?v=', false);
     }
 
     public function test_sitemap_is_available(): void
@@ -69,7 +69,7 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('Content-Type', 'text/plain; charset=UTF-8');
-        $response->assertSee('# FURUPRO', false);
+        $response->assertSee('# FurimaDeck', false);
         $response->assertSee('/features', false);
         $response->assertSee('Pricing: Free is 0 JPY. Premium includes a 7-day free trial, then 480 JPY per month including tax.', false);
         $response->assertDontSee('/dashboard', false);
@@ -81,7 +81,7 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/manifest+json; charset=UTF-8');
-        $response->assertJsonPath('short_name', 'FURUPRO');
+        $response->assertJsonPath('short_name', 'FurimaDeck');
         $response->assertJsonPath('display', 'standalone');
     }
 
@@ -102,7 +102,7 @@ class ExampleTest extends TestCase
         $response->assertOk();
         $response->assertSee('rel="manifest"', false);
         $response->assertSee('data-pwa-install', false);
-        $response->assertSee('FURUPROをアプリとして追加', false);
+        $response->assertSee('FurimaDeckをアプリとして追加', false);
     }
 
     public function test_marketing_pages_are_available(): void

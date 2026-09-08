@@ -5,18 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     @php
         $pageSeo = config('seo.pages.register');
-        $siteName = config('seo.site_name', 'FURUPRO');
-        $image = asset(ltrim(config('seo.image', '/images/furugi-manager-hero.png'), '/'));
+        $siteName = config('seo.site_name', 'FurimaDeck');
+        $image = asset(ltrim(config('seo.image', '/images/furimadeck-hero.png'), '/'));
     @endphp
-    <title>{{ $pageSeo['title'] ?? '無料アカウント作成 | FURUPRO' }}</title>
-    <meta name="description" content="{{ $pageSeo['description'] ?? 'FURUPROの無料アカウント作成ページです。' }}">
+    <title>{{ $pageSeo['title'] ?? '無料アカウント作成 | FurimaDeck' }}</title>
+    <meta name="description" content="{{ $pageSeo['description'] ?? 'FurimaDeckの無料アカウント作成ページです。' }}">
     <meta name="robots" content="index,follow,max-image-preview:large">
     <link rel="canonical" href="{{ route('register') }}">
     <meta property="og:type" content="website">
     <meta property="og:locale" content="{{ config('seo.locale', 'ja_JP') }}">
     <meta property="og:site_name" content="{{ $siteName }}">
-    <meta property="og:title" content="{{ $pageSeo['title'] ?? '無料アカウント作成 | FURUPRO' }}">
-    <meta property="og:description" content="{{ $pageSeo['description'] ?? 'FURUPROの無料アカウント作成ページです。' }}">
+    <meta property="og:title" content="{{ $pageSeo['title'] ?? '無料アカウント作成 | FurimaDeck' }}">
+    <meta property="og:description" content="{{ $pageSeo['description'] ?? 'FurimaDeckの無料アカウント作成ページです。' }}">
     <meta property="og:url" content="{{ route('register') }}">
     <meta property="og:image" content="{{ $image }}">
     <meta name="twitter:card" content="{{ config('seo.twitter_card', 'summary_large_image') }}">
@@ -26,22 +26,22 @@
 </head>
 
 <body class="min-h-screen bg-slate-100">
-    <main class="flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none" style="background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('{{ asset('images/furugi-auth-visual.png') }}');">
+    <main class="flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none" style="background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('{{ asset('images/furimadeck-hero.png') }}');">
         <div class="grid min-h-[720px] w-full max-w-7xl grid-cols-1 overflow-hidden rounded-[2rem] bg-white shadow-2xl lg:grid-cols-2">
             <section class="relative hidden bg-blue-900 lg:block">
                 <img
-                    src="{{ asset('images/furugi-auth-visual.png') }}"
-                    alt="FURUPRO"
+                    src="{{ asset('images/furimadeck-hero.png') }}"
+                    alt="FurimaDeck"
                     class="absolute inset-0 h-full w-full object-cover"
                 >
                 <div class="absolute inset-0 bg-gradient-to-r from-blue-950/40 to-transparent"></div>
                 <div class="absolute left-8 top-8 text-white">
-                    <div class="text-sm font-bold tracking-[0.3em]">CLOTHING MANAGEMENT SYSTEM</div>
+                    <div class="text-sm font-bold tracking-[0.18em]">FLEA MARKET PROFIT SaaS</div>
                     <div class="mt-4 h-1 w-24 rounded-full bg-white"></div>
                 </div>
                 <div class="absolute bottom-10 left-8 right-8 text-white">
                     <h2 class="text-4xl font-black leading-tight">
-                        古着販売の管理を、<br>
+                        フリマ販売の収益を、<br>
                         もっとスマートに。
                     </h2>
                     <p class="mt-5 text-sm leading-7 text-blue-50">
@@ -54,12 +54,12 @@
                 <div class="w-full max-w-xl">
                     <div class="mb-8 text-center">
                         <a href="{{ route('home') }}" class="mb-6 inline-flex text-3xl font-black tracking-[0.22em] text-cyan-700">
-                            FURUPRO
+                            FurimaDeck
                         </a>
 
                         <h1 class="text-4xl font-black tracking-tight text-blue-800">アカウント作成</h1>
                         <p class="mt-3 text-sm font-bold tracking-[0.25em] text-cyan-700">CREATE ACCOUNT</p>
-                        <p class="mt-6 font-semibold text-slate-700">FURUPROを無料で始めましょう。</p>
+                        <p class="mt-6 font-semibold text-slate-700">FurimaDeckを無料で始めましょう。</p>
                         <div class="mx-auto mt-6 h-1 w-16 rounded-full bg-blue-600"></div>
                     </div>
 
@@ -212,7 +212,7 @@
                         </div>
                     </form>
 
-                    <p class="mt-8 text-center text-xs text-slate-600">&copy; 2026 FURUPRO All rights reserved.</p>
+                    <p class="mt-8 text-center text-xs text-slate-600">&copy; 2026 FurimaDeck All rights reserved.</p>
                 </div>
             </section>
         </div>

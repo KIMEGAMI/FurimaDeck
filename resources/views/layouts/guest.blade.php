@@ -7,7 +7,7 @@
 
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'furugi') }}</title>
+        <title>{{ config('app.name', 'FurimaDeck') }}</title>
 
         <x-pwa-head />
         <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
@@ -28,7 +28,7 @@
         >
             <div>
                 <a href="/" class="text-3xl font-black tracking-[0.22em] text-white drop-shadow-2xl">
-                    FURUPRO
+                    FurimaDeck
                 </a>
             </div>
 

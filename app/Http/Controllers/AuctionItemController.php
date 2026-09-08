@@ -936,7 +936,7 @@ class AuctionItemController extends Controller
             ->route('subscriptions.index')
             ->with('error', 'Freeプランの商品登録は'.User::FREE_AUCTION_ITEM_LIMIT.'件までです。Premiumは7日間無料お試し後、月額480円（税込）で商品登録数の制限がなくなります。')
             ->with('upgrade_title', '商品登録数の上限に達しました。')
-            ->with('upgrade_description', '7日間無料お試しで、商品登録数の制限解除、CSV登録、売上分析を実際の古着販売データで確認できます。')
+            ->with('upgrade_description', '7日間無料お試しで、商品登録数の制限解除、CSV登録、売上分析を実際のフリマ販売データで確認できます。')
             ->with('upgrade_features', $this->premiumUpgradeFeatures());
     }
 
