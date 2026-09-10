@@ -108,7 +108,9 @@ class ExampleTest extends TestCase
         $response->assertHeader('Content-Type', 'application/javascript; charset=UTF-8');
         $response->assertSee('self.addEventListener', false);
         $response->assertSee('furimadeck-pwa-v2', false);
-        $response->assertSee('再接続する', false);
+        $encodedRetryLabel = json_encode('再接続する');
+        $this->assertIsString($encodedRetryLabel);
+        $response->assertSee('const OFFLINE_RETRY_LABEL = '.$encodedRetryLabel.';', false);
         $response->assertSee("window.addEventListener('online'", false);
         $response->assertDontSee("'/login'", false);
     }

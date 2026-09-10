@@ -1,7 +1,7 @@
 const CACHE_NAME = @json($cacheName);
 const OFFLINE_TITLE = @json($offlineTitle);
 const OFFLINE_MESSAGE = @json($offlineMessage);
-const OFFLINE_RETRY_LABEL = {!! json_encode($offlineRetryLabel, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!};
+const OFFLINE_RETRY_LABEL = @json($offlineRetryLabel);
 const CORE_ASSETS = [
     '/favicon.ico',
     '/images/logo.png',
