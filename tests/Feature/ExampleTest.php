@@ -26,6 +26,7 @@ class ExampleTest extends TestCase
         $response->assertSee('/features', false);
         $response->assertSee('/use-cases', false);
         $response->assertSee('/pricing', false);
+        $response->assertSee(config('seo.updated_at'), false);
         $response->assertDontSee('/login', false);
     }
 
@@ -44,8 +45,12 @@ class ExampleTest extends TestCase
     public function test_commercial_transactions_page_contains_required_disclosure_items(): void
     {
         $response = $this->get('/commercial-transactions');
+        $trialDays = (int) config('furimadeck.billing.trial_period_days');
+        $monthlyPrice = (int) config('furimadeck.billing.monthly_price_jpy');
 
         $response->assertOk();
+        $response->assertSee(config('legal.updated_at'), false);
+        $response->assertSee("Premiumプラン: {$trialDays}日間無料お試し後、月額".number_format($monthlyPrice).'円（税込）', false);
         foreach ([
             '事業者名',
             '代表者名または運営責任者',
@@ -63,6 +68,16 @@ class ExampleTest extends TestCase
         }
     }
 
+    public function test_public_pricing_page_matches_furimadeck_plan_settings(): void
+    {
+        $response = $this->get('/pricing');
+        $trialDays = (int) config('furimadeck.billing.trial_period_days');
+        $monthlyPrice = (int) config('furimadeck.billing.monthly_price_jpy');
+
+        $response->assertOk();
+        $response->assertSee("{$trialDays}日間無料お試し後、月額".number_format($monthlyPrice).'円（税込）', false);
+    }
+
     public function test_llms_txt_is_available(): void
     {
         $response = $this->get('/llms.txt');
@@ -71,7 +86,7 @@ class ExampleTest extends TestCase
         $response->assertHeader('Content-Type', 'text/plain; charset=UTF-8');
         $response->assertSee('# FurimaDeck', false);
         $response->assertSee('/features', false);
-        $response->assertSee('Pricing: Free is 0 JPY. Premium includes a 7-day free trial, then 480 JPY per month including tax.', false);
+        $response->assertSee('Pricing: Free is 0 JPY. Premium includes a 7-day free trial, then 980 JPY per month including tax.', false);
         $response->assertDontSee('/dashboard', false);
     }
 
@@ -92,6 +107,9 @@ class ExampleTest extends TestCase
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/javascript; charset=UTF-8');
         $response->assertSee('self.addEventListener', false);
+        $response->assertSee('furimadeck-pwa-v2', false);
+        $response->assertSee('再接続する', false);
+        $response->assertSee("window.addEventListener('online'", false);
         $response->assertDontSee("'/login'", false);
     }
 

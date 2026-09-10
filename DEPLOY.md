@@ -1,5 +1,13 @@
 # Production Deployment
 
+> **Legacy FURUPRO deployment only.** This document retains the existing
+> FURUPRO production path, database, domain, and integration settings for
+> legacy-service maintenance. Do not use it to deploy FurimaDeck.
+>
+> FurimaDeck must use a dedicated application path, database, public URL,
+> Stripe endpoint, and OAuth redirect URI. Follow
+> `docs/furimadeck-cutover-handoff.md` after those values are confirmed.
+
 This project is a Laravel application with Vite assets.
 
 The production environment assumed here is:
@@ -36,7 +44,7 @@ For the first deployment:
 
 ```bash
 cd /var/www
-sudo git clone https://github.com/KIMEGAMI/furugi.git furugi
+sudo git clone https://github.com/KIMEGAMI/FurimaDeck.git furugi
 sudo chown -R www-data:www-data /var/www/furugi
 cd /var/www/furugi
 ```

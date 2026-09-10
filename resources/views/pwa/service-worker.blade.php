@@ -1,6 +1,7 @@
 const CACHE_NAME = @json($cacheName);
 const OFFLINE_TITLE = @json($offlineTitle);
 const OFFLINE_MESSAGE = @json($offlineMessage);
+const OFFLINE_RETRY_LABEL = {!! json_encode($offlineRetryLabel, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!};
 const CORE_ASSETS = [
     '/favicon.ico',
     '/images/logo.png',
@@ -39,7 +40,7 @@ self.addEventListener('fetch', (event) => {
     if (request.mode === 'navigate') {
         event.respondWith(
             fetch(request).catch(() => new Response(
-                `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${OFFLINE_TITLE}</title></head><body style="font-family:sans-serif;padding:32px;background:#0f172a;color:#f8fafc"><h1>${OFFLINE_TITLE}</h1><p>${OFFLINE_MESSAGE}</p></body></html>`,
+                `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${OFFLINE_TITLE}</title></head><body style="font-family:sans-serif;padding:32px;background:#0f172a;color:#f8fafc"><h1>${OFFLINE_TITLE}</h1><p>${OFFLINE_MESSAGE}</p><button type="button" id="offline-retry">${OFFLINE_RETRY_LABEL}</button><script>const retry=document.getElementById('offline-retry');retry.addEventListener('click',()=>window.location.reload());window.addEventListener('online',()=>window.location.reload());</script></body></html>`,
                 { headers: { 'Content-Type': 'text/html; charset=UTF-8' } }
             ))
         );

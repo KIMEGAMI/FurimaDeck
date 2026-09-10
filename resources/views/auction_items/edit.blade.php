@@ -45,7 +45,7 @@
                         </div>
                     </div>
 
-                    @include('auction_items.partials.category-selects', [
+                    @include('auction_items.partials.category-selects-v2', [
                         'parentCategories' => $parentCategories,
                         'parentSelectId' => 'edit_parent_category_id',
                         'categorySelectId' => 'edit_category_id',

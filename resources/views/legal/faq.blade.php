@@ -1,7 +1,9 @@
 @php
     $pageSeo = config('seo.pages')['legal.faq'] ?? [];
+    $premiumPrice = (int) config('furimadeck.billing.monthly_price_jpy');
+    $trialDays = (int) config('furimadeck.billing.trial_period_days');
     $faqs = [
-        ['FreeプランとPremiumプランの違いは何ですか？', 'Freeプランは無料で、商品登録50件、カテゴリ登録5件まで利用できます。Premiumプランは7日間無料お試し後、月額480円（税込）で、商品登録数とカテゴリ数の制限がなくなり、CSV管理、売上分析、ジャンル別分析、重複チェックなどの機能をまとめて利用できます。'],
+        ['FreeプランとPremiumプランの違いは何ですか？', "Freeプランは無料で、商品登録50件まで利用できます。Premiumプランは{$trialDays}日間無料お試し後、月額".number_format($premiumPrice).'円（税込）で、商品登録数の制限がなくなり、CSV登録・出力、販売と利益の管理を利用できます。'],
         ['CSVで一括登録できますか？', 'できます。FurimaDeck形式CSV、ヤフオクCSV変換、メルカリShops CSV変換などに対応しています。'],
         ['スマートフォンから商品画像を登録できますか？', 'できます。商品登録画面からカメラを起動して撮影した画像を登録できます。'],
         ['重複した商品を削除できますか？', '重複チェック画面から候補を確認し、残す商品を選んで不要な重複を削除できます。'],
