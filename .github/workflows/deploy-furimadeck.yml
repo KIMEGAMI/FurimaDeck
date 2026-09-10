@@ -1,0 +1,102 @@
+name: Deploy FurimaDeck
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: furimadeck-production-deploy
+  cancel-in-progress: false
+
+env:
+  FURIMADECK_DEPLOY_PORT: '22'
+  MIN_PHP_VERSION: '8.4.1'
+
+jobs:
+  deploy:
+    name: Deploy FurimaDeck production
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - name: Check out reviewed main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Validate FurimaDeck deployment settings
+        env:
+          DEPLOY_HOST: ${{ secrets.FURIMADECK_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.FURIMADECK_DEPLOY_USER }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.FURIMADECK_DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.FURIMADECK_DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ vars.FURIMADECK_DEPLOY_PATH }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_PRIVATE_KEY"
+          test -n "$DEPLOY_SSH_KNOWN_HOSTS"
+          test -n "$DEPLOY_PATH"
+          test "$DEPLOY_PATH" != "/"
+          test "$DEPLOY_PATH" != "/var/www/furugi"
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.FURIMADECK_DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.FURIMADECK_DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.FURIMADECK_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.FURIMADECK_DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.FURIMADECK_DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ vars.FURIMADECK_DEPLOY_PORT || env.FURIMADECK_DEPLOY_PORT }}
+          MIN_PHP_VERSION: ${{ env.MIN_PHP_VERSION }}
+        run: |
+          printf -v DEPLOY_PATH_ARG '%q' "$DEPLOY_PATH"
+          printf -v MIN_PHP_VERSION_ARG '%q' "$MIN_PHP_VERSION"
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "bash -s -- $DEPLOY_PATH_ARG $MIN_PHP_VERSION_ARG" <<'SCRIPT'
+          set -euo pipefail
+
+          DEPLOY_PATH="$1"
+          MIN_PHP_VERSION="$2"
+          case "$DEPLOY_PATH" in
+            /|/var/www/furugi)
+              echo "Refusing to deploy FurimaDeck to a legacy or unsafe path." >&2
+              exit 1
+              ;;
+          esac
+
+          test -d "$DEPLOY_PATH"
+          test -f "$DEPLOY_PATH/.env"
+          test ! -e "$DEPLOY_PATH/public/hot"
+          cd "$DEPLOY_PATH"
+          git status --porcelain
+          test -z "$(git status --porcelain)"
+          git fetch origin main
+          git merge --ff-only origin/main
+          php -r "if (version_compare(PHP_VERSION, '$MIN_PHP_VERSION', '<')) { fwrite(STDERR, 'PHP $MIN_PHP_VERSION or newer is required. Current: '.PHP_VERSION.PHP_EOL); exit(1); }"
+          sudo -u www-data composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress
+          sudo -u www-data npm ci --ignore-scripts
+          sudo -u www-data npm run build
+          sudo -u www-data php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force
+          sudo -u www-data php artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckCategorySeeder --force
+          sudo -u www-data php artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckMarketplaceSeeder --force
+          sudo -u www-data php artisan furimadeck:check-cutover
+          sudo -u www-data php artisan optimize:clear
+          sudo -u www-data php artisan config:cache
+          sudo -u www-data php artisan route:cache
+          sudo -u www-data php artisan view:cache
+          sudo -u www-data php artisan queue:restart || true
+          sudo systemctl reload apache2
+          SCRIPT

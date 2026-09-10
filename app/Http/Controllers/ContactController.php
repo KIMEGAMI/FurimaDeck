@@ -72,7 +72,7 @@ class ContactController extends Controller
     }
 
     /**
-     * @param array{name: string, email: string, subject: string, message: string} $input
+     * @param  array{name: string, email: string, subject: string, message: string}  $input
      */
     private function containsNgWord(array $input, NgWordFilter $ngWordFilter): bool
     {

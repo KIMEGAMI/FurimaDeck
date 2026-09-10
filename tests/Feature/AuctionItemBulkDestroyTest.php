@@ -15,56 +15,64 @@ class AuctionItemBulkDestroyTest extends TestCase
 
     public function test_user_can_delete_only_their_auction_items_after_confirmation(): void
     {
-        Storage::fake('public');
-
         $user = User::factory()->create();
         $otherUser = User::factory()->create();
         $category = Category::create(['name' => '親カテゴリ', 'sort_order' => 1]);
+        $pathSuffix = uniqid();
+        $itemImagePath = 'auction-items/test-bulk-destroy-item-'.$pathSuffix.'.jpg';
+        $soldImagePath = 'auction-items/test-bulk-destroy-sold-'.$pathSuffix.'.jpg';
+        $otherImagePath = 'auction-items/test-bulk-destroy-other-'.$pathSuffix.'.jpg';
 
-        Storage::disk('public')->put('auction-items/item.jpg', 'item-image');
-        Storage::disk('public')->put('auction-items/sold.jpg', 'sold-image');
-        Storage::disk('public')->put('auction-items/other.jpg', 'other-image');
+        Storage::disk('public')->put($itemImagePath, 'item-image');
+        Storage::disk('public')->put($soldImagePath, 'sold-image');
+        Storage::disk('public')->put($otherImagePath, 'other-image');
 
-        AuctionItem::create([
-            ...$this->auctionItemPayload('ITEM-001'),
-            'user_id' => $user->id,
-            'category_id' => $category->id,
-            'image_path' => 'auction-items/item.jpg',
-            'sold_image_path' => 'auction-items/sold.jpg',
-        ]);
+        try {
+            Storage::disk('public')->assertExists($otherImagePath);
 
-        AuctionItem::create([
-            ...$this->auctionItemPayload('OTHER-001'),
-            'user_id' => $otherUser->id,
-            'image_path' => 'auction-items/other.jpg',
-        ]);
+            AuctionItem::create([
+                ...$this->auctionItemPayload('ITEM-001'),
+                'user_id' => $user->id,
+                'category_id' => $category->id,
+                'image_path' => $itemImagePath,
+                'sold_image_path' => $soldImagePath,
+            ]);
 
-        $this
-            ->actingAs($user)
-            ->delete(route('auction-items.bulk-destroy'), [
-                'confirm_delete_all_items' => '1',
-            ])
-            ->assertRedirect(route('auction-items.index'))
-            ->assertSessionHas('success');
+            AuctionItem::create([
+                ...$this->auctionItemPayload('OTHER-001'),
+                'user_id' => $otherUser->id,
+                'image_path' => $otherImagePath,
+            ]);
 
-        $this->assertDatabaseMissing('auction_items', [
-            'user_id' => $user->id,
-            'management_id' => 'ITEM-001',
-        ]);
+            $this
+                ->actingAs($user)
+                ->delete(route('auction-items.bulk-destroy'), [
+                    'confirm_delete_all_items' => '1',
+                ])
+                ->assertRedirect(route('auction-items.index'))
+                ->assertSessionHas('success');
 
-        $this->assertDatabaseHas('auction_items', [
-            'user_id' => $otherUser->id,
-            'management_id' => 'OTHER-001',
-        ]);
+            $this->assertDatabaseMissing('auction_items', [
+                'user_id' => $user->id,
+                'management_id' => 'ITEM-001',
+            ]);
 
-        $this->assertDatabaseHas('categories', [
-            'id' => $category->id,
-            'name' => '親カテゴリ',
-        ]);
+            $this->assertDatabaseHas('auction_items', [
+                'user_id' => $otherUser->id,
+                'management_id' => 'OTHER-001',
+            ]);
 
-        Storage::disk('public')->assertMissing('auction-items/item.jpg');
-        Storage::disk('public')->assertMissing('auction-items/sold.jpg');
-        Storage::disk('public')->assertExists('auction-items/other.jpg');
+            $this->assertDatabaseHas('categories', [
+                'id' => $category->id,
+                'name' => '親カテゴリ',
+            ]);
+
+            Storage::disk('public')->assertMissing($itemImagePath);
+            Storage::disk('public')->assertMissing($soldImagePath);
+            Storage::disk('public')->assertExists($otherImagePath);
+        } finally {
+            Storage::disk('public')->delete($otherImagePath);
+        }
     }
 
     public function test_user_cannot_bulk_delete_items_without_confirmation_checkbox(): void

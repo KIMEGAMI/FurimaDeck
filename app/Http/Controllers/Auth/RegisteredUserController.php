@@ -16,9 +16,7 @@ use Illuminate\View\View;
 
 class RegisteredUserController extends Controller
 {
-    public function __construct(private readonly EmailVerificationDelivery $emailVerificationDelivery)
-    {
-    }
+    public function __construct(private readonly EmailVerificationDelivery $emailVerificationDelivery) {}
 
     public function create(): View
     {

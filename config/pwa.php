@@ -9,5 +9,5 @@ return [
     'display' => env('PWA_DISPLAY', 'standalone'),
     'start_url' => env('PWA_START_URL', '/'),
     'scope' => env('PWA_SCOPE', '/'),
-    'cache_name' => env('PWA_CACHE_NAME', 'furimadeck-pwa-v1'),
+    'cache_name' => env('PWA_CACHE_NAME', 'furimadeck-pwa-v2'),
 ];

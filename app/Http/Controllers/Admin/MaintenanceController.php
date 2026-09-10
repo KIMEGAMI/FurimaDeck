@@ -12,8 +12,7 @@ class MaintenanceController extends Controller
 {
     public function __construct(
         private readonly MaintenanceModeService $maintenanceMode
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): View
     {

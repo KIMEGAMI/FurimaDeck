@@ -11,6 +11,10 @@ class HomeController extends Controller
     public function __invoke(): View|RedirectResponse
     {
         if (Auth::check()) {
+            if ((bool) config('furimadeck.cutover_enabled')) {
+                return redirect()->route('furimadeck-dashboard');
+            }
+
             return redirect()->route('dashboard');
         }
 

@@ -45,6 +45,7 @@ class PwaController extends Controller
                 'cacheName' => config('pwa.cache_name'),
                 'offlineTitle' => 'FurimaDeck',
                 'offlineMessage' => '現在オフラインです。通信状況を確認してから再度お試しください。',
+                'offlineRetryLabel' => '再接続する',
             ], 200)
             ->header('Content-Type', 'application/javascript; charset=UTF-8')
             ->header('Service-Worker-Allowed', '/');

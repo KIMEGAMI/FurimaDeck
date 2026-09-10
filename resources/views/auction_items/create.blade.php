@@ -30,22 +30,24 @@
                     <div>
                         <span class="block text-xs font-black tracking-wider text-slate-600">商品画像</span>
                         <div class="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                <div>
-                                    <label for="camera_image" class="block text-sm font-black text-slate-700">カメラで撮影</label>
-                                    <input id="camera_image" type="file" name="camera_image" accept="image/jpeg,image/png,image/webp" capture="environment" class="mt-2 block w-full cursor-pointer rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-700 file:px-4 file:py-2 file:text-sm file:font-black file:text-white">
-                                </div>
-                                <div>
-                                    <label for="image" class="block text-sm font-black text-slate-700">画像を選択</label>
-                                    <input id="image" type="file" name="image" accept="image/jpeg,image/png,image/webp" class="mt-2 block w-full cursor-pointer rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-black file:text-slate-700">
+                            <input id="images" type="file" name="images[]" accept="image/jpeg,image/png,image/webp" multiple class="sr-only">
+                            <input id="camera-images" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" class="sr-only">
+
+                            <div id="image-drop-zone" class="rounded-xl border-2 border-dashed border-slate-300 bg-white p-6 text-center transition">
+                                <p class="text-sm font-black text-slate-700">画像をここへドラッグ＆ドロップ</p>
+                                <p class="mt-1 text-xs font-semibold text-slate-500">JPG / PNG / WEBP、1枚あたり2MB、最大10枚</p>
+                                <div class="mt-4 flex flex-wrap justify-center gap-2">
+                                    <button id="choose-images" type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-700">画像を選択</button>
+                                    <button id="take-photo" type="button" class="rounded-lg border border-blue-700 bg-white px-4 py-2 text-sm font-black text-blue-700 transition hover:bg-blue-50">カメラで撮影</button>
                                 </div>
                             </div>
-                            <p class="mt-2 text-xs font-semibold text-slate-500">スマートフォンでは「カメラで撮影」から背面カメラを起動できます。JPG / PNG / WEBP 対応、最大2MBです。</p>
+                            <p id="image-upload-error" class="mt-3 hidden text-sm font-bold text-red-700" role="alert"></p>
                             <div id="image-preview-wrap" class="mt-4 hidden">
-                                <p class="mb-2 text-xs font-black tracking-wider text-slate-600">選択中の画像</p>
-                                <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                                    <img id="image-preview" src="" alt="選択中の商品画像" class="h-72 w-full object-contain">
+                                <div class="mb-2 flex items-center justify-between">
+                                    <p class="text-xs font-black tracking-wider text-slate-600">選択中の画像</p>
+                                    <p id="image-count" class="text-xs font-bold text-slate-500"></p>
                                 </div>
+                                <div id="image-preview-list" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"></div>
                             </div>
                         </div>
                     </div>
@@ -65,7 +67,7 @@
                         </div>
                     </div>
 
-                    @include('auction_items.partials.category-selects', [
+                    @include('auction_items.partials.category-selects-v2', [
                         'parentCategories' => $parentCategories,
                         'parentSelectId' => 'create_parent_category_id',
                         'categorySelectId' => 'create_category_id',
@@ -73,7 +75,7 @@
 
                     <div>
                         <label class="block text-xs font-black tracking-wider text-slate-600">商品タイトル</label>
-                        <input type="text" name="title" value="{{ old('title') }}" class="mt-2 h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="90s ナイロンジャケット">
+                        <input type="text" name="title" value="{{ old('title') }}" class="mt-2 h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="商品名・型番など">
                     </div>
 
                     <div>
@@ -134,11 +136,19 @@
             const feeRates = @json($salesFeeRates);
             const platform = document.getElementById('platform');
             const salesFeeRate = document.getElementById('sales_fee_rate');
-            const imageInput = document.getElementById('image');
-            const cameraImageInput = document.getElementById('camera_image');
+            const imageInput = document.getElementById('images');
+            const cameraImageInput = document.getElementById('camera-images');
+            const imageDropZone = document.getElementById('image-drop-zone');
+            const chooseImages = document.getElementById('choose-images');
+            const takePhoto = document.getElementById('take-photo');
+            const imageUploadError = document.getElementById('image-upload-error');
             const imagePreviewWrap = document.getElementById('image-preview-wrap');
-            const imagePreview = document.getElementById('image-preview');
-            let previewUrl = null;
+            const imagePreviewList = document.getElementById('image-preview-list');
+            const imageCount = document.getElementById('image-count');
+            const maximumImageCount = 10;
+            const maximumImageBytes = 2 * 1024 * 1024;
+            const supportedImageTypes = ['image/jpeg', 'image/png', 'image/webp'];
+            const selectedImages = [];
 
             platform?.addEventListener('change', function () {
                 if (Object.prototype.hasOwnProperty.call(feeRates, platform.value)) {
@@ -146,33 +156,146 @@
                 }
             });
 
-            function showImagePreview(file) {
-                if (previewUrl) {
-                    URL.revokeObjectURL(previewUrl);
-                    previewUrl = null;
-                }
-                if (!file) {
-                    imagePreview.removeAttribute('src');
-                    imagePreviewWrap.classList.add('hidden');
-                    return;
-                }
-                previewUrl = URL.createObjectURL(file);
-                imagePreview.src = previewUrl;
-                imagePreviewWrap.classList.remove('hidden');
+            function showImageUploadError(message) {
+                imageUploadError.textContent = message;
+                imageUploadError.classList.toggle('hidden', message === '');
             }
 
+            function syncImageInput() {
+                const transfer = new DataTransfer();
+
+                selectedImages.forEach(function (entry) {
+                    transfer.items.add(entry.file);
+                });
+
+                imageInput.files = transfer.files;
+            }
+
+            function renderImages() {
+                imagePreviewList.replaceChildren();
+                imageCount.textContent = `${selectedImages.length} / ${maximumImageCount} 枚`;
+                imagePreviewWrap.classList.toggle('hidden', selectedImages.length === 0);
+
+                selectedImages.forEach(function (entry, index) {
+                    const card = document.createElement('div');
+                    const preview = document.createElement('img');
+                    const position = document.createElement('span');
+                    const removeButton = document.createElement('button');
+
+                    card.className = 'relative overflow-hidden rounded-lg border border-slate-200 bg-white';
+                    card.draggable = true;
+                    card.dataset.index = String(index);
+
+                    preview.className = 'aspect-square w-full object-cover';
+                    preview.src = entry.url;
+                    preview.alt = `選択中の商品画像 ${index + 1}`;
+
+                    position.className = 'absolute bottom-1 left-1 rounded bg-slate-900 px-1.5 py-0.5 text-xs font-black text-white';
+                    position.textContent = String(index + 1);
+
+                    removeButton.type = 'button';
+                    removeButton.className = 'absolute right-1 top-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white text-base font-black text-slate-800 shadow hover:bg-slate-100';
+                    removeButton.title = 'この画像を削除';
+                    removeButton.setAttribute('aria-label', 'この画像を削除');
+                    removeButton.textContent = '×';
+                    removeButton.addEventListener('click', function () {
+                        URL.revokeObjectURL(entry.url);
+                        selectedImages.splice(index, 1);
+                        syncImageInput();
+                        renderImages();
+                    });
+
+                    card.addEventListener('dragstart', function (event) {
+                        event.dataTransfer.setData('text/plain', String(index));
+                        event.dataTransfer.effectAllowed = 'move';
+                    });
+                    card.addEventListener('dragover', function (event) {
+                        event.preventDefault();
+                    });
+                    card.addEventListener('drop', function (event) {
+                        event.preventDefault();
+                        const sourceIndex = Number(event.dataTransfer.getData('text/plain'));
+
+                        if (!Number.isInteger(sourceIndex) || sourceIndex === index) {
+                            return;
+                        }
+
+                        const [movedImage] = selectedImages.splice(sourceIndex, 1);
+                        selectedImages.splice(index, 0, movedImage);
+                        syncImageInput();
+                        renderImages();
+                    });
+
+                    card.append(preview, position, removeButton);
+                    imagePreviewList.append(card);
+                });
+            }
+
+            function addImages(files) {
+                const acceptedImages = [];
+                let errorMessage = '';
+
+                Array.from(files).forEach(function (file) {
+                    if (!supportedImageTypes.includes(file.type)) {
+                        errorMessage = 'JPG、PNG、WEBP形式の画像を選択してください。';
+                        return;
+                    }
+                    if (file.size > maximumImageBytes) {
+                        errorMessage = '1枚あたり2MB以下の画像を選択してください。';
+                        return;
+                    }
+                    if (selectedImages.length + acceptedImages.length >= maximumImageCount) {
+                        errorMessage = `商品画像は最大${maximumImageCount}枚までです。`;
+                        return;
+                    }
+                    acceptedImages.push({ file: file, url: URL.createObjectURL(file) });
+                });
+
+                selectedImages.push(...acceptedImages);
+                showImageUploadError(errorMessage);
+                syncImageInput();
+                renderImages();
+            }
+
+            chooseImages?.addEventListener('click', function () {
+                imageInput.click();
+            });
+
+            takePhoto?.addEventListener('click', function () {
+                cameraImageInput.click();
+            });
+
             imageInput?.addEventListener('change', function () {
-                showImagePreview(imageInput.files?.[0] ?? null);
-                if (imageInput.files?.length) {
-                    cameraImageInput.value = '';
-                }
+                addImages(imageInput.files ?? []);
             });
 
             cameraImageInput?.addEventListener('change', function () {
-                showImagePreview(cameraImageInput.files?.[0] ?? null);
-                if (cameraImageInput.files?.length) {
-                    imageInput.value = '';
-                }
+                addImages(cameraImageInput.files ?? []);
+                cameraImageInput.value = '';
+            });
+
+            ['dragenter', 'dragover'].forEach(function (eventName) {
+                imageDropZone?.addEventListener(eventName, function (event) {
+                    event.preventDefault();
+                    imageDropZone.classList.add('border-blue-600', 'bg-blue-50');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(function (eventName) {
+                imageDropZone?.addEventListener(eventName, function (event) {
+                    event.preventDefault();
+                    imageDropZone.classList.remove('border-blue-600', 'bg-blue-50');
+                });
+            });
+
+            imageDropZone?.addEventListener('drop', function (event) {
+                addImages(event.dataTransfer.files);
+            });
+
+            window.addEventListener('beforeunload', function () {
+                selectedImages.forEach(function (entry) {
+                    URL.revokeObjectURL(entry.url);
+                });
             });
         });
     </script>

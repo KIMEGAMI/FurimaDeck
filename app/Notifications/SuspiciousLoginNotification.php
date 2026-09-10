@@ -14,8 +14,7 @@ class SuspiciousLoginNotification extends Notification
         private readonly string $loginMethod,
         private readonly string $ipAddress,
         private readonly string $loggedInAt,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<int, string>

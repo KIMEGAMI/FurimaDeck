@@ -17,9 +17,7 @@ use Throwable;
 
 class GoogleController extends Controller
 {
-    public function __construct(private readonly LoginSecurityService $loginSecurity)
-    {
-    }
+    public function __construct(private readonly LoginSecurityService $loginSecurity) {}
 
     public function redirect()
     {
@@ -95,7 +93,7 @@ class GoogleController extends Controller
         Auth::login($user, true);
         $this->loginSecurity->recordSuccessfulLogin($user, $request, 'Googleログイン');
 
-        return redirect()->route('dashboard');
+        return redirect()->route((bool) config('furimadeck.cutover_enabled') ? 'furimadeck-dashboard' : 'dashboard');
     }
 
     private function hasVerifiedGoogleEmail(SocialiteUser $googleUser): bool
