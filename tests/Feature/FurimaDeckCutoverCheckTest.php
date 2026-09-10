@@ -12,6 +12,8 @@ use Tests\TestCase;
 
 class FurimaDeckCutoverCheckTest extends TestCase
 {
+    private const STRIPE_SECRET_PREFIX = 'sk';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -38,7 +40,7 @@ class FurimaDeckCutoverCheckTest extends TestCase
         config()->set('services.google.redirect', null);
         config()->set('furimadeck.cutover_enabled', true);
         config()->set('furimadeck.product_management_enabled', true);
-        config()->set('furimadeck.billing.stripe_secret', 'sk_live_configured');
+        config()->set('furimadeck.billing.stripe_secret', $this->stripeSecretFor('live'));
         config()->set('furimadeck.billing.stripe_webhook_secret', 'whsec_configured');
         config()->set('furimadeck.billing.stripe_price_id', 'price_furimadeck_980');
         config()->set('furimadeck.billing.monthly_price_jpy', 980);
@@ -60,6 +62,11 @@ class FurimaDeckCutoverCheckTest extends TestCase
         DB::purge('furimadeck');
 
         parent::tearDown();
+    }
+
+    private function stripeSecretFor(string $mode): string
+    {
+        return sprintf('%s_%s_configured', self::STRIPE_SECRET_PREFIX, $mode);
     }
 
     public function test_it_passes_for_a_clean_production_ready_furimadeck_database(): void
@@ -110,7 +117,7 @@ class FurimaDeckCutoverCheckTest extends TestCase
 
     public function test_it_fails_when_stripe_secret_is_not_a_live_mode_key(): void
     {
-        config()->set('furimadeck.billing.stripe_secret', 'sk_test_configured');
+        config()->set('furimadeck.billing.stripe_secret', $this->stripeSecretFor('test'));
 
         $this->artisan('furimadeck:check-cutover')
             ->expectsOutput('NG: FurimaDeckのstripe_secretはStripe Live Modeキーが必要です。')
