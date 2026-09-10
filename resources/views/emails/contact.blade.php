@@ -6,11 +6,11 @@
 <html lang="ja">
 <head>
     <meta charset="utf-8">
-    <title>FURUPRO お問い合わせ</title>
+    <title>FurimaDeck お問い合わせ</title>
 </head>
 <body style="margin:0; background:#f8fafc; color:#0f172a; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; line-height:1.7;">
     <div style="max-width:680px; margin:0 auto; padding:24px;">
-        <h1 style="margin:0 0 20px; font-size:20px; line-height:1.4;">FURUPROへのお問い合わせが届きました</h1>
+        <h1 style="margin:0 0 20px; font-size:20px; line-height:1.4;">FurimaDeckへのお問い合わせが届きました</h1>
 
         <div style="margin:0 0 18px; padding:16px; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px;">
             <div style="margin:0 0 6px; color:#475569; font-size:13px; font-weight:700;">お名前</div>

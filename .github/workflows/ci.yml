@@ -42,7 +42,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
-          extensions: bcmath, ctype, curl, dom, fileinfo, mbstring, openssl, pdo_sqlite, sqlite3, tokenizer, xml, zip
+          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_sqlite, sqlite3, tokenizer, xml, zip
           coverage: none
 
       - name: Set up Node.js
@@ -64,6 +64,9 @@ jobs:
 
       - name: Build frontend assets
         run: npm run build
+
+      - name: Check PHP code style
+        run: vendor/bin/pint --test
 
       - name: Run PHP tests
         run: composer test

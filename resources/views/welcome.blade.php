@@ -1,5 +1,7 @@
 @php
-    $siteName = config('seo.site_name', 'FURUPRO');
+    $siteName = config('seo.site_name', 'FurimaDeck');
+    $premiumPrice = (int) config('furimadeck.billing.monthly_price_jpy');
+    $trialDays = (int) config('furimadeck.billing.trial_period_days');
     $pageSeo = config('seo.pages.home', []);
     $title = $pageSeo['title'] ?? config('seo.title');
     $description = $pageSeo['description'] ?? config('seo.description');
@@ -12,8 +14,8 @@
 
         return asset($normalizedPath).'?v='.$version;
     };
-    $heroImage = $versionedAsset('images/furugi-manager-hero.png');
-    $valueImage = $versionedAsset('images/furugi-manager-value.png');
+    $heroImage = $versionedAsset('images/furimadeck-hero.png');
+    $valueImage = $versionedAsset('images/furimadeck-value.png');
     $organizationId = $canonical.'#organization';
     $websiteId = $canonical.'#website';
     $organizationSchema = [
@@ -75,10 +77,10 @@
             [
                 '@type' => 'Offer',
                 'name' => 'Premium',
-                'price' => '480',
+                'price' => (string) $premiumPrice,
                 'priceCurrency' => 'JPY',
                 'availability' => 'https://schema.org/InStock',
-                'description' => '7日間無料お試し後、月額480円（税込）で利用できます。',
+                'description' => "{$trialDays}日間無料お試し後、月額".number_format($premiumPrice).'円（税込）で利用できます。',
             ],
         ],
         'featureList' => ['画像付き商品登録', '在庫管理', 'SOLD管理', '売上と利益の分析', 'CSV管理', '外部CSV変換', '重複チェック', 'PWA対応'],
@@ -105,14 +107,14 @@
     <meta property="og:description" content="{{ $description }}">
     <meta property="og:url" content="{{ $canonical }}">
     <meta property="og:image" content="{{ $heroImage }}">
-    <meta property="og:image:alt" content="FURUPRO 古着販売向け在庫管理システム">
+    <meta property="og:image:alt" content="FurimaDeck フリマ販売の収益管理SaaS">
     <meta property="og:image:width" content="{{ config('seo.image_width', 1200) }}">
     <meta property="og:image:height" content="{{ config('seo.image_height', 630) }}">
     <meta name="twitter:card" content="{{ config('seo.twitter_card', 'summary_large_image') }}">
     <meta name="twitter:title" content="{{ $title }}">
     <meta name="twitter:description" content="{{ $description }}">
     <meta name="twitter:image" content="{{ $heroImage }}">
-    <meta name="twitter:image:alt" content="FURUPRO 古着販売向け在庫管理システム">
+    <meta name="twitter:image:alt" content="FurimaDeck フリマ販売の収益管理SaaS">
     <x-pwa-head />
     <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -123,8 +125,8 @@
 <body class="bg-white text-slate-950 antialiased">
     <header class="fixed inset-x-0 top-0 z-30 border-b border-white/30 bg-white/85 backdrop-blur-md">
         <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-            <a href="{{ route('home') }}" class="flex items-center gap-3" aria-label="FURUPRO トップページ">
-                <span class="text-lg font-black tracking-[0.22em] text-cyan-700">FURUPRO</span>
+            <a href="{{ route('home') }}" class="flex items-center gap-3" aria-label="FurimaDeck トップページ">
+                <span class="text-lg font-black tracking-[0.08em] text-cyan-700">FurimaDeck</span>
             </a>
             <nav class="flex flex-wrap justify-end gap-x-3 gap-y-2 text-sm font-black" aria-label="メインナビゲーション">
                 <a href="{{ route('marketing.features') }}" class="px-2 py-2 text-cyan-800 hover:text-cyan-600">機能</a>
@@ -138,11 +140,11 @@
 
     <main>
         <section class="relative min-h-[88svh] overflow-hidden pt-20">
-            <img src="{{ $heroImage }}" alt="FURUPRO 古着販売向け在庫管理システムの紹介画像" class="absolute inset-0 h-full w-full object-cover object-center">
+            <img src="{{ $heroImage }}" alt="FurimaDeck フリマ販売の収益管理SaaSの紹介画像" class="absolute inset-0 h-full w-full object-cover object-center">
             <div class="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-white via-white/80 to-transparent"></div>
             <div class="relative mx-auto flex min-h-[calc(88svh-80px)] max-w-7xl items-end px-4 pb-10 sm:px-6 lg:px-8">
                 <div class="max-w-3xl">
-                    <h1 class="sr-only">古着販売の在庫管理と売上管理ならFURUPRO</h1>
+                    <h1 class="sr-only">フリマ販売の収益管理ならFurimaDeck</h1>
                     <div class="flex flex-wrap gap-3">
                         <a href="{{ route('register') }}" class="rounded-md bg-cyan-700 px-7 py-4 text-center text-sm font-black text-white shadow-lg shadow-cyan-900/20 hover:bg-cyan-800">はじめる</a>
                         <form method="POST" action="{{ route('login.demo') }}">
@@ -151,7 +153,7 @@
                         </form>
                     </div>
                     <p class="mt-5 max-w-2xl text-sm font-black leading-7 text-cyan-950">
-                        商品登録、画像管理、在庫状況、SOLD、売上、CSVをまとめて管理。古着販売の日々の作業を、もっと見やすく、もっと速くします。
+                        商品登録、画像管理、在庫状況、SOLD、売上、CSVをまとめて管理。フリマ販売の日々の収益管理を、もっと見やすく、もっと速くします。
                     </p>
                 </div>
             </div>
@@ -161,11 +163,11 @@
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="max-w-3xl">
                     <p class="text-sm font-black tracking-[0.24em] text-cyan-700">FEATURES</p>
-                    <h2 class="mt-3 text-3xl font-black tracking-tight text-cyan-950 sm:text-4xl">古着販売の管理を、ひとつの画面で。</h2>
-                    <p class="mt-4 text-base font-bold leading-8 text-slate-700">複数サービスへ出品していると、商品名、価格、画像、販売状況、利益の管理が散らかりやすくなります。FURUPROは、その運用を毎日使える形に整理します。</p>
+                    <h2 class="mt-3 text-3xl font-black tracking-tight text-cyan-950 sm:text-4xl">フリマ販売の収益を、ひとつの画面で。</h2>
+                    <p class="mt-4 text-base font-bold leading-8 text-slate-700">複数サービスへ出品していると、商品名、価格、画像、販売状況、利益の管理が散らかりやすくなります。FurimaDeckは、その運用を毎日使える形に整理します。</p>
                 </div>
                 <div class="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    @foreach ([['商品管理', '画像付きで商品を登録し、出品中・SOLD・下書きを整理できます。'], ['CSV管理', 'FURUPRO用CSV、ヤフオクCSV変換、メルカリShops CSV変換、バックアップCSV、復元用CSVをまとめて管理できます。'], ['売上分析', '売上、手数料、送料、実利益を確認し、販売の状況を追えます。'], ['運用改善', '重複チェックやジャンル別分析で、毎日の管理ロスを減らします。']] as [$heading, $body])
+                    @foreach ([['商品管理', '画像付きで商品を登録し、出品中・SOLD・下書きを整理できます。'], ['CSV管理', 'FurimaDeck形式CSV、ヤフオクCSV変換、メルカリShops CSV変換、バックアップCSV、復元用CSVをまとめて管理できます。'], ['売上分析', '売上、手数料、送料、実利益を確認し、販売の状況を追えます。'], ['運用改善', '重複チェックやジャンル別分析で、毎日の管理ロスを減らします。']] as [$heading, $body])
                         <article class="rounded-lg border border-cyan-100 bg-cyan-50/70 p-6">
                             <h3 class="text-lg font-black text-cyan-950">{{ $heading }}</h3>
                             <p class="mt-3 text-sm font-bold leading-7 text-slate-700">{{ $body }}</p>
@@ -177,7 +179,7 @@
 
         <section class="bg-white pb-16">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <img src="{{ $valueImage }}" alt="FURUPRO案内" class="w-full rounded-lg border border-cyan-100 shadow-xl" loading="lazy">
+                <img src="{{ $valueImage }}" alt="FurimaDeck案内" class="w-full rounded-lg border border-cyan-100 shadow-xl" loading="lazy">
             </div>
         </section>
 
@@ -206,7 +208,7 @@
                 <div class="rounded-lg border border-cyan-100 bg-cyan-50 p-6 sm:p-8">
                     <p class="text-sm font-black tracking-[0.24em] text-cyan-700">PRICING</p>
                     <h2 class="mt-3 text-3xl font-black text-cyan-950">FreeプランとPremiumプランがあります。</h2>
-                    <p class="mt-4 max-w-3xl text-sm font-bold leading-7 text-slate-700">Freeは商品登録50件・カテゴリ5件まで利用できます。Premiumは7日間無料お試し後、月額480円（税込）で商品登録数とカテゴリ数の制限がなくなり、CSV管理、売上分析、ジャンル別分析、重複チェックなどをまとめて使えます。古着販売の登録、確認、振り返りをひとつに集めて、毎日の作業時間を減らします。</p>
+                    <p class="mt-4 max-w-3xl text-sm font-bold leading-7 text-slate-700">Freeは商品登録50件まで利用できます。Premiumは{{ $trialDays }}日間無料お試し後、月額{{ number_format($premiumPrice) }}円（税込）で商品登録数の制限がなくなり、CSV登録・出力、販売と利益の管理をまとめて使えます。フリマ販売の登録、確認、振り返りをひとつに集めて、毎日の作業時間を減らします。</p>
                     <div class="mt-6 flex flex-wrap gap-3">
                         <a href="{{ route('marketing.pricing') }}" class="inline-flex rounded-md bg-cyan-700 px-6 py-3 text-sm font-black text-white hover:bg-cyan-800">料金体系を見る</a>
                         <a href="{{ route('register') }}" class="inline-flex rounded-md border border-cyan-300 bg-white px-6 py-3 text-sm font-black text-cyan-900 hover:bg-cyan-50">Freeで始める</a>
@@ -228,7 +230,7 @@
                 <a href="{{ route('legal.faq') }}" class="hover:text-cyan-600">よくある質問</a>
                 <a href="{{ route('legal.contact') }}" class="hover:text-cyan-600">お問い合わせ</a>
             </nav>
-            <p>&copy; 2026 FURUPRO. All rights reserved.</p>
+            <p>&copy; 2026 FurimaDeck. All rights reserved.</p>
         </div>
     </footer>
 </body>

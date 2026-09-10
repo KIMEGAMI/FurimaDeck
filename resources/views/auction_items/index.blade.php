@@ -46,7 +46,7 @@
                     </div>
 
                     <div class="lg:col-span-6">
-                        @include('auction_items.partials.category-selects', [
+                        @include('auction_items.partials.category-selects-v2', [
                             'parentCategories' => $parentCategories,
                             'parentSelectId' => 'filter_parent_category_id',
                             'categorySelectId' => 'filter_category_id',
@@ -131,7 +131,9 @@
                             $salesFee = (int) ($item->sales_fee ?? round($soldPrice * ($salesFeeRate / 100)));
                             $shippingFee = (int) ($item->shipping_fee ?? 0);
                             $profit = $item->status === 'sold' ? (int) ($item->profit ?? ($soldPrice - $purchasePrice - $salesFee - $shippingFee)) : ($soldPrice - $purchasePrice - $salesFee - $shippingFee);
-                            $categoryLabel = $item->category ? (($item->category->parent?->name ? $item->category->parent->name.' / ' : '').$item->category->name) : '未設定';
+                            $categoryLabel = $item->category
+                                ? collect([$item->category->parent?->parent?->name, $item->category->parent?->name, $item->category->name])->filter()->implode(' / ')
+                                : '未設定';
                             $daysListed = $item->created_at ? max(0, (int) $item->created_at->diffInDays(now())) : 0;
                             $statusLabel = $item->status === 'sold' ? 'SOLD' : '出品中';
                         @endphp

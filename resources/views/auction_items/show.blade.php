@@ -26,7 +26,9 @@
         $salesFee = (int) ($auctionItem->sales_fee ?? round($soldPrice * ($salesFeeRate / 100)));
         $shippingFee = (int) ($auctionItem->shipping_fee ?? 0);
         $profit = (int) ($auctionItem->profit ?? ($soldPrice - $purchasePrice - $salesFee - $shippingFee));
-        $categoryLabel = $auctionItem->category ? (($auctionItem->category->parent?->name ? $auctionItem->category->parent->name.' / ' : '').$auctionItem->category->name) : '未設定';
+        $categoryLabel = $auctionItem->category
+            ? collect([$auctionItem->category->parent?->parent?->name, $auctionItem->category->parent?->name, $auctionItem->category->name])->filter()->implode(' / ')
+            : '未設定';
     @endphp
 
     <div class="min-h-screen bg-slate-100 py-10">

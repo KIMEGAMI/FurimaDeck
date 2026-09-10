@@ -30,9 +30,9 @@
     <section class="bg-slate-950 py-16 text-white">
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <p class="text-sm font-black tracking-[0.24em] text-cyan-200">FEATURES</p>
-            <h1 class="mt-4 max-w-4xl text-4xl font-black leading-tight md:text-5xl">古着販売に必要な管理機能を、ひとつのサービスに。</h1>
+            <h1 class="mt-4 max-w-4xl text-4xl font-black leading-tight md:text-5xl">フリマ販売の収益管理を、ひとつのサービスに。</h1>
             <p class="mt-5 max-w-3xl text-base font-semibold leading-8 text-cyan-100">
-                FURUPROは、フリマ販売や複数販路運用で散らばりやすい商品情報、画像、販売状況、売上、利益をまとめて管理する古着販売向けシステムです。
+                FurimaDeckは、フリマ販売や複数販路運用で散らばりやすい商品情報、画像、販売状況、売上、利益をまとめて管理する収益管理SaaSです。
             </p>
         </div>
     </section>
@@ -42,7 +42,7 @@
             @foreach ([
                 ['画像付き商品登録', '管理ID、商品タイトル、ジャンル、仕入れ価格、販売価格、手数料、送料、コメント、商品画像をまとめて登録できます。'],
                 ['出品中・SOLD管理', '販売前の商品とSOLD商品を切り替えて管理し、売上や利益の集計に反映できます。'],
-                ['CSV管理・変換', 'FURUPRO CSVに加えて、ヤフオク売上CSV、メルカリShops CSVなど外部CSVの変換、バックアップCSV、復元用CSVをまとめて管理できます。'],
+                ['CSV管理・変換', 'FurimaDeck形式CSVに加えて、ヤフオク売上CSV、メルカリShops CSVなど外部CSVの変換、バックアップCSV、復元用CSVをまとめて管理できます。'],
                 ['売上・利益分析', '売上、仕入れ、手数料、送料、実利益を確認し、月次の振り返りや価格調整に活用できます。'],
                 ['重複チェック', '同じ商品が複数登録された場合に、最新の商品を残して重複分を整理できます。'],
                 ['スマホ・PWA対応', 'スマホから商品画像を登録しやすく、ホーム画面追加によるアプリ風の利用にも対応しています。'],

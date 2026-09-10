@@ -1,0 +1,6 @@
+{
+    "preset": "laravel",
+    "exclude": [
+        "storage_codex_test"
+    ]
+}

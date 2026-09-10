@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuctionItem;
+use App\Models\AuctionItemImage;
 use App\Models\Category;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -12,6 +13,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class AuctionItemController extends Controller
 {
@@ -20,6 +22,8 @@ class AuctionItemController extends Controller
     private const CSV_MAX_CELL_LENGTH = 1000;
 
     private const IMAGE_MAX_KILOBYTES = 2048;
+
+    private const IMAGE_MAX_COUNT = 10;
 
     private const UNSOLD_DEFAULT_DAYS = 10;
 
@@ -57,7 +61,7 @@ class AuctionItemController extends Controller
         $parentCategoryId = $request->integer('parent_category_id') ?: null;
         $categoryId = $request->integer('category_id') ?: null;
 
-        $query = AuctionItem::with(['category.parent'])
+        $query = AuctionItem::with(['category.parent.parent'])
             ->where('user_id', Auth::id());
 
         if ($unsoldOnly) {
@@ -88,11 +92,7 @@ class AuctionItemController extends Controller
         if ($categoryId) {
             $query->where('category_id', $categoryId);
         } elseif ($parentCategoryId) {
-            $childCategoryIds = Category::query()
-                ->where('parent_id', $parentCategoryId)
-                ->pluck('id');
-
-            $query->whereIn('category_id', $childCategoryIds);
+            $query->whereIn('category_id', $this->categoryAndDescendantIds($parentCategoryId));
         }
 
         $sellingAdviceItems = $this->sellingAdviceItems((int) Auth::id());
@@ -271,19 +271,17 @@ class AuctionItemController extends Controller
         $salesFeeRate = (float) ($validated['sales_fee_rate'] ?? $this->defaultSalesFeeRate($platform));
         $salesFee = $this->calculateSalesFee($soldPrice, $salesFeeRate);
 
-        $imageFile = $this->auctionItemImageFile($request);
-        $imagePath = $imageFile
-            ? $imageFile->store('auction-items', 'public')
-            : null;
+        $imageFiles = $this->auctionItemImageFiles($request);
+        $this->ensureAuctionItemImageLimit($imageFiles);
 
-        AuctionItem::create([
+        $auctionItem = AuctionItem::create([
             'user_id' => Auth::id(),
             'management_id' => $validated['management_id'],
             'title' => $validated['title'],
             'comment' => $validated['comment'] ?? null,
             'platform' => $platform,
             'category_id' => $validated['category_id'] ?? null,
-            'image_path' => $imagePath,
+            'image_path' => null,
             'sold_image_path' => null,
             'purchase_price' => $purchasePrice,
             'sold_price' => $soldPrice,
@@ -294,6 +292,8 @@ class AuctionItemController extends Controller
             'sold_at' => null,
             'status' => AuctionItem::STATUS_SELLING,
         ]);
+
+        $this->storeAuctionItemImages($auctionItem, $imageFiles);
 
         return redirect()
             ->route('auction-items.index')
@@ -694,8 +694,9 @@ class AuctionItemController extends Controller
         $imageFile = $this->auctionItemImageFile($request);
 
         if ($imageFile) {
-            $this->deleteAuctionItemImage($auctionItem->image_path);
-            $this->deleteAuctionItemImage($auctionItem->sold_image_path);
+            $this->deleteAuctionItemImages($auctionItem);
+            $this->deleteAuctionItemImage($auctionItem->image_path, $auctionItem->id);
+            $this->deleteAuctionItemImage($auctionItem->sold_image_path, $auctionItem->id);
             $auctionItem->image_path = $imageFile->store('auction-items', 'public');
             $auctionItem->sold_image_path = null;
         }
@@ -757,7 +758,7 @@ class AuctionItemController extends Controller
     public function markAsSelling(AuctionItem $auctionItem)
     {
         $this->authorizeOwner($auctionItem);
-        $this->deleteAuctionItemImage($auctionItem->sold_image_path);
+        $this->deleteAuctionItemImage($auctionItem->sold_image_path, $auctionItem->id);
 
         $auctionItem->status = AuctionItem::STATUS_SELLING;
         $auctionItem->sold_at = null;
@@ -798,8 +799,9 @@ class AuctionItemController extends Controller
             ->orderBy('id')
             ->chunkById(100, function ($items) use (&$deletedCount) {
                 foreach ($items as $item) {
-                    $this->deleteAuctionItemImage($item->image_path);
-                    $this->deleteAuctionItemImage($item->sold_image_path);
+                    $this->deleteAuctionItemImages($item);
+                    $this->deleteAuctionItemImage($item->image_path, $item->id);
+                    $this->deleteAuctionItemImage($item->sold_image_path, $item->id);
                     $item->delete();
                     $deletedCount++;
                 }
@@ -813,8 +815,9 @@ class AuctionItemController extends Controller
     public function destroy(AuctionItem $auctionItem)
     {
         $this->authorizeOwner($auctionItem);
-        $this->deleteAuctionItemImage($auctionItem->image_path);
-        $this->deleteAuctionItemImage($auctionItem->sold_image_path);
+        $this->deleteAuctionItemImages($auctionItem);
+        $this->deleteAuctionItemImage($auctionItem->image_path, $auctionItem->id);
+        $this->deleteAuctionItemImage($auctionItem->sold_image_path, $auctionItem->id);
         $auctionItem->delete();
 
         return redirect()
@@ -910,6 +913,8 @@ class AuctionItemController extends Controller
             ],
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.self::IMAGE_MAX_KILOBYTES],
             'camera_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.self::IMAGE_MAX_KILOBYTES],
+            'images' => ['nullable', 'array', 'max:'.self::IMAGE_MAX_COUNT],
+            'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:'.self::IMAGE_MAX_KILOBYTES],
         ], [
             'management_id.unique' => 'この管理IDは既に登録されています。別の管理IDを入力してください。',
             'platform.in' => '出品先を選択してください。',
@@ -936,7 +941,7 @@ class AuctionItemController extends Controller
             ->route('subscriptions.index')
             ->with('error', 'Freeプランの商品登録は'.User::FREE_AUCTION_ITEM_LIMIT.'件までです。Premiumは7日間無料お試し後、月額480円（税込）で商品登録数の制限がなくなります。')
             ->with('upgrade_title', '商品登録数の上限に達しました。')
-            ->with('upgrade_description', '7日間無料お試しで、商品登録数の制限解除、CSV登録、売上分析を実際の古着販売データで確認できます。')
+            ->with('upgrade_description', '7日間無料お試しで、商品登録数の制限解除、CSV登録、売上分析を実際のフリマ販売データで確認できます。')
             ->with('upgrade_features', $this->premiumUpgradeFeatures());
     }
 
@@ -1006,6 +1011,57 @@ class AuctionItemController extends Controller
         return null;
     }
 
+    /**
+     * @return array<int, UploadedFile>
+     */
+    private function auctionItemImageFiles(Request $request): array
+    {
+        $imageFiles = array_values(array_filter(
+            $request->file('images', []),
+            fn (mixed $file): bool => $file instanceof UploadedFile
+        ));
+
+        if ($imageFiles !== []) {
+            return $imageFiles;
+        }
+
+        $legacyImageFile = $this->auctionItemImageFile($request);
+
+        return $legacyImageFile ? [$legacyImageFile] : [];
+    }
+
+    /**
+     * @param  array<int, UploadedFile>  $imageFiles
+     */
+    private function ensureAuctionItemImageLimit(array $imageFiles): void
+    {
+        if (count($imageFiles) <= self::IMAGE_MAX_COUNT) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'images' => '商品画像は最大'.self::IMAGE_MAX_COUNT.'枚まで登録できます。',
+        ]);
+    }
+
+    /**
+     * @param  array<int, UploadedFile>  $imageFiles
+     */
+    private function storeAuctionItemImages(AuctionItem $auctionItem, array $imageFiles): void
+    {
+        foreach ($imageFiles as $position => $imageFile) {
+            $imagePath = $imageFile->store('auction-items', 'public');
+            $auctionItem->images()->create([
+                'path' => $imagePath,
+                'position' => $position,
+            ]);
+        }
+
+        $auctionItem->update([
+            'image_path' => $auctionItem->images()->value('path'),
+        ]);
+    }
+
     private function csvImportError(string $message)
     {
         return redirect()
@@ -1056,11 +1112,28 @@ class AuctionItemController extends Controller
     private function parentCategories()
     {
         return Category::query()
-            ->with('children')
+            ->with('children.children')
             ->whereNull('parent_id')
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * @return Collection<int, int>
+     */
+    private function categoryAndDescendantIds(int $categoryId): Collection
+    {
+        $allCategoryIds = collect([$categoryId]);
+        $parentIds = collect([$categoryId]);
+
+        while ($parentIds->isNotEmpty()) {
+            $childIds = Category::query()->whereIn('parent_id', $parentIds)->pluck('id');
+            $allCategoryIds = $allCategoryIds->merge($childIds);
+            $parentIds = $childIds;
+        }
+
+        return $allCategoryIds->unique()->values();
     }
 
     private function duplicateAuctionItemGroups()
@@ -1127,8 +1200,9 @@ class AuctionItemController extends Controller
             ->values();
 
         foreach ($deleteItems as $item) {
-            $this->deleteAuctionItemImage($item->image_path);
-            $this->deleteAuctionItemImage($item->sold_image_path);
+            $this->deleteAuctionItemImages($item);
+            $this->deleteAuctionItemImage($item->image_path, $item->id);
+            $this->deleteAuctionItemImage($item->sold_image_path, $item->id);
             $item->delete();
         }
 
@@ -1203,7 +1277,7 @@ class AuctionItemController extends Controller
                     $query->orWhere('title', $title);
                 }
             })
-            ->orderByRaw("status = ? desc", [AuctionItem::STATUS_SELLING])
+            ->orderByRaw('status = ? desc', [AuctionItem::STATUS_SELLING])
             ->orderByDesc('updated_at')
             ->orderByDesc('id');
 
@@ -1211,7 +1285,7 @@ class AuctionItemController extends Controller
     }
 
     /**
-     * @param array<int, mixed> $headers
+     * @param  array<int, mixed>  $headers
      * @return array<int, string>
      */
     private function normalizeFurugiImportHeaders(array $headers): array
@@ -1407,11 +1481,42 @@ class AuctionItemController extends Controller
             : AuctionItem::STATUS_SELLING;
     }
 
-    private function deleteAuctionItemImage(?string $path): void
+    private function deleteAuctionItemImage(?string $path, ?int $currentAuctionItemId = null): void
     {
-        if ($this->isSafeAuctionItemImagePath($path)) {
+        if ($this->isSafeAuctionItemImagePath($path) && ! $this->isAuctionItemImageReferenced($path, $currentAuctionItemId)) {
             Storage::disk('public')->delete($path);
         }
+    }
+
+    private function deleteAuctionItemImages(AuctionItem $auctionItem): void
+    {
+        $imagePaths = $auctionItem->images()->pluck('path')->all();
+        $auctionItem->images()->delete();
+
+        foreach (array_unique($imagePaths) as $imagePath) {
+            $this->deleteAuctionItemImage($imagePath, $auctionItem->id);
+        }
+    }
+
+    private function isAuctionItemImageReferenced(string $path, ?int $currentAuctionItemId): bool
+    {
+        $itemReferenceExists = AuctionItem::query()
+            ->when($currentAuctionItemId !== null, fn ($query) => $query->whereKeyNot($currentAuctionItemId))
+            ->where(function ($query) use ($path): void {
+                $query
+                    ->where('image_path', $path)
+                    ->orWhere('sold_image_path', $path);
+            })
+            ->exists();
+
+        if ($itemReferenceExists) {
+            return true;
+        }
+
+        return AuctionItemImage::query()
+            ->where('path', $path)
+            ->when($currentAuctionItemId !== null, fn ($query) => $query->where('auction_item_id', '!=', $currentAuctionItemId))
+            ->exists();
     }
 
     private function isSafeAuctionItemImagePath(?string $path): bool

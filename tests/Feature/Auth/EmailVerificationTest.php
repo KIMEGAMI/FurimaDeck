@@ -16,6 +16,13 @@ class EmailVerificationTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config()->set('furimadeck.cutover_enabled', true);
+    }
+
     public function test_email_verification_screen_can_be_rendered(): void
     {
         $user = User::factory()->unverified()->create();
@@ -98,7 +105,7 @@ class EmailVerificationTest extends TestCase
         Event::assertDispatched(Verified::class);
         $this->assertTrue($user->fresh()->hasVerifiedEmail());
         $this->assertAuthenticatedAs($user);
-        $response->assertRedirect(route('dashboard', absolute: false).'?verified=1');
+        $response->assertRedirect(route('furimadeck-dashboard', absolute: false).'?verified=1');
     }
 
     public function test_authenticated_user_cannot_verify_another_users_email(): void

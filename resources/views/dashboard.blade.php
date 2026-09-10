@@ -155,7 +155,7 @@
                         <p class="text-xs font-black tracking-[0.18em] text-emerald-300">DATA PROTECTION</p>
                         <h2 class="mt-1 text-xl font-black text-white">データ保護とバックアップ</h2>
                         <p class="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-200">
-                            商品全削除、CSV一括取り込み、端末変更、データ整理の前には「復元用CSV」を保存してください。戻す時はCSV管理の「FURUPRO形式CSVを一括登録」から復元用CSVを取り込みます。
+                            商品全削除、CSV一括取り込み、端末変更、データ整理の前には「復元用CSV」を保存してください。戻す時はCSV管理の「FurimaDeck形式CSVを一括登録」から復元用CSVを取り込みます。
                         </p>
                         <div class="mt-4 grid gap-3 text-sm font-bold leading-6 text-slate-100 md:grid-cols-3">
                             <div class="rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-3">
@@ -164,7 +164,7 @@
                             </div>
                             <div class="rounded-xl border border-cyan-300/20 bg-cyan-400/10 p-3">
                                 <p class="font-black text-cyan-200">2. 失敗した時</p>
-                                <p class="mt-1 text-slate-200">CSV管理のFURUPRO形式CSV取り込みから、保存していた復元用CSVを選びます。</p>
+                                <p class="mt-1 text-slate-200">CSV管理のFurimaDeck形式CSV取り込みから、保存していた復元用CSVを選びます。</p>
                             </div>
                             <div class="rounded-xl border border-amber-300/20 bg-amber-400/10 p-3">
                                 <p class="font-black text-amber-200">3. 重複はスキップ</p>
@@ -243,7 +243,7 @@
                     <a href="{{ route('legal.faq') }}" class="hover:text-cyan-300">よくある質問</a>
                     <a href="{{ route('legal.contact') }}" class="hover:text-cyan-300">お問い合わせ</a>
                 </nav>
-                <p class="mt-4 text-xs text-slate-300">&copy; 2026 FURUPRO. All rights reserved.</p>
+                <p class="mt-4 text-xs text-slate-300">&copy; 2026 FurimaDeck. All rights reserved.</p>
             </footer>
         </div>
     </div>

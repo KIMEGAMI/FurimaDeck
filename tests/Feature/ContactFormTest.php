@@ -21,6 +21,16 @@ class ContactFormTest extends TestCase
         $response->assertSee('name="message"', false);
     }
 
+    public function test_contact_form_remains_available_after_furimadeck_cutover(): void
+    {
+        config()->set('furimadeck.cutover_enabled', true);
+
+        $response = $this->get('/contact');
+
+        $response->assertOk();
+        $response->assertSee('お問い合わせフォーム', false);
+    }
+
     public function test_contact_form_rejects_ng_words(): void
     {
         $response = $this->from('/contact')->post('/contact', [

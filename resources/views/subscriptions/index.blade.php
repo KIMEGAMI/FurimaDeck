@@ -5,7 +5,8 @@
         $hasStripeSubscription = $hasStripeSubscription ?? false;
         $stripeInvoices = $stripeInvoices ?? [];
         $stripeInvoicesUnavailable = $stripeInvoicesUnavailable ?? false;
-        $canStartStripeCheckout = ! $isAdmin && ! $isDemoUser && (! $hasActiveSubscription || ! $hasStripeSubscription);
+        $canStartStripeCheckout = ! $isAdmin && ! $isDemoUser && ! $hasActiveSubscription;
+        $canOpenCancellationPortal = ! $isAdmin && ! $isDemoUser && $hasActiveSubscription;
         $invoiceStatusLabels = [
             'draft' => '下書き',
             'open' => '未払い',
@@ -85,7 +86,7 @@
                         <p class="text-sm font-black tracking-[0.18em] text-cyan-700">STRIPE BILLING</p>
                         <h1 class="mt-2 text-3xl font-black text-slate-900 md:text-4xl">契約・解約</h1>
                         <p class="mt-4 max-w-2xl text-sm font-bold leading-7 text-slate-600">
-                            Premium登録、支払い方法の変更、領収書確認、解約はStripeの安全な画面で行います。FURUPROはカード番号を保存しません。
+                            Premium登録、支払い方法の変更、領収書確認、解約はStripeの安全な画面で行います。FurimaDeckはカード番号を保存しません。
                         </p>
                     </div>
 
@@ -233,7 +234,7 @@
                         <dl class="mt-4 grid gap-3 text-sm font-bold text-slate-700 sm:grid-cols-2">
                             <div class="rounded-lg bg-white p-4">
                                 <dt class="text-slate-950">サービス名</dt>
-                                <dd class="mt-1">FURUPRO Premium</dd>
+                                <dd class="mt-1">FurimaDeck Premium</dd>
                             </div>
                             <div class="rounded-lg bg-white p-4">
                                 <dt class="text-slate-950">料金</dt>
@@ -288,8 +289,8 @@
                         解約はStripeの契約管理画面内で行います。契約中のユーザーは、下のボタンからStripeの契約管理画面へ移動できます。
                     </p>
 
-                    @if ($hasActiveSubscription && $hasStripeSubscription)
-                        <form method="POST" action="{{ route('subscriptions.portal') }}" class="mt-5">
+                    @if ($canOpenCancellationPortal)
+                        <form method="POST" action="{{ route('subscriptions.cancel-feedback') }}" class="mt-5">
                             @csrf
                             <button type="submit" class="rounded-lg bg-amber-700 px-6 py-3 text-sm font-black text-white shadow hover:bg-amber-800">
                                 解約へ進む

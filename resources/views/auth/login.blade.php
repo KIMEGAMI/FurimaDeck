@@ -4,24 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex,follow">
-    <title>ログイン | FURUPRO</title>
+    <title>ログイン | FurimaDeck</title>
 
     <x-pwa-head />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
 <body class="min-h-screen bg-slate-100">
-    <main class="flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none" style="background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('{{ asset('images/furugi-auth-visual.png') }}');">
+    <main class="flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none" style="background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('{{ asset('images/furimadeck-hero.png') }}');">
         <div class="grid min-h-[720px] w-full max-w-7xl grid-cols-1 overflow-hidden rounded-lg bg-white shadow-2xl lg:grid-cols-2">
             <section class="relative hidden bg-blue-900 lg:block">
                 <img
-                    src="{{ asset('images/furugi-auth-visual.png') }}"
-                    alt="FURUPRO"
+                    src="{{ asset('images/furimadeck-hero.png') }}"
+                    alt="FurimaDeck"
                     class="absolute inset-0 h-full w-full object-cover"
                 >
                 <div class="absolute inset-0 bg-gradient-to-r from-blue-950/35 to-transparent"></div>
                 <div class="absolute left-8 top-8 text-white">
-                    <div class="text-sm font-bold tracking-[0.3em]">CLOTHING MANAGEMENT SYSTEM</div>
+                    <div class="text-sm font-bold tracking-[0.18em]">FLEA MARKET PROFIT SaaS</div>
                     <div class="mt-4 h-1 w-24 rounded-full bg-white"></div>
                 </div>
             </section>
@@ -30,12 +30,12 @@
                 <div class="w-full max-w-xl">
                     <div class="mb-10 text-center">
                         <a href="{{ route('home') }}" class="mb-6 inline-flex text-3xl font-black tracking-[0.22em] text-cyan-700">
-                            FURUPRO
+                            FurimaDeck
                         </a>
 
-                        <h1 class="text-4xl font-black tracking-tight text-blue-800">FURUPRO</h1>
-                        <p class="mt-3 text-sm font-bold tracking-[0.25em] text-cyan-700">CLOTHING MANAGEMENT SYSTEM</p>
-                        <p class="mt-6 font-semibold text-slate-600">在庫・入出庫・販売を、もっとスマートに。</p>
+                        <h1 class="text-4xl font-black tracking-tight text-blue-800">FurimaDeck</h1>
+                        <p class="mt-3 text-sm font-bold tracking-[0.18em] text-cyan-700">FLEA MARKET PROFIT SaaS</p>
+                        <p class="mt-6 font-semibold text-slate-600">商品・販売・利益を、もっとスマートに。</p>
                         <div class="mx-auto mt-6 h-1 w-16 rounded-full bg-blue-600"></div>
                     </div>
 
@@ -46,7 +46,7 @@
                         disabled
                         class="mb-6 w-full rounded-md border border-cyan-300 bg-cyan-50 px-5 py-4 text-center text-sm font-black text-cyan-900 shadow-sm transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        FURUPROをアプリとして追加
+                        FurimaDeckをアプリとして追加
                     </button>
 
                     @if (session('status'))
@@ -146,7 +146,7 @@
                         </a>
                     </div>
 
-                    <p class="mt-8 text-center text-xs text-slate-500">&copy; 2026 FURUPRO All rights reserved.</p>
+                    <p class="mt-8 text-center text-xs text-slate-500">&copy; 2026 FurimaDeck All rights reserved.</p>
                 </div>
             </section>
         </div>

@@ -38,10 +38,10 @@ class SeoController extends Controller
                 'changefreq' => $page['changefreq'] ?? 'monthly',
                 'priority' => $page['priority'] ?? '0.5',
                 'image' => $routeName === 'home'
-                    ? asset(ltrim(config('seo.image', '/images/furugi-manager-hero.png'), '/'))
+                    ? asset(ltrim(config('seo.image', '/images/furimadeck-hero.png'), '/'))
                     : null,
                 'image_title' => $routeName === 'home'
-                    ? config('seo.site_name', 'FURUPRO')
+                    ? config('seo.site_name', 'FurimaDeck')
                     : null,
             ];
         }
@@ -73,14 +73,14 @@ class SeoController extends Controller
 
     public function llms(): Response
     {
-        $siteName = config('seo.site_name', 'FURUPRO');
+        $siteName = config('seo.site_name', 'FurimaDeck');
         $description = config('seo.description');
         $lines = [
             '# '.$siteName,
             '',
             '> '.$description,
             '',
-            'FURUPROは、古着販売の商品登録、画像管理、在庫管理、SOLD管理、売上分析、利益管理、CSV登録、重複チェックをまとめて扱うWeb管理システムです。',
+            'FurimaDeckは、フリマ販売の商品登録、画像管理、在庫管理、SOLD管理、売上分析、利益管理、CSV登録、重複チェックをまとめて扱う収益管理SaaSです。',
             '',
             '## Public pages',
         ];
@@ -97,7 +97,9 @@ class SeoController extends Controller
         $lines[] = '## Notes for AI assistants';
         $lines[] = '- Use the public pages above as the authoritative product summary.';
         $lines[] = '- Do not treat authenticated dashboard, admin, billing, notices, or user data pages as public documentation.';
-        $lines[] = '- Pricing: Free is 0 JPY. Premium includes a 7-day free trial, then 480 JPY per month including tax.';
+        $trialDays = (int) config('furimadeck.billing.trial_period_days');
+        $premiumPrice = number_format((int) config('furimadeck.billing.monthly_price_jpy'));
+        $lines[] = "- Pricing: Free is 0 JPY. Premium includes a {$trialDays}-day free trial, then {$premiumPrice} JPY per month including tax.";
 
         return response(implode("\n", $lines)."\n", 200, [
             'Content-Type' => 'text/plain; charset=UTF-8',

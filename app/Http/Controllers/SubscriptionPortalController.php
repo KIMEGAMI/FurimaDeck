@@ -28,11 +28,60 @@ class SubscriptionPortalController extends Controller
             return $this->backWithError('契約管理画面を開けませんでした。Stripeの顧客情報または契約情報を確認してください。');
         }
 
+        return $this->createPortalSession($user, $secret, [
+            'customer' => $customerId,
+            'return_url' => route('subscriptions.index', [], true),
+        ]);
+    }
+
+    public function cancelFeedback(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $secret = config('services.stripe.secret');
+
+        if (! is_string($secret) || $secret === '') {
+            return $this->backWithError('Stripeの設定が未完了です。STRIPE_SECRET または STRIPE_SECRET_KEY を設定してください。');
+        }
+
+        $customerId = $this->resolveCustomerId($user, $secret);
+
+        if (! is_string($customerId) || $customerId === '') {
+            return $this->backWithError('解約画面を開けませんでした。Stripeの顧客情報または契約情報を確認してください。');
+        }
+
+        $user->refresh();
+        $subscriptionId = $this->resolveCancelableSubscriptionId($user, $customerId, $secret);
+
+        if (! is_string($subscriptionId) || $subscriptionId === '') {
+            return $this->backWithError('解約画面を開けませんでした。Stripeの契約情報を確認してください。');
+        }
+
+        $returnUrl = route('subscriptions.index', [], true);
+
+        return $this->createPortalSession($user, $secret, [
+            'customer' => $customerId,
+            'return_url' => $returnUrl,
+            'flow_data' => [
+                'type' => 'subscription_cancel',
+                'subscription_cancel' => [
+                    'subscription' => $subscriptionId,
+                ],
+                'after_completion' => [
+                    'type' => 'redirect',
+                    'redirect' => [
+                        'return_url' => $returnUrl,
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function createPortalSession(User $user, string $secret, array $payload): RedirectResponse
+    {
         try {
-            $payload = [
-                'customer' => $customerId,
-                'return_url' => route('subscriptions.index', [], true),
-            ];
             $configurationId = config('services.stripe.portal_configuration_id');
 
             if (is_string($configurationId) && $configurationId !== '') {
@@ -72,11 +121,6 @@ class SubscriptionPortalController extends Controller
         return redirect()->away($portalUrl);
     }
 
-    public function cancelFeedback(Request $request): RedirectResponse
-    {
-        return $this->portal($request);
-    }
-
     private function resolveCustomerId(User $user, string $secret): ?string
     {
         if (is_string($user->stripe_customer_id) && $user->stripe_customer_id !== '') {
@@ -111,6 +155,43 @@ class SubscriptionPortalController extends Controller
         }
 
         return $response->successful() && $response->json('deleted') !== true;
+    }
+
+    private function resolveCancelableSubscriptionId(User $user, string $customerId, string $secret): ?string
+    {
+        if (is_string($user->stripe_subscription_id) && $user->stripe_subscription_id !== '') {
+            $subscription = $this->fetchSubscription($user->stripe_subscription_id, $secret);
+
+            if ($this->isCancelableSubscription($subscription)) {
+                $this->syncSubscriptionPayload($user, $subscription);
+
+                $subscriptionId = data_get($subscription, 'id');
+
+                return is_string($subscriptionId) && $subscriptionId !== '' ? $subscriptionId : null;
+            }
+        }
+
+        $subscription = $this->fetchActiveSubscriptionForCustomer($customerId, $secret);
+
+        if (! $this->isCancelableSubscription($subscription)) {
+            return null;
+        }
+
+        $this->syncSubscriptionPayload($user, $subscription);
+
+        $subscriptionId = data_get($subscription, 'id');
+
+        return is_string($subscriptionId) && $subscriptionId !== '' ? $subscriptionId : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $subscription
+     */
+    private function isCancelableSubscription(array $subscription): bool
+    {
+        return in_array(data_get($subscription, 'status'), ['active', 'trialing'], true)
+            && is_string(data_get($subscription, 'id'))
+            && data_get($subscription, 'id') !== '';
     }
 
     /**

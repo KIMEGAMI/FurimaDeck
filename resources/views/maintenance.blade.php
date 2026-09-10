@@ -9,14 +9,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>{{ $title }} | FURUPRO</title>
+    <title>{{ $title }} | FurimaDeck</title>
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-slate-950 text-white">
     <main class="flex min-h-screen items-center justify-center bg-cover bg-center px-4 py-10" style="background-image: linear-gradient(rgba(2, 6, 23, 0.58), rgba(2, 6, 23, 0.82)), url('{{ asset('images/bg.png') }}');">
         <section class="w-full max-w-2xl rounded-3xl border border-cyan-300/20 bg-slate-950/70 p-8 text-center shadow-2xl backdrop-blur-md">
-            <div class="text-3xl font-black tracking-[0.22em] text-cyan-200">FURUPRO</div>
+            <div class="text-3xl font-black tracking-[0.08em] text-cyan-200">FurimaDeck</div>
 
             <p class="mt-8 text-sm font-black tracking-[0.25em] text-cyan-300">MAINTENANCE</p>
             <h1 class="mt-4 text-3xl font-black md:text-4xl">{{ $title }}</h1>
