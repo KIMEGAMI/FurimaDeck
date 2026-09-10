@@ -13,9 +13,7 @@ use Illuminate\View\View;
 
 class AuthenticatedSessionController extends Controller
 {
-    public function __construct(private readonly LoginSecurityService $loginSecurity)
-    {
-    }
+    public function __construct(private readonly LoginSecurityService $loginSecurity) {}
 
     public function create(): View
     {
@@ -33,7 +31,7 @@ class AuthenticatedSessionController extends Controller
             return redirect()->route('verification.notice');
         }
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->intended($this->authenticatedDestination());
     }
 
     public function demo(Request $request): RedirectResponse
@@ -60,7 +58,7 @@ class AuthenticatedSessionController extends Controller
             return redirect()->route('verification.notice');
         }
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->intended($this->authenticatedDestination());
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -72,5 +70,12 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerateToken();
 
         return redirect('/');
+    }
+
+    private function authenticatedDestination(): string
+    {
+        return (bool) config('furimadeck.cutover_enabled')
+            ? route('furimadeck-dashboard', absolute: false)
+            : route('dashboard', absolute: false);
     }
 }

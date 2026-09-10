@@ -36,3 +36,27 @@ The server must already have the production `.env` file, database, web server, C
 The deployment workflow checks the server PHP version before installing Composer dependencies.
 
 The SSH deployment user must be allowed to run the deployment commands as `www-data` and reload Apache. Prefer a restricted passwordless sudo rule for only these commands.
+
+## FurimaDeck production deployment
+
+`Deploy FurimaDeck` is a separate manual workflow. It runs only when manually
+dispatched from `main`, checks out `main`, and refuses the legacy
+`/var/www/furugi` path. It does not share the legacy deployment settings.
+
+Configure these production-environment secrets without committing their values:
+
+- `FURIMADECK_DEPLOY_HOST`
+- `FURIMADECK_DEPLOY_USER`
+- `FURIMADECK_DEPLOY_SSH_PRIVATE_KEY`
+- `FURIMADECK_DEPLOY_SSH_KNOWN_HOSTS`
+
+Configure these production-environment variables:
+
+- `FURIMADECK_DEPLOY_PATH`: the separately provisioned FurimaDeck directory.
+- `FURIMADECK_DEPLOY_PORT`: SSH port, when it is not `22`.
+
+Before dispatching the workflow, create the target directory and its
+FurimaDeck-only `.env`, confirm the dedicated database backup and connection,
+and ensure `public/hot` is absent. The workflow runs FurimaDeck migrations,
+initial seeds, and `furimadeck:check-cutover`; any failed check stops the
+release before Apache reload.

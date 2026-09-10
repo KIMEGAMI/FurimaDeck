@@ -3,12 +3,12 @@
 namespace App\Models;
 
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 #[Fillable([
@@ -23,6 +23,7 @@ use Illuminate\Notifications\Notifiable;
     'premium_started_at',
     'premium_ends_at',
     'trial_used_at',
+    'stripe_subscription_event_created_at',
     'last_login_at',
     'last_login_ip',
     'last_login_user_agent_hash',
@@ -57,6 +58,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'premium_started_at' => 'datetime',
             'premium_ends_at' => 'datetime',
             'trial_used_at' => 'datetime',
+            'stripe_subscription_event_created_at' => 'datetime',
             'last_login_at' => 'datetime',
             'suspicious_login_detected_at' => 'datetime',
             'is_admin' => 'boolean',
@@ -106,5 +108,41 @@ class User extends Authenticatable implements MustVerifyEmail
     public function auctionItems(): HasMany
     {
         return $this->hasMany(AuctionItem::class);
+    }
+
+    /** @return HasMany<Product, User> */
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
+    }
+
+    /** @return HasMany<Supplier, User> */
+    public function suppliers(): HasMany
+    {
+        return $this->hasMany(Supplier::class);
+    }
+
+    /** @return HasMany<Listing, User> */
+    public function listings(): HasMany
+    {
+        return $this->hasMany(Listing::class);
+    }
+
+    /** @return HasMany<Sale, User> */
+    public function sales(): HasMany
+    {
+        return $this->hasMany(Sale::class);
+    }
+
+    /** @return HasMany<AiUsageLog, User> */
+    public function aiUsageLogs(): HasMany
+    {
+        return $this->hasMany(AiUsageLog::class);
+    }
+
+    /** @return HasMany<AuditLog, User> */
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(AuditLog::class);
     }
 }

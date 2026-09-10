@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\AuctionItem;
+use App\Models\AuctionItemImage;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -98,21 +99,26 @@ class ProfileController extends Controller
 
     private function deleteUserAuctionItemImages(int $userId): void
     {
+        $paths = AuctionItemImage::query()
+            ->whereHas('auctionItem', fn ($query) => $query->where('user_id', $userId))
+            ->pluck('path')
+            ->filter(fn (?string $path) => $this->isSafeAuctionItemImagePath($path))
+            ->all();
+
         AuctionItem::query()
             ->where('user_id', $userId)
             ->select(['id', 'image_path', 'sold_image_path'])
-            ->chunkById(100, function ($items) {
-                $paths = $items
+            ->chunkById(100, function ($items) use (&$paths): void {
+                $paths = array_merge($paths, $items
                     ->flatMap(fn (AuctionItem $item) => [$item->image_path, $item->sold_image_path])
                     ->filter(fn (?string $path) => $this->isSafeAuctionItemImagePath($path))
-                    ->unique()
                     ->values()
-                    ->all();
-
-                if ($paths !== []) {
-                    Storage::disk('public')->delete($paths);
-                }
+                    ->all());
             });
+
+        if ($paths !== []) {
+            Storage::disk('public')->delete(array_values(array_unique($paths)));
+        }
     }
 
     private function isSafeAuctionItemImagePath(?string $path): bool

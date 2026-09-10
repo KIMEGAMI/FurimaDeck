@@ -8,11 +8,23 @@ FurimaDeck は、ヤフオク・メルカリ・Yahooフリマ・ラクマなど�
 
 ---
 
-## URL
+## ローカル起動
 
-本番環境
+依存関係を準備済みの場合は、ビルド済みアセットで次のように起動します。
 
-https://furupro.shinji.work
+```powershell
+npm run build
+php artisan serve --host=127.0.0.1 --port=8001
+```
+
+ブラウザで `http://127.0.0.1:8001/` を開きます。
+
+Vite の開発サーバーを利用する場合は、`npm run dev` を実行中のままにしてください。停止済みViteを参照して画面のスタイルが失われた場合は、`public/hot` を削除してから `npm run build` を実行します。
+
+```powershell
+Remove-Item -LiteralPath public\hot -ErrorAction SilentlyContinue
+npm run build
+```
 
 ---
 
@@ -112,6 +124,14 @@ CSVファイルの文字コード違い（UTF-8、Shift-JISなど）にも対応
 * 売上分析機能の強化
 * モバイルUI改善
 * 通知機能追加
+
+---
+
+## 本番公開
+
+FurimaDeck の本番公開 URL は `https://furimadeck.kimegami.jp` です。旧FURUPROのURL、DB、Stripe Webhook、OAuth設定を流用しません。DNS、TLS証明書、本番VPSの向き先は公開前に確認します。
+
+公開前には専用DB、HTTPS URL、Stripe Live ModeのProduct・Price・Webhook、Google OAuth redirect URI、バックアップを人間が確認してください。手順は `docs/furimadeck-cutover-handoff.md` を参照してください。
 
 ---
 

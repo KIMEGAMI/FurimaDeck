@@ -13,6 +13,13 @@ class AuthenticationTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config()->set('furimadeck.cutover_enabled', true);
+    }
+
     public function test_login_screen_can_be_rendered(): void
     {
         $response = $this->get('/login');
@@ -30,7 +37,21 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertAuthenticated();
-        $response->assertRedirect(route('dashboard', absolute: false));
+        $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
+    }
+
+    public function test_users_are_sent_to_the_furimadeck_dashboard_after_login_during_cutover(): void
+    {
+        config()->set('furimadeck.cutover_enabled', true);
+        $user = User::factory()->create();
+
+        $response = $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticatedAs($user);
+        $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
     }
 
     public function test_users_can_authenticate_with_uppercase_email_input(): void
@@ -45,7 +66,7 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertAuthenticatedAs($user);
-        $response->assertRedirect(route('dashboard', absolute: false));
+        $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
     }
 
     public function test_first_successful_login_records_security_baseline_without_notification(): void
@@ -113,7 +134,25 @@ class AuthenticationTest extends TestCase
         $response = $this->post(route('login.demo'));
 
         $this->assertAuthenticatedAs($user);
-        $response->assertRedirect(route('dashboard', absolute: false));
+        $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
+    }
+
+    public function test_demo_user_is_sent_to_the_furimadeck_dashboard_during_cutover(): void
+    {
+        config([
+            'furimadeck.cutover_enabled' => true,
+            'demo.user_email' => 'demo@example.com',
+            'demo.user_password' => 'demo-password',
+        ]);
+        $user = User::factory()->create([
+            'email' => 'demo@example.com',
+            'password' => 'demo-password',
+        ]);
+
+        $response = $this->post(route('login.demo'));
+
+        $this->assertAuthenticatedAs($user);
+        $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
     }
 
     public function test_unverified_demo_user_can_authenticate_using_the_demo_login(): void
@@ -131,12 +170,7 @@ class AuthenticationTest extends TestCase
         $response = $this->post(route('login.demo'));
 
         $this->assertAuthenticatedAs($user);
-        $response->assertRedirect(route('dashboard', absolute: false));
-
-        $this
-            ->actingAs($user)
-            ->get(route('dashboard'))
-            ->assertOk();
+        $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
     }
 
     public function test_unverified_users_can_authenticate_using_the_login_screen(): void

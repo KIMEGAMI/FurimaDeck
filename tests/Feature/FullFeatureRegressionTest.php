@@ -13,6 +13,21 @@ class FullFeatureRegressionTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_product_form_keeps_profit_simulator_without_description_generator(): void
+    {
+        $user = $this->premiumUser();
+
+        $response = $this
+            ->actingAs($user)
+            ->get(route('auction-items.create'));
+
+        $response->assertOk();
+        $response->assertSee('値付け支援・利益シミュレーター', false);
+        $response->assertSee('おすすめ価格を売値に入れる', false);
+        $response->assertDontSee('商品説明文を作成する', false);
+        $response->assertDontSee('data-generate-description', false);
+    }
+
     public function test_product_registration_without_image_and_sold_calculation_are_exact(): void
     {
         $user = $this->premiumUser();

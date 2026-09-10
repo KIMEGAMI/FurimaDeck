@@ -2,7 +2,8 @@
     $user = Auth::user();
     $isAdmin = $user?->isAdmin() ?? false;
     $hasPremiumPlan = $user?->hasActiveSubscription() ?? false;
-    $brandHref = $isAdmin ? route('profile.edit') : route('dashboard');
+    $isFurimaDeckCutover = (bool) config('furimadeck.cutover_enabled');
+    $brandHref = $isFurimaDeckCutover ? route('furimadeck-dashboard') : ($isAdmin ? route('profile.edit') : route('dashboard'));
 @endphp
 
 <nav x-data="{ open: false }" class="border-b border-cyan-300/20 bg-slate-950/45 text-white shadow-2xl backdrop-blur-md">
@@ -16,7 +17,44 @@
                 </div>
 
                 <div class="hidden space-x-6 sm:-my-px sm:ms-8 sm:flex">
-                    @if ($isAdmin)
+                    @if ($isFurimaDeckCutover)
+                        <x-nav-link :href="route('furimadeck-dashboard')" :active="request()->routeIs('furimadeck-dashboard')">
+                            HOME
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('products.index')" :active="request()->routeIs('products.index', 'products.create', 'products.edit', 'products.update', 'products.images.*')">
+                            商品管理
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('products.imports.create')" :active="request()->routeIs('products.imports.*')">
+                            CSV取込{{ $hasPremiumPlan ? '' : ' Premium' }}
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('listings.index')" :active="request()->routeIs('listings.*')">
+                            出品管理
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('suppliers.index')" :active="request()->routeIs('suppliers.*')">
+                            仕入先
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('furimadeck-sales.index')" :active="request()->routeIs('furimadeck-sales.*')">
+                            販売管理{{ $hasPremiumPlan ? '' : ' Premium' }}
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('furimadeck-billing.index')" :active="request()->routeIs('furimadeck-billing.*')">
+                            契約・解約
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('furimadeck-account.edit')" :active="request()->routeIs('furimadeck-account.*')">
+                            アカウント
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('furimadeck-activity.index')" :active="request()->routeIs('furimadeck-activity.*')">
+                            操作履歴
+                        </x-nav-link>
+
+                    @elseif ($isAdmin)
                         <x-nav-link :href="route('profile.edit')" :active="request()->routeIs('profile.edit')">
                             プロフィール
                         </x-nav-link>
@@ -129,7 +167,44 @@
 
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="space-y-1 pb-3 pt-2">
-            @if ($isAdmin)
+            @if ($isFurimaDeckCutover)
+                <x-responsive-nav-link :href="route('furimadeck-dashboard')" :active="request()->routeIs('furimadeck-dashboard')">
+                    HOME
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('products.index')" :active="request()->routeIs('products.index', 'products.create', 'products.edit', 'products.update', 'products.images.*')">
+                    商品管理
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('products.imports.create')" :active="request()->routeIs('products.imports.*')">
+                    CSV取込{{ $hasPremiumPlan ? '' : ' Premium' }}
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('listings.index')" :active="request()->routeIs('listings.*')">
+                    出品管理
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('suppliers.index')" :active="request()->routeIs('suppliers.*')">
+                    仕入先
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('furimadeck-sales.index')" :active="request()->routeIs('furimadeck-sales.*')">
+                    販売管理{{ $hasPremiumPlan ? '' : ' Premium' }}
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('furimadeck-billing.index')" :active="request()->routeIs('furimadeck-billing.*')">
+                    契約・解約
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('furimadeck-account.edit')" :active="request()->routeIs('furimadeck-account.*')">
+                    アカウント
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('furimadeck-activity.index')" :active="request()->routeIs('furimadeck-activity.*')">
+                    操作履歴
+                </x-responsive-nav-link>
+
+            @elseif ($isAdmin)
                 <x-responsive-nav-link :href="route('profile.edit')" :active="request()->routeIs('profile.edit')">
                     プロフィール
                 </x-responsive-nav-link>

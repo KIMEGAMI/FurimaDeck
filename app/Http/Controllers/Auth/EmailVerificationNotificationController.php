@@ -9,9 +9,7 @@ use Illuminate\Http\Request;
 
 class EmailVerificationNotificationController extends Controller
 {
-    public function __construct(private readonly EmailVerificationDelivery $emailVerificationDelivery)
-    {
-    }
+    public function __construct(private readonly EmailVerificationDelivery $emailVerificationDelivery) {}
 
     /**
      * Send a new email verification notification.

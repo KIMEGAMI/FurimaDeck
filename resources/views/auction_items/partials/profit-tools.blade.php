@@ -31,12 +31,9 @@
         </div>
     </div>
 
-    <div class="mt-4 grid gap-3 sm:grid-cols-2">
+    <div class="mt-4">
         <button type="button" data-apply-recommended-price class="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow hover:bg-emerald-800">
             おすすめ価格を売値に入れる
-        </button>
-        <button type="button" data-generate-description class="rounded-xl border border-emerald-300 bg-white px-5 py-3 text-sm font-black text-emerald-800 shadow hover:bg-emerald-100">
-            商品説明文を作成する
         </button>
     </div>
 
@@ -55,9 +52,6 @@
                 }
 
                 const fields = {
-                    title: form.querySelector('[name="title"]'),
-                    platform: form.querySelector('[name="platform"]'),
-                    comment: form.querySelector('[name="comment"]'),
                     purchasePrice: form.querySelector('[name="purchase_price"]'),
                     soldPrice: form.querySelector('[name="sold_price"]'),
                     salesFeeRate: form.querySelector('[name="sales_fee_rate"]'),
@@ -72,7 +66,6 @@
                     advice: tool.querySelector('[data-price-advice]'),
                 };
                 const recommendedButton = tool.querySelector('[data-apply-recommended-price]');
-                const descriptionButton = tool.querySelector('[data-generate-description]');
 
                 const yen = function (value) {
                     return '¥' + Math.max(0, Math.round(value)).toLocaleString();
@@ -121,26 +114,6 @@
 
                     recommendedButton.dataset.price = String(current.recommendedPrice);
                 };
-                const generateDescription = function () {
-                    const title = fields.title?.value.trim() || '商品';
-                    const platform = fields.platform?.value || '各販売サイト';
-                    const current = values();
-                    const text = [
-                        title,
-                        '',
-                        '古着販売向けに管理している一点物です。',
-                        '状態、サイズ感、素材感は写真と説明を確認してください。',
-                        '出品先: ' + platform,
-                        '販売価格の目安: ' + yen(current.soldPrice || current.recommendedPrice),
-                        '',
-                        '気になる点があれば購入前にコメントしてください。',
-                    ].join('\n');
-
-                    if (fields.comment) {
-                        fields.comment.value = fields.comment.value.trim() ? fields.comment.value.trim() + '\n\n' + text : text;
-                        fields.comment.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
-                };
 
                 ['input', 'change'].forEach(function (eventName) {
                     Object.values(fields).forEach(function (field) {
@@ -153,7 +126,6 @@
                         fields.soldPrice.dispatchEvent(new Event('input', { bubbles: true }));
                     }
                 });
-                descriptionButton?.addEventListener('click', generateDescription);
                 update();
             });
         });

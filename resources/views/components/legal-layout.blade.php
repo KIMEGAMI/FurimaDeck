@@ -121,7 +121,7 @@
                 <div class="border-b border-slate-200 pb-6">
                     <p class="text-sm font-black tracking-[0.2em] text-cyan-700">{{ $eyebrow }}</p>
                     <h1 class="mt-3 text-3xl font-black leading-tight text-slate-950 md:text-4xl">{{ $title }}</h1>
-                    <p class="mt-4 text-sm font-bold text-slate-500">最終更新日: 2026年8月9日</p>
+                    <p class="mt-4 text-sm font-bold text-slate-500">最終更新日: {{ config('legal.updated_at') }}</p>
                 </div>
                 <div class="legal-content mt-8">
                     {{ $slot }}
