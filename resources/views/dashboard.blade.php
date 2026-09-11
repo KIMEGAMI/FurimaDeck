@@ -178,7 +178,7 @@
                         </a>
                     @else
                         <div class="rounded-xl border border-cyan-300/25 bg-cyan-400/10 p-4">
-                            <p class="text-sm font-black text-cyan-100">Freeは商品{{ number_format($freeItemLimit ?? 50) }}件までです。Premiumは7日間無料お試し後、月額480円（税込）でCSV管理や売上分析まで使えます。</p>
+                            <p class="text-sm font-black text-cyan-100">Freeは商品{{ number_format($freeItemLimit ?? 50) }}件までです。Premiumは7日間無料お試し後、月額{{ number_format((int) config('services.stripe.subscription_amount')) }}円（税込）でCSV管理や売上分析まで使えます。</p>
                             <a href="{{ route('subscriptions.index') }}" class="mt-3 inline-flex rounded-lg bg-cyan-400 px-5 py-2 text-sm font-black text-slate-950 hover:bg-cyan-300">
                                 7日間無料でPremiumを試す
                             </a>

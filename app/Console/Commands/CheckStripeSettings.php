@@ -10,7 +10,7 @@ class CheckStripeSettings extends Command
 {
     private const EXPECTED_PRODUCTION_APP_URL = 'https://furupro.shinji.work';
 
-    private const EXPECTED_SUBSCRIPTION_AMOUNT = 480;
+    private const EXPECTED_SUBSCRIPTION_AMOUNT = 980;
 
     private const EXPECTED_SUBSCRIPTION_CURRENCY = 'jpy';
 

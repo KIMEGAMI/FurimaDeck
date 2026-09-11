@@ -194,7 +194,7 @@ class SubscriptionCheckoutController extends Controller
             'quantity' => 1,
             'price_data' => [
                 'currency' => config('services.stripe.subscription_currency', 'jpy'),
-                'unit_amount' => (int) config('services.stripe.subscription_amount', 480),
+                'unit_amount' => (int) config('services.stripe.subscription_amount'),
                 'recurring' => ['interval' => 'month'],
                 'product_data' => [
                     'name' => config('services.stripe.subscription_product_name', 'FurimaDeck Premium'),
