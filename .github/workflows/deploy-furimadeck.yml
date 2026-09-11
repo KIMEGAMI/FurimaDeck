@@ -86,17 +86,23 @@ jobs:
           git fetch origin main
           git merge --ff-only origin/main
           php -r "if (version_compare(PHP_VERSION, '$MIN_PHP_VERSION', '<')) { fwrite(STDERR, 'PHP $MIN_PHP_VERSION or newer is required. Current: '.PHP_VERSION.PHP_EOL); exit(1); }"
-          sudo -u www-data composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress
-          sudo -u www-data npm ci --ignore-scripts
-          sudo -u www-data npm run build
-          sudo -u www-data php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force
-          sudo -u www-data php artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckCategorySeeder --force
-          sudo -u www-data php artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckMarketplaceSeeder --force
-          sudo -u www-data php artisan furimadeck:check-cutover
-          sudo -u www-data php artisan optimize:clear
-          sudo -u www-data php artisan config:cache
-          sudo -u www-data php artisan route:cache
-          sudo -u www-data php artisan view:cache
-          sudo -u www-data php artisan queue:restart || true
+          COMPOSER_BIN="$(command -v composer)"
+          NPM_BIN="$(command -v npm)"
+          PHP_BIN="$(command -v php)"
+          test -x "$COMPOSER_BIN"
+          test -x "$NPM_BIN"
+          test -x "$PHP_BIN"
+          sudo -u www-data "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress
+          sudo -u www-data "$NPM_BIN" ci --ignore-scripts
+          sudo -u www-data "$NPM_BIN" run build
+          sudo -u www-data "$PHP_BIN" artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force
+          sudo -u www-data "$PHP_BIN" artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckCategorySeeder --force
+          sudo -u www-data "$PHP_BIN" artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckMarketplaceSeeder --force
+          sudo -u www-data "$PHP_BIN" artisan furimadeck:check-cutover
+          sudo -u www-data "$PHP_BIN" artisan optimize:clear
+          sudo -u www-data "$PHP_BIN" artisan config:cache
+          sudo -u www-data "$PHP_BIN" artisan route:cache
+          sudo -u www-data "$PHP_BIN" artisan view:cache
+          sudo -u www-data "$PHP_BIN" artisan queue:restart || true
           sudo systemctl reload apache2
           SCRIPT
