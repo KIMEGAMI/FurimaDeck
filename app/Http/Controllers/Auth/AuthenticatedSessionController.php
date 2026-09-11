@@ -37,6 +37,12 @@ class AuthenticatedSessionController extends Controller
     public function demo(Request $request): RedirectResponse
     {
         $email = config('demo.user_email');
+        if (! (bool) config('demo.user_enabled')) {
+            throw ValidationException::withMessages([
+                'email' => 'デモログインは現在利用できません。',
+            ]);
+        }
+
         $password = config('demo.user_password');
 
         if (! is_string($email) || $email === '' || ! is_string($password) || $password === '') {
