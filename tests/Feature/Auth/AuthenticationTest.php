@@ -18,6 +18,7 @@ class AuthenticationTest extends TestCase
         parent::setUp();
 
         config()->set('furimadeck.cutover_enabled', true);
+        config()->set('demo.user_enabled', true);
     }
 
     public function test_login_screen_can_be_rendered(): void
@@ -135,6 +136,25 @@ class AuthenticationTest extends TestCase
 
         $this->assertAuthenticatedAs($user);
         $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
+    }
+
+    public function test_demo_login_is_unavailable_when_disabled(): void
+    {
+        config([
+            'demo.user_enabled' => false,
+            'demo.user_email' => 'demo@example.com',
+            'demo.user_password' => 'demo-password',
+        ]);
+
+        User::factory()->create([
+            'email' => 'demo@example.com',
+            'password' => 'demo-password',
+        ]);
+
+        $response = $this->post(route('login.demo'));
+
+        $this->assertGuest();
+        $response->assertSessionHasErrors('email');
     }
 
     public function test_demo_user_is_sent_to_the_furimadeck_dashboard_during_cutover(): void

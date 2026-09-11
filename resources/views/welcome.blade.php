@@ -147,10 +147,12 @@
                     <h1 class="sr-only">フリマ販売の収益管理ならFurimaDeck</h1>
                     <div class="flex flex-wrap gap-3">
                         <a href="{{ route('register') }}" class="rounded-md bg-cyan-700 px-7 py-4 text-center text-sm font-black text-white shadow-lg shadow-cyan-900/20 hover:bg-cyan-800">はじめる</a>
-                        <form method="POST" action="{{ route('login.demo') }}">
-                            @csrf
-                            <button type="submit" class="rounded-md border border-cyan-300 bg-white/90 px-7 py-4 text-sm font-black text-black shadow-lg hover:bg-white">デモを見る</button>
-                        </form>
+                        @if ((bool) config('demo.user_enabled'))
+                            <form method="POST" action="{{ route('login.demo') }}">
+                                @csrf
+                                <button type="submit" class="rounded-md border border-cyan-300 bg-white/90 px-7 py-4 text-sm font-black text-black shadow-lg hover:bg-white">デモを見る</button>
+                            </form>
+                        @endif
                     </div>
                     <p class="mt-5 max-w-2xl text-sm font-black leading-7 text-cyan-950">
                         商品登録、画像管理、在庫状況、SOLD、売上、CSVをまとめて管理。フリマ販売の日々の収益管理を、もっと見やすく、もっと速くします。

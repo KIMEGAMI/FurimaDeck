@@ -10,11 +10,11 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
-        $email = env('ADMIN_EMAIL', 'admin@shinji.work');
-        $password = env('ADMIN_PASSWORD');
+        $email = env('FURIMADECK_ADMIN_EMAIL') ?: env('ADMIN_EMAIL', 'admin@shinji.work');
+        $password = env('FURIMADECK_ADMIN_INITIAL_PASSWORD') ?: env('ADMIN_PASSWORD');
 
         if (! is_string($password) || $password === '') {
-            $this->command?->warn('ADMIN_PASSWORD is not set. Admin user was not created.');
+            $this->command?->warn('FURIMADECK_ADMIN_INITIAL_PASSWORD is not set. Admin user was not created.');
 
             return;
         }

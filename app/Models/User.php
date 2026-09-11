@@ -95,6 +95,9 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isDemoUser(): bool
     {
         $demoEmail = config('demo.user_email');
+        if (! (bool) config('demo.user_enabled')) {
+            return false;
+        }
 
         return is_string($demoEmail) && $demoEmail !== '' && $this->email === $demoEmail;
     }
