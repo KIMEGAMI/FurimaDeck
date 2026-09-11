@@ -26,7 +26,7 @@ class StripeSettingsCheckTest extends TestCase
             'https://api.stripe.com/v1/prices/price_live_premium' => Http::response([
                 'active' => true,
                 'currency' => 'jpy',
-                'unit_amount' => 480,
+                'unit_amount' => 980,
                 'recurring' => ['interval' => 'month'],
             ]),
             'https://api.stripe.com/v1/account' => Http::response([
@@ -44,7 +44,7 @@ class StripeSettingsCheckTest extends TestCase
             ->assertSuccessful();
     }
 
-    public function test_production_stripe_check_fails_when_price_amount_is_not_480(): void
+    public function test_production_stripe_check_fails_when_price_amount_is_not_980(): void
     {
         $this->app->detectEnvironment(fn () => 'production');
 
@@ -60,7 +60,7 @@ class StripeSettingsCheckTest extends TestCase
             'https://api.stripe.com/v1/prices/price_live_wrong_amount' => Http::response([
                 'active' => true,
                 'currency' => 'jpy',
-                'unit_amount' => 980,
+                'unit_amount' => 480,
                 'recurring' => ['interval' => 'month'],
             ]),
             'https://api.stripe.com/v1/account' => Http::response([

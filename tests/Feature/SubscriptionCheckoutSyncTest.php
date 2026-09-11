@@ -228,7 +228,7 @@ class SubscriptionCheckoutSyncTest extends TestCase
         config([
             'services.stripe.secret' => 'sk_test_example',
             'services.stripe.subscription_price_id' => 'price_missing',
-            'services.stripe.subscription_amount' => 480,
+            'services.stripe.subscription_amount' => 980,
             'services.stripe.subscription_currency' => 'jpy',
         ]);
 
@@ -268,7 +268,7 @@ class SubscriptionCheckoutSyncTest extends TestCase
         Http::assertSent(fn ($request) => $request->url() === 'https://api.stripe.com/v1/checkout/sessions'
             && ($request['line_items'][0]['price'] ?? null) === 'price_missing');
         Http::assertSent(fn ($request) => $request->url() === 'https://api.stripe.com/v1/checkout/sessions'
-            && ($request['line_items'][0]['price_data']['unit_amount'] ?? null) === 480
+            && ($request['line_items'][0]['price_data']['unit_amount'] ?? null) === 980
             && ($request['line_items'][0]['price_data']['currency'] ?? null) === 'jpy'
             && ! isset($request['line_items'][0]['price']));
     }
@@ -450,7 +450,7 @@ class SubscriptionCheckoutSyncTest extends TestCase
                         'id' => 'in_recent',
                         'number' => 'FURUPRO-2026-0001',
                         'status' => 'paid',
-                        'total' => 480,
+                        'total' => 980,
                         'currency' => 'jpy',
                         'created' => $createdAt,
                         'hosted_invoice_url' => 'https://invoice.stripe.test/in_recent',
@@ -473,7 +473,7 @@ class SubscriptionCheckoutSyncTest extends TestCase
             ->assertOk()
             ->assertSee('請求書', false)
             ->assertSee('FURUPRO-2026-0001', false)
-            ->assertSee('¥480', false)
+            ->assertSee('¥980', false)
             ->assertSee('支払い済み', false)
             ->assertSee('https://invoice.stripe.test/in_recent', false)
             ->assertSee('https://invoice.stripe.test/in_recent.pdf', false);

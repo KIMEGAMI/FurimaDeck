@@ -32,7 +32,8 @@ class EnsurePremiumPlan
             'auction-items.duplicates.destroy' => '重複チェックはPremiumプランで利用できます。',
             default => 'この機能はPremiumプラン限定です。',
         };
-        $message = $title.' Premiumは7日間無料お試し後、月額480円（税込）で、商品登録数・カテゴリ数の制限なし、CSV登録、売上分析、ジャンル別分析、重複チェックを利用できます。';
+        $premiumPrice = number_format((int) config('services.stripe.subscription_amount'));
+        $message = $title." Premiumは7日間無料お試し後、月額{$premiumPrice}円（税込）で、商品登録数・カテゴリ数の制限なし、CSV登録、売上分析、ジャンル別分析、重複チェックを利用できます。";
 
         if ($request->expectsJson()) {
             return response()->json(['message' => $message], 403);

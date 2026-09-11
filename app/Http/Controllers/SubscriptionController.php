@@ -34,7 +34,7 @@ class SubscriptionController extends Controller
             'isDemoUser' => $isDemoUser,
             'stripeInvoices' => $stripeInvoices,
             'stripeInvoicesUnavailable' => $stripeInvoicesUnavailable,
-            'price' => config('services.stripe.subscription_amount', 480),
+            'price' => config('services.stripe.subscription_amount'),
             'trialEndsAt' => $user->subscription_status === 'trialing' && $user->premium_ends_at?->isFuture()
                 ? $user->premium_ends_at
                 : null,
@@ -596,7 +596,7 @@ class SubscriptionController extends Controller
             'quantity' => 1,
             'price_data' => [
                 'currency' => config('services.stripe.subscription_currency', 'jpy'),
-                'unit_amount' => (int) config('services.stripe.subscription_amount', 480),
+                'unit_amount' => (int) config('services.stripe.subscription_amount'),
                 'recurring' => ['interval' => 'month'],
                 'product_data' => [
                     'name' => config('services.stripe.subscription_product_name', 'FurimaDeck Premium'),
