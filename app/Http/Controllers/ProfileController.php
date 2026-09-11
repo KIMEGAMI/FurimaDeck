@@ -92,9 +92,7 @@ class ProfileController extends Controller
             return false;
         }
 
-        $demoEmail = config('demo.user_email');
-
-        return $user->isAdmin() || (is_string($demoEmail) && $demoEmail !== '' && $user->email === $demoEmail);
+        return $user->isAdmin() || $user->isDemoUser();
     }
 
     private function deleteUserAuctionItemImages(int $userId): void
