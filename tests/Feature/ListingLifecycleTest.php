@@ -137,6 +137,7 @@ class ListingLifecycleTest extends TestCase
             'internal_sku' => 'LISTING-PREVIEW-001',
             'product_name' => '出品確認テスト商品',
             'condition' => 'used',
+            'description_base' => 'コピーに使う商品説明',
             'purchase_unit_cost' => 1000,
             'purchase_quantity' => 1,
             'quantity_available' => 1,
@@ -154,8 +155,98 @@ class ListingLifecycleTest extends TestCase
         $this->actingAs($user)
             ->get(route('listings.create'))
             ->assertOk()
+            ->assertSee('出品する商品')
+            ->assertSee('商品情報')
+            ->assertSee('価格・販売条件')
+            ->assertSee('配送情報')
+            ->assertSee('公開後の記録')
+            ->assertSee('商品ID: LISTING-PREVIEW-001')
+            ->assertSee('id="listing-product-preview"', false)
+            ->assertSee('商品情報を反映')
+            ->assertSee('出品文をコピー')
+            ->assertSee('data-product-description="コピーに使う商品説明"', false)
             ->assertSee('出品前確認')
             ->assertSee('Yahoo!オークション');
+    }
+
+    public function test_sale_create_page_exposes_listing_product_and_marketplace_for_browser_sync(): void
+    {
+        $user = User::factory()->create(['email_verified_at' => now(), 'is_admin' => true]);
+        $product = $user->products()->create([
+            'internal_sku' => 'LISTING-SALE-SYNC-001',
+            'product_name' => '販売連携テスト商品',
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 1,
+            'inventory_status' => 'in_stock',
+        ]);
+        $marketplace = Marketplace::query()->create([
+            'code' => 'sale-sync-marketplace',
+            'name' => '販売連携テスト販売先',
+            'base_url' => 'https://example.test',
+            'fee_type' => 'percentage',
+            'default_fee_rate' => 0,
+            'is_active' => true,
+        ]);
+        $listing = $user->listings()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $marketplace->id,
+            'listing_title' => '販売連携テスト出品',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('furimadeck-sales.create'))
+            ->assertOk()
+            ->assertSee('出品を選ぶと、商品と販売先を出品内容に合わせます。')
+            ->assertSee('data-product-id="'.$product->id.'"', false)
+            ->assertSee('data-marketplace-id="'.$marketplace->id.'"', false)
+            ->assertSee('value="'.$listing->id.'"', false);
+    }
+
+    public function test_sale_index_renders_returned_sales_without_a_blade_syntax_error(): void
+    {
+        $user = User::factory()->create(['email_verified_at' => now(), 'is_admin' => true]);
+        $product = $user->products()->create([
+            'internal_sku' => 'SALE-INDEX-001',
+            'product_name' => '販売一覧テスト商品',
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 0,
+            'inventory_status' => 'out_of_stock',
+        ]);
+        $marketplace = Marketplace::query()->create([
+            'code' => 'sale-index-marketplace',
+            'name' => '販売一覧テスト販売先',
+            'base_url' => 'https://example.test',
+            'fee_type' => 'percentage',
+            'default_fee_rate' => 0,
+            'is_active' => true,
+        ]);
+        $user->sales()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $marketplace->id,
+            'internal_sku_snapshot' => $product->internal_sku,
+            'product_name_snapshot' => $product->product_name,
+            'quantity' => 1,
+            'sold_price' => 3000,
+            'sold_at' => now(),
+            'status' => 'returned',
+            'cost_basis' => 1000,
+            'net_profit' => 2000,
+            'refund_amount' => 3000,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('furimadeck-sales.index'))
+            ->assertOk()
+            ->assertSee('販売管理')
+            ->assertDontSee('取引管理')
+            ->assertSee('販売一覧テスト商品')
+            ->assertSee('返品・返金済み')
+            ->assertSee('返金 ¥3,000');
     }
 
     public function test_listing_store_calculates_the_profit_estimate_on_the_server(): void
@@ -185,7 +276,6 @@ class ListingLifecycleTest extends TestCase
                 'marketplace_id' => $marketplace->id,
                 'listing_title' => '見込み利益テスト出品',
                 'listing_price' => 10000,
-                'listing_quantity' => 2,
                 'expected_fee_rate' => '10.00',
                 'shipping_fee' => 750,
                 'status' => 'draft',
@@ -194,15 +284,15 @@ class ListingLifecycleTest extends TestCase
 
         $this->assertDatabaseHas('listings', [
             'product_id' => $product->id,
-            'expected_profit' => 2250,
-            'expected_margin' => 22.5,
+            'expected_profit' => 5250,
+            'expected_margin' => 52.5,
         ]);
 
         $this->actingAs($user)
             ->get(route('listings.index'))
             ->assertOk()
             ->assertSee('見込み利益')
-            ->assertSee('¥2,250');
+            ->assertSee('¥5,250');
     }
 
     public function test_other_marketplace_requires_and_stores_a_user_defined_name(): void

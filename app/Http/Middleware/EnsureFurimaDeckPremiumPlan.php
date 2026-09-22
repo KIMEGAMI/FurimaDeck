@@ -14,7 +14,12 @@ class EnsureFurimaDeckPremiumPlan
             return $next($request);
         }
 
-        $message = 'この機能はPremiumプランで利用できます。';
+        $message = match ($request->route()?->getName()) {
+            'furimadeck-analytics.index' => '売上分析はPremiumプランで利用できます。',
+            'furimadeck-analytics.categories' => 'ジャンル別分析はPremiumプランで利用できます。',
+            'furimadeck-improvement.index' => '販売改善はPremiumプランで利用できます。',
+            default => 'この機能はPremiumプランで利用できます。',
+        };
         if ($request->expectsJson()) {
             return response()->json(['message' => $message], 403);
         }

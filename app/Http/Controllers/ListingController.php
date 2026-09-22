@@ -7,6 +7,7 @@ use App\Models\Marketplace;
 use App\Services\AuditLogger;
 use App\Services\ListingLifecycleService;
 use App\Services\ListingProfitEstimator;
+use App\Services\MarketplaceFeeService;
 use App\Services\MarketplaceListingReadinessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,7 +26,7 @@ class ListingController extends Controller
 
     public function create(Request $request): View
     {
-        return view('listings.create', $this->formData($request));
+        return view('listings.create', $this->formData($request) + ['selectedProductId' => $request->integer('product_id') ?: null]);
     }
 
     public function store(Request $request, ListingLifecycleService $lifecycle, ListingProfitEstimator $profitEstimator, AuditLogger $auditLogger): RedirectResponse
@@ -37,7 +38,7 @@ class ListingController extends Controller
         }
         $auditLogger->log($request->user(), Listing::class, $listing->id, 'listing.created', null, $listing->getAttributes(), $request->ip());
 
-        return redirect()->route('listings.edit', $listing)->with('success', '出品準備データを作成しました。');
+        return redirect()->route('listings.edit', $listing)->with('success', '出品情報を登録しました。');
     }
 
     public function edit(Request $request, Listing $listing): View
@@ -58,7 +59,7 @@ class ListingController extends Controller
         }
         $auditLogger->log($request->user(), Listing::class, $listing->id, 'listing.updated', $before, $listing->fresh()->getAttributes(), $request->ip());
 
-        return back()->with('success', '出品準備データを更新しました。');
+        return back()->with('success', '出品情報を更新しました。');
     }
 
     public function destroy(Request $request, Listing $listing, AuditLogger $auditLogger): RedirectResponse
@@ -82,9 +83,9 @@ class ListingController extends Controller
         $marketplaces = Marketplace::query()->where('is_active', true)->orderBy('name')->get();
 
         return [
-            'products' => $request->user()->products()->orderBy('product_name')->get(),
+            'products' => $request->user()->products()->with('images')->orderBy('product_name')->get(),
             'marketplaces' => $marketplaces,
-            'marketplaceFeeRates' => $marketplaces->mapWithKeys(fn (Marketplace $marketplace) => [$marketplace->id => $marketplace->default_fee_rate]),
+            'marketplaceFeeRates' => app(MarketplaceFeeService::class)->rates($marketplaces),
             'marketplaceRequirements' => app(MarketplaceListingReadinessService::class)->requirementsForMarketplaces($marketplaces),
             'statuses' => Listing::USER_SETTABLE_STATUSES,
         ];
@@ -104,7 +105,6 @@ class ListingController extends Controller
             'listing_title' => ['required', 'string', 'max:255'],
             'listing_description' => ['nullable', 'string', 'max:10000'],
             'listing_price' => ['nullable', 'integer', 'min:0'],
-            'listing_quantity' => ['required', 'integer', 'min:1', 'max:1000000'],
             'expected_fee_rate' => ['required', 'decimal:0,2', 'min:0', 'max:100'],
             'marketplace_category' => ['nullable', 'string', 'max:255'],
             'marketplace_condition' => ['nullable', 'string', 'max:255'],
@@ -129,6 +129,7 @@ class ListingController extends Controller
     private function listingValuesWithEstimate(Request $request, ListingProfitEstimator $profitEstimator): array
     {
         $values = $this->validatedListing($request);
+        $values['listing_quantity'] = 1;
         $marketplaceCode = Marketplace::query()->whereKey($values['marketplace_id'])->value('code');
         if ($marketplaceCode === 'other' && blank($values['marketplace_other_name'] ?? null)) {
             throw ValidationException::withMessages([
@@ -146,7 +147,7 @@ class ListingController extends Controller
         $product = $request->user()->products()->findOrFail($values['product_id']);
         $estimate = $profitEstimator->estimate(
             $product,
-            $values['listing_quantity'],
+            1,
             $values['listing_price'],
             (string) $values['expected_fee_rate'],
             $values['shipping_fee'] ?? 0,

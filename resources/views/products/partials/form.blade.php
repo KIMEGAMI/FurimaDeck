@@ -2,60 +2,121 @@
 @php($editing = isset($product))
 @php($purchaseDate = $editing && $product->purchase_date ? $product->purchase_date->format('Y-m-d') : '')
 @php($remainingImageSlots = max(0, (int) config('furimadeck.product_images.max_count') - ($editing ? $product->images->count() : 0)))
-<div class="grid gap-5 md:grid-cols-2">
-<label class="block text-sm font-bold text-slate-700">SKU<input required name="internal_sku" value="{{ old('internal_sku', $product->internal_sku ?? '') }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
+@php($selectedCategoryId = (string) old('category_id', $product->category_id ?? ''))
+@php($categoryList = $categories->map(fn ($category) => ['id' => $category->id, 'parent_id' => $category->parent_id, 'name' => $category->name])->values())
+@include('products.partials.images')
+<section class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+<h3 class="text-lg font-black text-slate-900">基本情報</h3><p class="mt-1 text-sm text-slate-600">まずは必須項目だけで登録できます。詳細はあとから編集できます。</p>
+<div class="mt-4 grid gap-5 md:grid-cols-2">
+<label class="block text-sm font-bold text-slate-700">商品ID<input required name="internal_sku" value="{{ old('internal_sku', $product->internal_sku ?? '') }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
 <label class="block text-sm font-bold text-slate-700">商品名<input required name="product_name" value="{{ old('product_name', $product->product_name ?? '') }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700">カテゴリ<select id="category_id" name="category_id" class="mt-1 w-full rounded border-slate-300 text-slate-900"><option value="">未分類</option>@foreach($categories as $root)<optgroup label="{{ $root->name }}">@foreach($root->children as $child)<option value="{{ $child->id }}" @selected(old('category_id', $product->category_id ?? '') == $child->id)>{{ $child->name }}</option>@foreach($child->children as $leaf)<option value="{{ $leaf->id }}" @selected(old('category_id', $product->category_id ?? '') == $leaf->id)>&nbsp;&nbsp;{{ $leaf->name }}</option>@endforeach@endforeach</optgroup>@endforeach</select></label>
-<label class="block text-sm font-bold text-slate-700">商品状態<select name="condition" class="mt-1 w-full rounded border-slate-300 text-slate-900">@foreach($conditions as $condition)<option value="{{ $condition }}" @selected(old('condition', $product->condition ?? 'used') === $condition)>{{ \App\Models\Product::conditionLabel($condition) }}</option>@endforeach</select></label>
-<label class="block text-sm font-bold text-slate-700">仕入先<select name="supplier_id" class="mt-1 w-full rounded border-slate-300 text-slate-900"><option value="">未設定</option>@foreach($suppliers as $supplier)<option value="{{ $supplier->id }}" @selected(old('supplier_id', $product->supplier_id ?? '') == $supplier->id)>{{ $supplier->name }}</option>@endforeach</select></label>
-<label class="block text-sm font-bold text-slate-700">仕入日<input type="date" name="purchase_date" value="{{ old('purchase_date', $purchaseDate) }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700">仕入単価<input required min="0" type="number" name="purchase_unit_cost" value="{{ old('purchase_unit_cost', $product->purchase_unit_cost ?? 0) }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700">仕入数量<input required min="1" type="number" name="purchase_quantity" value="{{ old('purchase_quantity', $product->purchase_quantity ?? 1) }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700">在庫数<input required min="0" type="number" name="quantity_available" value="{{ old('quantity_available', $product->quantity_available ?? 0) }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700">仕入送料<input min="0" type="number" name="purchase_shipping_cost" value="{{ old('purchase_shipping_cost', $product->purchase_shipping_cost ?? 0) }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700">その他仕入費用<input min="0" type="number" name="other_purchase_expense" value="{{ old('other_purchase_expense', $product->other_purchase_expense ?? 0) }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700">在庫状態<select name="inventory_status" class="mt-1 w-full rounded border-slate-300 text-slate-900">@foreach($inventoryStatuses as $status)<option value="{{ $status }}" @selected(old('inventory_status', $product->inventory_status ?? 'draft') === $status)>{{ \App\Models\Product::inventoryStatusLabel($status) }}</option>@endforeach</select></label>
-<label class="block text-sm font-bold text-slate-700">保管場所<input name="storage_location" value="{{ old('storage_location', $product->storage_location ?? '') }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700">JAN / EAN<input name="jan_ean" value="{{ old('jan_ean', $product->jan_ean ?? '') }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700">ISBN<input name="isbn" value="{{ old('isbn', $product->isbn ?? '') }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700 md:col-span-2">メーカー・型番<input name="manufacturer_model_number" value="{{ old('manufacturer_model_number', $product->manufacturer_model_number ?? '') }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-<label class="block text-sm font-bold text-slate-700 md:col-span-2">シリアル番号<input name="serial_number" value="{{ old('serial_number', $product->serial_number ?? '') }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
+<div class="md:col-span-2">
+    <span class="block text-sm font-bold text-slate-700">カテゴリ</span>
+    <input id="category_id" name="category_id" type="hidden" value="{{ $selectedCategoryId }}">
+    <div id="category-levels" class="mt-1 grid gap-3 md:grid-cols-2 xl:grid-cols-4"></div>
+    <p class="mt-2 text-xs text-slate-600">大項目から順に選択してください。Yahoo!フリマと同じく、詳細カテゴリがある場合は次の選択欄が表示されます。</p>
 </div>
-<label class="mt-5 block text-sm font-bold text-slate-700">基本説明<textarea name="description_base" rows="5" class="mt-1 w-full rounded border-slate-300 text-slate-900">{{ old('description_base', $product->description_base ?? '') }}</textarea></label>
-<label class="mt-5 block text-sm font-bold text-slate-700">メモ<textarea name="memo" rows="4" class="mt-1 w-full rounded border-slate-300 text-slate-900">{{ old('memo', $product->memo ?? '') }}</textarea></label>
-<section class="mt-5 rounded border border-slate-200 bg-slate-50 p-4">
-    <h3 class="font-black text-slate-800">カテゴリ別属性</h3>
-    <div id="category-attributes" class="mt-3 grid gap-4 md:grid-cols-2">
-        @foreach($categoryAttributes as $attribute)
-            @php($existingValue = $editing ? $product->attributeValues->firstWhere('category_attribute_id', $attribute->id)?->value_text : null)
-            <label class="block text-sm font-bold text-slate-700">{{ $attribute->label }}<input type="hidden" name="attributes[{{ $loop->index }}][id]" value="{{ $attribute->id }}"><input name="attributes[{{ $loop->index }}][value_text]" value="{{ old('attributes.'.$loop->index.'.value_text', $existingValue) }}" @required($attribute->is_required) class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
-        @endforeach
-    </div>
-</section>
-<section class="mt-5"><p class="text-sm font-bold text-slate-700">商品画像（JPEG / PNG / WEBP、合計最大{{ config('furimadeck.product_images.max_count') }}枚、追加は{{ $remainingImageSlots }}枚まで、各{{ config('furimadeck.product_images.max_size_kilobytes') / 1024 }}MB）</p><input id="product-images" type="file" name="images[]" multiple accept="image/jpeg,image/png,image/webp" class="sr-only"><input id="product-image-folder" type="file" webkitdirectory directory multiple accept="image/jpeg,image/png,image/webp" class="sr-only"><div id="product-image-drop-zone" class="mt-2 rounded border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-700"><p class="font-bold">画像をドラッグ＆ドロップ</p><div class="mt-3 flex flex-wrap justify-center gap-2"><button id="product-image-choose" type="button" class="rounded bg-slate-800 px-4 py-2 text-sm font-bold text-white">画像を選択</button><button id="product-image-folder-choose" type="button" class="rounded border border-slate-700 px-4 py-2 text-sm font-bold text-slate-800">フォルダから選択</button></div></div><p id="product-image-error" class="mt-2 hidden font-bold text-red-700"></p><div id="product-image-preview" class="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-5"></div></section>
-@if($editing && $product->images->isNotEmpty())<div id="stored-product-images" data-order-url="{{ route('products.images.order', $product) }}" class="mt-3 grid grid-cols-5 gap-2">@foreach($product->images->sortBy('position') as $image)<div class="stored-product-image relative cursor-move" draggable="true" data-image-id="{{ $image->id }}"><img src="{{ route('products.images.show', ['product' => $product, 'image' => $image, 'variant' => 'thumbnail']) }}" alt="商品画像" class="aspect-square rounded object-cover"><form method="POST" action="{{ route('products.images.destroy', [$product, $image]) }}" class="absolute right-1 top-1">@csrf @method('DELETE')<button class="rounded bg-red-600 px-2 py-1 text-xs font-bold text-white" onclick="return confirm('この画像を削除しますか？')">削除</button></form></div>@endforeach</div>@endif
+<label class="block text-sm font-bold text-slate-700">商品状態<select name="condition" class="mt-1 w-full rounded border-slate-300 text-slate-900">@foreach($conditions as $condition)<option value="{{ $condition }}" @selected(old('condition', $product->condition ?? 'used') === $condition)>{{ \App\Models\Product::conditionLabel($condition) }}</option>@endforeach</select></label>
+<label class="block text-sm font-bold text-slate-700 md:col-span-2">商品説明<textarea name="description_base" rows="5" maxlength="10000" placeholder="商品の特徴、状態、注意点などを入力してください。" class="mt-1 w-full rounded border-slate-300 text-slate-900">{{ old('description_base', $product->description_base ?? '') }}</textarea></label>
+<div class="md:col-span-2 mt-2 border-t border-slate-200 pt-4"><h3 class="text-base font-black text-slate-900">仕入・商品詳細（任意）</h3><p class="mt-1 text-sm text-slate-600">登録後に編集できる補足情報です。</p></div>
+<label class="block text-sm font-bold text-slate-700">仕入単価<input required min="0" type="number" name="purchase_unit_cost" value="{{ old('purchase_unit_cost', $product->purchase_unit_cost ?? 0) }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
+</div></section>
 <script>
-    document.getElementById('category_id')?.addEventListener('change', async function (event) {
-        const container = document.getElementById('category-attributes');
-        container.replaceChildren();
+    const categoryInput = document.getElementById('category_id');
 
-        if (!event.target.value) return;
+    const categoryList = @json($categoryList, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
+    const categoryLevels = document.getElementById('category-levels');
+    const categoriesById = new Map(categoryList.map(function (category) { return [String(category.id), category]; }));
+    const childrenByParentId = categoryList.reduce(function (groups, category) {
+        const parentKey = category.parent_id === null ? 'root' : String(category.parent_id);
+        groups[parentKey] ??= [];
+        groups[parentKey].push(category);
 
-        const response = await fetch(`{{ route('products.category-attributes') }}?category_id=${encodeURIComponent(event.target.value)}`, { headers: { Accept: 'application/json' } });
-        if (!response.ok) return;
+        return groups;
+    }, {});
+    const categoryLevelNames = ['大項目', '中項目', '小項目', '詳細カテゴリ'];
 
-        const payload = await response.json();
-        payload.attributes.forEach(function (attribute, index) {
-            const label = document.createElement('label');
-            label.className = 'block text-sm font-bold text-slate-700';
-            label.textContent = attribute.label;
-            const id = document.createElement('input');
-            id.type = 'hidden'; id.name = `attributes[${index}][id]`; id.value = attribute.id;
-            const input = document.createElement('input');
-            input.name = `attributes[${index}][value_text]`; input.required = attribute.is_required;
-            input.className = 'mt-1 w-full rounded border-slate-300 text-slate-900';
-            label.append(id, input); container.append(label);
+    function updateCategoryId(id) {
+        categoryInput.value = id;
+        categoryInput.dispatchEvent(new Event('change'));
+    }
+
+    function categoryLevelName(level) {
+        return categoryLevelNames[level] ?? `第${level + 1}階層`;
+    }
+
+    function categoryChildren(parentId) {
+        return childrenByParentId[parentId === null ? 'root' : String(parentId)] ?? [];
+    }
+
+    function removeLevelsAfter(level) {
+        while (categoryLevels.children.length > level + 1) {
+            categoryLevels.lastElementChild.remove();
+        }
+    }
+
+    function appendCategoryLevel(parentId, selectedId = '') {
+        const level = categoryLevels.children.length;
+        const options = categoryChildren(parentId);
+        if (options.length === 0) return;
+
+        const label = document.createElement('label');
+        label.className = 'block text-sm font-bold text-slate-700';
+        label.textContent = categoryLevelName(level);
+        const select = document.createElement('select');
+        select.className = 'category-level-select mt-1 w-full rounded border-slate-300 text-slate-900';
+        select.dataset.level = String(level);
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = level === 0 ? '未分類' : '選択してください';
+        select.append(placeholder);
+
+        options.forEach(function (category) {
+            const option = document.createElement('option');
+            option.value = category.id;
+            option.textContent = category.name;
+            option.selected = String(category.id) === String(selectedId);
+            select.append(option);
         });
+
+        select.addEventListener('change', function () {
+            const selectedCategory = categoriesById.get(this.value);
+            removeLevelsAfter(level);
+
+            if (!selectedCategory) {
+                const previousSelect = level === 0 ? null : categoryLevels.children[level - 1].querySelector('select');
+                updateCategoryId(previousSelect?.value ?? '');
+                return;
+            }
+
+            updateCategoryId(selectedCategory.id);
+            appendCategoryLevel(selectedCategory.id);
+        });
+
+        label.append(select);
+        categoryLevels.append(label);
+    }
+
+    function selectedCategoryPath() {
+        const path = [];
+        const visited = new Set();
+        let category = categoriesById.get(categoryInput.value);
+
+        while (category && !visited.has(String(category.id))) {
+            path.unshift(category);
+            visited.add(String(category.id));
+            category = category.parent_id === null ? null : categoriesById.get(String(category.parent_id));
+        }
+
+        return path;
+    }
+
+    const initialPath = selectedCategoryPath();
+    appendCategoryLevel(null, initialPath[0]?.id ?? '');
+    initialPath.forEach(function (category, index) {
+        if (index < initialPath.length - 1) {
+            appendCategoryLevel(category.id, initialPath[index + 1].id);
+        }
     });
 </script>
 <script>

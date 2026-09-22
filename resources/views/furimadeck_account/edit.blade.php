@@ -5,6 +5,10 @@
         <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
             @if (session('status') === 'profile-updated')
                 <p class="mb-4 rounded bg-emerald-50 p-4 font-bold text-emerald-800">アカウント情報を更新しました。</p>
+            @endif            @if (session('status') === 'data-deleted')
+                <p class="mb-4 rounded bg-emerald-50 p-4 font-bold text-emerald-800">FurimaDeckのデータを削除しました。アカウント情報は残っています。</p>
+            @endif            @if (session('status') === 'monthly-data-deleted')
+                <p class="mb-4 rounded bg-emerald-50 p-4 font-bold text-emerald-800">指定月の売上関連データを削除しました。商品・出品情報は残っています。</p>
             @endif
             @if (session('verification_status') === 'verification-link-sent')
                 <p class="mb-4 rounded bg-emerald-50 p-4 font-bold text-emerald-800">確認メールを送信しました。メール内のリンクを開いて認証を完了してください。</p>
@@ -13,6 +17,11 @@
             @endif
 
             <section class="rounded bg-white p-6 shadow">
+                <div class="mb-6 rounded border border-emerald-200 bg-emerald-50 p-5">
+                    <p class="text-sm font-black text-emerald-900">累計売上</p>
+                    <p class="mt-2 text-2xl font-black text-slate-950">¥{{ number_format($salesTotal) }}</p>
+                    <p class="mt-1 text-xs font-bold text-emerald-800">キャンセル・返品を除く販売確定分</p>
+                </div>
                 <form method="POST" action="{{ route('furimadeck-account.update') }}" class="space-y-5">
                     @csrf
                     @method('patch')
@@ -52,7 +61,11 @@
                     @if (session('status') === 'password-updated')<p class="text-sm font-bold text-emerald-800">パスワードを変更しました。</p>@endif
                 </form>
             </section>
-            <section class="mt-6 rounded border border-red-200 bg-red-50 p-6">
+            <section class="mt-6 rounded border border-amber-200 bg-amber-50 p-6">
+                <h3 class="text-lg font-black text-amber-900">FurimaDeckデータの全削除</h3>
+                <p class="mt-2 text-sm font-bold text-amber-900">商品、画像、出品、販売、CSV取込履歴、会計データなど、このアカウントのFurimaDeckデータだけを削除します。アカウント自体と契約情報は削除しません。</p>
+                <a href="{{ route('furimadeck-account.data-delete.confirm') }}" class="mt-4 inline-flex rounded bg-amber-700 px-4 py-2 font-black text-white hover:bg-amber-800">データ全削除の確認へ</a>                <a href="{{ route('furimadeck-account.monthly-data-delete.confirm', ['month' => now()->format('Y-m')]) }}" class="mt-4 ml-2 inline-flex rounded border border-amber-700 bg-white px-4 py-2 font-black text-amber-900 hover:bg-amber-100">期間（月）の削除へ</a>
+            </section>            <section class="mt-6 rounded border border-red-200 bg-red-50 p-6">
                 <h3 class="text-lg font-black text-red-900">アカウント削除</h3>
                 <form method="POST" action="{{ route('furimadeck-account.destroy') }}" class="mt-4 space-y-4">
                     @csrf

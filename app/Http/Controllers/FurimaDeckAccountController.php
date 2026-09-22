@@ -4,14 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\ProductImage;
+use App\Models\Sale;
 use App\Models\User;
 use App\Services\EmailVerificationDelivery;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Throwable;
@@ -22,7 +25,14 @@ class FurimaDeckAccountController extends Controller
 
     public function edit(Request $request): View
     {
-        return view('furimadeck_account.edit', ['user' => $request->user()]);
+        return view('furimadeck_account.edit', [
+            'user' => $request->user(),
+            'salesTotal' => Schema::hasTable('sales')
+                ? (int) $request->user()->sales()
+                    ->whereIn('status', Sale::VALID_SOLD_STATUSES)
+                    ->sum('sold_price')
+                : 0,
+        ]);
     }
 
     public function update(ProfileUpdateRequest $request, EmailVerificationDelivery $emailVerificationDelivery): RedirectResponse
@@ -45,6 +55,105 @@ class FurimaDeckAccountController extends Controller
         }
 
         return $response;
+    }
+
+    public function confirmDataDeletion(Request $request): View
+    {
+        $user = $request->user();
+
+        return view('furimadeck_account.confirm-data-deletion', ['user' => $user]);
+    }
+
+    public function confirmMonthlyDataDeletion(Request $request): View
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'month' => ['required', 'date_format:Y-m'],
+        ]);
+
+        return view('furimadeck_account.confirm-monthly-data-deletion', [
+            'user' => $user,
+            'month' => $validated['month'],
+        ]);
+    }
+
+    public function destroyMonthlyData(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validateWithBag('monthlyDataDeletion', [
+            'month' => ['required', 'date_format:Y-m'],
+            'password' => ['required', 'current_password'],
+            'confirm_monthly_data_deletion' => ['accepted'],
+        ]);
+        $month = CarbonImmutable::createFromFormat('!Y-m', $validated['month']);
+        $start = $month->startOfMonth();
+        $end = $start->addMonth();
+        $saleIds = DB::table('sales')
+            ->where('user_id', $user->id)
+            ->where('sold_at', '>=', $start)
+            ->where('sold_at', '<', $end)
+            ->pluck('id');
+
+        DB::transaction(function () use ($user, $saleIds, $start, $end): void {
+            if ($saleIds->isNotEmpty()) {
+                DB::table('accounting_entries')
+                    ->where('user_id', $user->id)
+                    ->whereIn('sale_id', $saleIds)
+                    ->delete();
+                DB::table('sales')
+                    ->where('user_id', $user->id)
+                    ->whereIn('id', $saleIds)
+                    ->delete();
+            }
+            if (Schema::hasTable('audit_logs')) {
+                DB::table('audit_logs')
+                    ->where('user_id', $user->id)
+                    ->where('created_at', '>=', $start)
+                    ->where('created_at', '<', $end)
+                    ->delete();
+            }
+        });
+
+        return redirect()->route('furimadeck-account.edit')->with('status', 'monthly-data-deleted');
+    }
+
+    public function destroyData(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        $request->validateWithBag('dataDeletion', [
+            'password' => ['required', 'current_password'],
+            'confirm_data_deletion' => ['accepted'],
+        ]);
+
+        $productImages = $this->productImages($user->id);
+        $auctionImages = $this->auctionImages($user->id);
+        $importBatchIds = DB::table('import_batches')->where('user_id', $user->id)->pluck('id');
+
+        DB::transaction(function () use ($user, $importBatchIds): void {
+            $this->deleteRowsForUser('accounting_entries', $user->id);
+            $this->deleteRowsForUser('accounting_connections', $user->id);
+            $this->deleteRowsForUser('ai_usage_logs', $user->id);
+            $this->deleteRowsForUser('ai_response_caches', $user->id);
+            $this->deleteRowsForUser('audit_logs', $user->id);
+            $this->deleteRowsForUser('subscription_cancellation_feedback', $user->id);
+            $this->deleteRowsForUser('sales', $user->id);
+            $this->deleteRowsForUser('listings', $user->id);
+            $this->deleteRowsForUser('auction_items', $user->id);
+            if ($importBatchIds->isNotEmpty()) {
+                DB::table('import_row_results')->whereIn('import_batch_id', $importBatchIds)->delete();
+                DB::table('import_batches')->whereIn('id', $importBatchIds)->delete();
+            }
+            $this->deleteRowsForUser('products', $user->id);
+            $this->deleteRowsForUser('suppliers', $user->id);
+        });
+
+        $this->deleteProductImages($productImages, $user->id);
+        $this->deleteAuctionImages($auctionImages);
+
+        return redirect()->route('furimadeck-account.edit')->with('status', 'data-deleted');
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -125,6 +234,39 @@ class FurimaDeckAccountController extends Controller
                     ->successful();
         } catch (Throwable) {
             return false;
+        }
+    }
+
+    /** @return Collection<int, object> */
+    private function auctionImages(int $userId): Collection
+    {
+        if (! Schema::hasTable('auction_items')) {
+            return collect();
+        }
+
+        return DB::table('auction_items')
+            ->where('user_id', $userId)
+            ->get(['image_path', 'sold_image_path']);
+    }
+
+    private function deleteRowsForUser(string $table, int $userId): void
+    {
+        if (Schema::hasTable($table)) {
+            DB::table($table)->where('user_id', $userId)->delete();
+        }
+    }
+
+    /** @param Collection<int, object> $images */
+    private function deleteAuctionImages(Collection $images): void
+    {
+        $paths = $images->flatMap(fn (object $image) => [$image->image_path, $image->sold_image_path])
+            ->filter(fn (?string $path) => is_string($path) && str_starts_with($path, 'auction-items/') && ! str_contains($path, '..'))
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($paths !== []) {
+            Storage::disk('public')->delete($paths);
         }
     }
 

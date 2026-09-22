@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\LoginSecurityService;
+use GuzzleHttp\Client;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,13 +22,13 @@ class GoogleController extends Controller
 
     public function redirect()
     {
-        return Socialite::driver('google')->redirect();
+        return $this->googleDriver()->redirect();
     }
 
     public function callback(Request $request): RedirectResponse
     {
         try {
-            $googleUser = Socialite::driver('google')->user();
+            $googleUser = $this->googleDriver()->user();
         } catch (InvalidStateException) {
             return redirect()
                 ->route('login')
@@ -62,6 +63,14 @@ class GoogleController extends Controller
             }
 
             $user = User::where('email', $email)->first();
+        }
+
+        if ($user && is_string($user->google_id) && $user->google_id !== '' && ! hash_equals($user->google_id, $googleId)) {
+            return redirect()
+                ->route('login')
+                ->withErrors([
+                    'email' => 'Googleログインに失敗しました。時間をおいてもう一度お試しください。',
+                ]);
         }
 
         if (! $user) {
@@ -102,5 +111,16 @@ class GoogleController extends Controller
         $verified = $rawUser['email_verified'] ?? $rawUser['verified_email'] ?? false;
 
         return filter_var($verified, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    private function googleDriver()
+    {
+        $driver = Socialite::driver('google');
+
+        if ((bool) config('services.google.direct_connection')) {
+            $driver->setHttpClient(new Client(['proxy' => '']));
+        }
+
+        return $driver;
     }
 }

@@ -76,10 +76,43 @@ class FurimaDeckDashboardTest extends TestCase
             ->get(route('furimadeck-dashboard'))
             ->assertOk()
             ->assertSee('累計売上')
-            ->assertSee('累計実利益')
+            ->assertSee('累計利益')
             ->assertSee('¥12,000')
             ->assertSee('¥4,200')
             ->assertSee('4点')
-            ->assertSee('原価 ¥4,000');
+            ->assertSee('原価 ¥4,000')
+            ->assertSee('FurimaDeckからのお知らせ')
+            ->assertSee('経営インサイト')
+            ->assertSee('利益サマリー')
+            ->assertSee('データ保護とバックアップ')
+            ->assertSee('の利益')
+            ->assertDontSee('DAILY SALES')
+            ->assertSee('furimadeckMonthlySalesChart', false)
+            ->assertSee('aria-label="前の月を表示"', false)
+            ->assertSee('aria-label="次の月を表示"', false);
+    }
+
+    public function test_desktop_navigation_dropdowns_open_by_click_and_close_when_pointer_leaves(): void
+    {
+        $user = User::factory()->create(['email_verified_at' => now()]);
+
+        $this->actingAs($user)
+            ->get(route('furimadeck-dashboard'))
+            ->assertOk()
+            ->assertSee('商品管理')
+            ->assertSee('商品一覧')
+            ->assertSee('分析')
+            ->assertSee('売上分析')
+            ->assertSee('ジャンル別分析')
+            ->assertSee('アカウント')
+            ->assertSee('メニュー')
+            ->assertSee('relative z-50 border-b', false)
+            ->assertSee('text-cyan-200">商品管理</p>', false)
+            ->assertSee('text-cyan-200">分析</p>', false)
+            ->assertSee('text-cyan-200">アカウント</p>', false)
+            ->assertSee('@mouseleave="$el.open = false"', false)
+            ->assertSee('@keydown.escape="$el.open = false"', false)
+            ->assertDontSee('top-full z-50 mt-2', false)
+            ->assertDontSee('class="group relative" open', false);
     }
 }

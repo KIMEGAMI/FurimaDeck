@@ -28,6 +28,35 @@ class AuthenticationTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_demo_login_is_not_advertised_when_its_credentials_are_missing(): void
+    {
+        config([
+            'demo.user_enabled' => true,
+            'demo.user_email' => null,
+            'demo.user_password' => null,
+        ]);
+
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertDontSee('デモを見る', false);
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertDontSee('デモを見る', false);
+    }
+
+    public function test_demo_login_is_advertised_when_its_credentials_are_configured(): void
+    {
+        config([
+            'demo.user_email' => 'demo@example.com',
+            'demo.user_password' => 'demo-password',
+        ]);
+
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee('デモを見る', false);
+    }
+
     public function test_users_can_authenticate_using_the_login_screen(): void
     {
         $user = User::factory()->create();
@@ -190,6 +219,22 @@ class AuthenticationTest extends TestCase
         $response = $this->post(route('login.demo'));
 
         $this->assertAuthenticatedAs($user);
+        $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
+    }
+
+    public function test_unverified_admin_user_can_authenticate_without_email_verification(): void
+    {
+        $user = User::factory()->unverified()->create([
+            'is_admin' => true,
+        ]);
+
+        $response = $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertNull($user->fresh()->email_verified_at);
         $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
     }
 

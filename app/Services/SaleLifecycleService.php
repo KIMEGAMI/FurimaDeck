@@ -46,9 +46,8 @@ class SaleLifecycleService
             $product->decrement('quantity_available', $quantity);
             $product->refresh();
 
-            if ($product->quantity_available === 0) {
-                $product->update(['inventory_status' => 'out_of_stock']);
-            }
+            $product->syncInventoryStatus();
+            $product->save();
 
             if ($listing !== null) {
                 $listing->update(['status' => 'sold', 'ended_at' => now()]);
@@ -67,7 +66,8 @@ class SaleLifecycleService
             }
             $product = Product::query()->whereKey($lockedSale->product_id)->lockForUpdate()->firstOrFail();
             $product->increment('quantity_available', $lockedSale->quantity);
-            $product->update(['inventory_status' => 'in_stock']);
+            $product->syncInventoryStatus();
+            $product->save();
             $lockedSale->update(['status' => 'cancelled', 'cancelled_at' => now(), 'cancellation_reason' => $reason]);
 
             return $lockedSale;
@@ -85,7 +85,8 @@ class SaleLifecycleService
             if ($restock) {
                 $product = Product::query()->whereKey($lockedSale->product_id)->lockForUpdate()->firstOrFail();
                 $product->increment('quantity_available', $restockedQuantity);
-                $product->update(['inventory_status' => 'in_stock']);
+                $product->syncInventoryStatus();
+                $product->save();
             }
             $lockedSale->update(['status' => 'returned', 'returned_at' => now(), 'return_reason' => $reason, 'refund_amount' => $refundAmount, 'return_shipping_fee' => $returnShippingFee, 'restocked_quantity' => $restockedQuantity]);
 

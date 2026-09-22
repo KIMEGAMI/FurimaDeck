@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use RuntimeException;
@@ -125,6 +126,35 @@ class PasswordResetTest extends TestCase
             $response
                 ->assertSessionHasNoErrors()
                 ->assertRedirect(route('login'));
+
+            return true;
+        });
+    }
+
+    public function test_password_reset_token_cannot_be_reused(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create();
+        $this->post('/forgot-password', ['email' => $user->email]);
+
+        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user): bool {
+            $payload = ['token' => $notification->token, 'email' => $user->email, 'password' => 'new-password', 'password_confirmation' => 'new-password'];
+            $this->post('/reset-password', $payload)->assertRedirect(route('login'));
+            $this->from('/reset-password/'.$notification->token)->post('/reset-password', $payload)->assertRedirect('/reset-password/'.$notification->token)->assertSessionHasErrors('email');
+
+            return true;
+        });
+    }
+
+    public function test_expired_password_reset_token_is_rejected(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create();
+        $this->post('/forgot-password', ['email' => $user->email]);
+
+        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user): bool {
+            DB::table('password_reset_tokens')->where('email', $user->email)->update(['created_at' => now()->subHours(25)]);
+            $this->from('/reset-password/'.$notification->token)->post('/reset-password', ['token' => $notification->token, 'email' => $user->email, 'password' => 'new-password', 'password_confirmation' => 'new-password'])->assertRedirect('/reset-password/'.$notification->token)->assertSessionHasErrors('email');
 
             return true;
         });

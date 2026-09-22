@@ -16,6 +16,8 @@ class Sale extends Model
         'returned',
     ];
 
+    public const VALID_SOLD_STATUSES = ['awaiting_shipment', 'shipped', 'completed'];
+
     public const STATUS_LABELS = [
         'pending' => '処理待ち',
         'awaiting_shipment' => '発送待ち',
@@ -31,6 +33,7 @@ class Sale extends Model
     }
 
     protected $fillable = [
+        'user_id',
         'product_id',
         'listing_id',
         'marketplace_id',
@@ -42,6 +45,7 @@ class Sale extends Model
         'status',
         'cost_basis',
         'sales_fee',
+        'sales_fee_rate',
         'shipping_fee',
         'purchase_shipping_cost',
         'packing_cost',
@@ -68,6 +72,7 @@ class Sale extends Model
             'sold_at' => 'datetime',
             'cost_basis' => 'integer',
             'sales_fee' => 'integer',
+            'sales_fee_rate' => 'decimal:2',
             'shipping_fee' => 'integer',
             'purchase_shipping_cost' => 'integer',
             'packing_cost' => 'integer',

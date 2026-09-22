@@ -35,15 +35,12 @@ class FurimaDeckCutoverMiddlewareTest extends TestCase
         }
     }
 
-    public function test_legacy_routes_are_hidden_after_cutover(): void
+    public function test_legacy_product_list_redirects_to_the_furimadeck_product_list_after_cutover(): void
     {
         config()->set('furimadeck.cutover_enabled', true);
 
-        try {
-            app(EnsureFuruproLegacyDisabled::class)->handle(Request::create('/auction-items'), fn () => response('ok'));
-            $this->fail('The legacy route must be hidden.');
-        } catch (HttpException $exception) {
-            $this->assertSame(404, $exception->getStatusCode());
-        }
+        $response = app(EnsureFuruproLegacyDisabled::class)->handle(Request::create('/auction-items?keyword=lamp'), fn () => response('ok'));
+
+        $this->assertSame(route('products.index', ['keyword' => 'lamp']), $response->getTargetUrl());
     }
 }

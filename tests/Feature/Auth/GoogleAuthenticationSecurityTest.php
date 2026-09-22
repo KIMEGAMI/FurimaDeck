@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use GuzzleHttp\Client;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as SocialiteUser;
@@ -64,6 +65,23 @@ class GoogleAuthenticationSecurityTest extends TestCase
         $this->assertNotNull($user->fresh()->email_verified_at);
     }
 
+    public function test_verified_google_email_cannot_link_to_an_account_owned_by_a_different_google_id(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'owner@example.com',
+            'google_id' => 'google-old-user-id',
+        ]);
+
+        $this->fakeGoogleUser('google-new-user-id', 'owner@example.com', true);
+
+        $response = $this->get(route('google.callback'));
+
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHasErrors('email');
+        $this->assertGuest();
+        $this->assertSame('google-old-user-id', $user->fresh()->google_id);
+    }
+
     public function test_google_login_failure_returns_to_login_screen(): void
     {
         Socialite::shouldReceive('driver')
@@ -78,7 +96,19 @@ class GoogleAuthenticationSecurityTest extends TestCase
         $this->assertGuest();
     }
 
-    private function fakeGoogleUser(string $id, string $email, bool $emailVerified): void
+    public function test_google_login_can_explicitly_bypass_an_inherited_proxy(): void
+    {
+        $this->app['config']->set('services.google.direct_connection', true);
+        $provider = $this->fakeGoogleUser('google-user-id', 'owner@example.com', true);
+
+        $response = $this->get(route('google.callback'));
+
+        $response->assertRedirect(route('dashboard'));
+        $this->assertInstanceOf(Client::class, $provider->httpClient);
+        $this->assertSame('', $provider->httpClient->getConfig('proxy'));
+    }
+
+    private function fakeGoogleUser(string $id, string $email, bool $emailVerified): object
     {
         $socialiteUser = (new SocialiteUser)->setRaw([
             'email_verified' => $emailVerified,
@@ -90,7 +120,16 @@ class GoogleAuthenticationSecurityTest extends TestCase
 
         $provider = new class($socialiteUser)
         {
+            public ?Client $httpClient = null;
+
             public function __construct(private SocialiteUser $user) {}
+
+            public function setHttpClient(Client $httpClient): self
+            {
+                $this->httpClient = $httpClient;
+
+                return $this;
+            }
 
             public function user(): SocialiteUser
             {
@@ -102,5 +141,7 @@ class GoogleAuthenticationSecurityTest extends TestCase
             ->once()
             ->with('google')
             ->andReturn($provider);
+
+        return $provider;
     }
 }
