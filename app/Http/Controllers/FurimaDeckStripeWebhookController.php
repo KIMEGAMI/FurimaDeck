@@ -87,10 +87,14 @@ class FurimaDeckStripeWebhookController extends Controller
             return;
         }
 
-        $eventCreated = $eventCreatedAt === null ? null : Carbon::createFromTimestamp($eventCreatedAt);
+        $eventCreated = $eventCreatedAt === null ? null : Carbon::createFromTimestampUTC($eventCreatedAt);
+        $storedEventCreated = $user->getRawOriginal('stripe_subscription_event_created_at');
+        $storedEventCreatedAt = is_string($storedEventCreated) && $storedEventCreated !== ''
+            ? Carbon::parse($storedEventCreated, 'UTC')
+            : null;
         if ($eventCreated !== null
-            && $user->stripe_subscription_event_created_at !== null
-            && $eventCreated->lt($user->stripe_subscription_event_created_at)) {
+            && $storedEventCreatedAt !== null
+            && $eventCreated->lt($storedEventCreatedAt)) {
             return;
         }
 

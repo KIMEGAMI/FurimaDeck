@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
+    private const MINUTES_PER_HOUR = 60;
+
+    private const MINUTES_PER_DAY = 1440;
+
     public const CONDITIONS = [
         'new',
         'unused',
@@ -28,25 +33,31 @@ class Product extends Model
         'junk' => 'ジャンク品',
     ];
 
-    public const INVENTORY_STATUSES = [
-        'draft',
-        'in_stock',
-        'listing_ready',
-        'listed',
-        'reserved',
-        'out_of_stock',
-        'archived',
-    ];
+    public const INVENTORY_STATUSES = ['in_stock', 'out_of_stock'];
 
     public const INVENTORY_STATUS_LABELS = [
-        'draft' => '下書き',
         'in_stock' => '在庫あり',
-        'listing_ready' => '出品準備完了',
-        'listed' => '出品中',
-        'reserved' => '取引中',
         'out_of_stock' => '在庫なし',
-        'archived' => '保管済み',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (Product $product): void {
+            $product->inventory_status = self::inventoryStatusForQuantity((int) $product->quantity_available);
+        });
+    }
+
+    public static function inventoryStatusForQuantity(int $quantityAvailable): string
+    {
+        return $quantityAvailable > 0 ? 'in_stock' : 'out_of_stock';
+    }
+
+    public function syncInventoryStatus(): self
+    {
+        $this->inventory_status = self::inventoryStatusForQuantity((int) $this->quantity_available);
+
+        return $this;
+    }
 
     public static function conditionLabel(string $condition): string
     {
@@ -125,5 +136,46 @@ class Product extends Model
     public function sales(): HasMany
     {
         return $this->hasMany(Sale::class);
+    }
+
+    public function validSales(): HasMany
+    {
+        return $this->hasMany(Sale::class)
+            ->whereIn('status', Sale::VALID_SOLD_STATUSES)
+            ->latest('sold_at');
+    }
+
+    public function scopeWithValidSaleFlag(Builder $query): Builder
+    {
+        return $query->withExists(['sales as has_valid_sale' => fn (Builder $sales): Builder => $sales->whereIn('status', Sale::VALID_SOLD_STATUSES)]);
+    }
+
+    public function isSoldOutByValidSale(): bool
+    {
+        return (int) $this->quantity_available === 0 && (bool) ($this->has_valid_sale ?? $this->sales()->whereIn('status', Sale::VALID_SOLD_STATUSES)->exists());
+    }
+
+    public function inventoryAgeLabel(): string
+    {
+        if ($this->created_at === null) {
+            return '未設定';
+        }
+
+        $minutes = max(0, (int) $this->created_at->diffInMinutes(now()));
+        if ($minutes < self::MINUTES_PER_HOUR) {
+            return $minutes.'分';
+        }
+
+        if ($minutes < self::MINUTES_PER_DAY) {
+            $hours = intdiv($minutes, self::MINUTES_PER_HOUR);
+            $remainingMinutes = $minutes % self::MINUTES_PER_HOUR;
+
+            return $hours.'時間'.($remainingMinutes > 0 ? $remainingMinutes.'分' : '');
+        }
+
+        $days = intdiv($minutes, self::MINUTES_PER_DAY);
+        $remainingHours = intdiv($minutes % self::MINUTES_PER_DAY, self::MINUTES_PER_HOUR);
+
+        return $days.'日'.($remainingHours > 0 ? $remainingHours.'時間' : '');
     }
 }

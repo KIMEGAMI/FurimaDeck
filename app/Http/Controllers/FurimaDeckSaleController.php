@@ -6,6 +6,7 @@ use App\Models\Listing;
 use App\Models\Marketplace;
 use App\Models\Sale;
 use App\Services\AuditLogger;
+use App\Services\MarketplaceFeeService;
 use App\Services\SaleLifecycleService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,21 +21,24 @@ class FurimaDeckSaleController extends Controller
         return view('furimadeck_sales.index', ['sales' => $request->user()->sales()->with(['product', 'marketplace'])->latest('sold_at')->paginate(50)]);
     }
 
-    public function create(Request $request): View
+    public function create(Request $request, MarketplaceFeeService $feeService): View
     {
+        $marketplaces = Marketplace::query()->where('is_active', true)->orderBy('name')->get();
+
         return view('furimadeck_sales.create', [
             'products' => $request->user()->products()->where('quantity_available', '>', 0)->orderBy('product_name')->get(),
             'listings' => $request->user()->listings()->whereIn('status', ['ready', 'active'])->with(['product', 'marketplace'])->get(),
-            'marketplaces' => Marketplace::query()->where('is_active', true)->orderBy('name')->get(),
+            'marketplaces' => $marketplaces,
+            'marketplaceFeeRates' => $feeService->rates($marketplaces),
+            'selectedProductId' => $request->integer('product_id') ?: null,
         ]);
     }
 
-    public function store(Request $request, SaleLifecycleService $lifecycle, AuditLogger $auditLogger): RedirectResponse
+    public function store(Request $request, SaleLifecycleService $lifecycle, AuditLogger $auditLogger, MarketplaceFeeService $feeService): RedirectResponse
     {
         $validated = $request->validate([
             'product_id' => ['required', Rule::exists('products', 'id')->where('user_id', $request->user()->id)],
-            'listing_id' => ['nullable', Rule::exists('listings', 'id')->where('user_id', $request->user()->id)],
-            'marketplace_id' => ['required', Rule::exists('marketplaces', 'id')->where('is_active', true)],
+            'listing_id' => ['required', Rule::exists('listings', 'id')->where('user_id', $request->user()->id)],
             'quantity' => ['required', 'integer', 'min:1'],
             'sold_price' => ['required', 'integer', 'min:0'],
             'sold_at' => ['required', 'date'],
@@ -49,6 +53,10 @@ class FurimaDeckSaleController extends Controller
         ]);
 
         try {
+            $marketplaceId = (int) $request->user()->listings()->whereKey($validated['listing_id'])->value('marketplace_id');
+            $marketplace = Marketplace::query()->whereKey($marketplaceId)->where('is_active', true)->firstOrFail();
+            $validated['marketplace_id'] = $marketplace->id;
+            $validated['sales_fee'] = $feeService->amount((int) $validated['sold_price'], $marketplace);
             $sale = $lifecycle->record($request->user(), $validated);
         } catch (RuntimeException $exception) {
             return back()->withInput()->withErrors(['quantity' => $exception->getMessage()]);
@@ -64,6 +72,7 @@ class FurimaDeckSaleController extends Controller
 
     public function cancel(Request $request, Sale $sale, SaleLifecycleService $lifecycle, AuditLogger $auditLogger): RedirectResponse
     {
+        $this->ensureOwner($request, $sale);
         $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
         $before = $sale->getAttributes();
         try {
@@ -78,6 +87,7 @@ class FurimaDeckSaleController extends Controller
 
     public function advanceStatus(Request $request, Sale $sale, SaleLifecycleService $lifecycle, AuditLogger $auditLogger): RedirectResponse
     {
+        $this->ensureOwner($request, $sale);
         $validated = $request->validate(['status' => ['required', Rule::in(['shipped', 'completed'])]]);
         $before = $sale->getAttributes();
         try {
@@ -92,6 +102,7 @@ class FurimaDeckSaleController extends Controller
 
     public function returnSale(Request $request, Sale $sale, SaleLifecycleService $lifecycle, AuditLogger $auditLogger): RedirectResponse
     {
+        $this->ensureOwner($request, $sale);
         $validated = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'refund_amount' => ['required', 'integer', 'min:0'], 'return_shipping_fee' => ['nullable', 'integer', 'min:0'], 'restock' => ['nullable', 'boolean']]);
         $before = $sale->getAttributes();
         try {
@@ -102,5 +113,10 @@ class FurimaDeckSaleController extends Controller
         $auditLogger->log($request->user(), Sale::class, $sale->id, 'sale.returned', $before, $sale->getAttributes(), $request->ip());
 
         return back()->with('success', '返品を記録しました。');
+    }
+
+    private function ensureOwner(Request $request, Sale $sale): void
+    {
+        abort_unless($sale->user_id === $request->user()->id, 404);
     }
 }

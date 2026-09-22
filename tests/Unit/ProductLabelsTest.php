@@ -12,7 +12,8 @@ class ProductLabelsTest extends TestCase
     public function test_product_condition_and_inventory_status_have_japanese_labels(): void
     {
         $this->assertSame('未使用に近い', Product::conditionLabel('like_new'));
-        $this->assertSame('出品準備完了', Product::inventoryStatusLabel('listing_ready'));
+        $this->assertSame('在庫あり', Product::inventoryStatusLabel('in_stock'));
+        $this->assertSame('在庫なし', Product::inventoryStatusLabel('out_of_stock'));
     }
 
     public function test_unknown_product_values_are_preserved_for_safe_display(): void

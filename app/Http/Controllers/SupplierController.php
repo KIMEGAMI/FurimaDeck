@@ -54,7 +54,7 @@ class SupplierController extends Controller
     {
         return $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'type' => ['required', Rule::in(Supplier::TYPES)],
+            'type' => ['required', Rule::in(Supplier::types())],
             'memo' => ['nullable', 'string', 'max:3000'],
         ]);
     }

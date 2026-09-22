@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\CategoryAttribute;
+use App\Models\Listing;
+use App\Models\Marketplace;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductImage;
+use App\Models\Sale;
 use App\Services\AuditLogger;
 use App\Services\FurimaDeckEntitlements;
+use App\Services\MarketplaceFeeService;
 use App\Services\ProductImageProcessor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -29,11 +33,13 @@ class ProductController extends Controller
             'inventory_status' => ['nullable', Rule::in(Product::INVENTORY_STATUSES)],
             'category_id' => ['nullable', 'integer'],
             'supplier_id' => ['nullable', 'integer'],
+            'stale_days' => ['nullable', 'integer', 'min:1', 'max:'.(int) config('furimadeck.inventory.max_filter_days')],
         ]);
 
         $products = $request->user()
             ->products()
-            ->with(['category', 'supplier', 'images'])
+            ->with(['category', 'supplier', 'images', 'listings.marketplace', 'validSales.marketplace'])
+            ->withValidSaleFlag()
             ->when($filters['keyword'] ?? null, function ($query, string $keyword): void {
                 $query->where(function ($nestedQuery) use ($keyword): void {
                     $nestedQuery
@@ -45,15 +51,28 @@ class ProductController extends Controller
             ->when($filters['inventory_status'] ?? null, fn ($query, string $status) => $query->where('inventory_status', $status))
             ->when($filters['category_id'] ?? null, fn ($query, int $categoryId) => $query->whereIn('category_id', $this->categoryIdsForFilter($categoryId)))
             ->when($filters['supplier_id'] ?? null, fn ($query, int $supplierId) => $query->where('supplier_id', $supplierId))
+            ->when($filters['stale_days'] ?? null, function ($query, int $days): void {
+                $threshold = now()->subDays($days)->toDateString();
+                $query
+                    ->where('quantity_available', '>', 0)
+                    ->whereDoesntHave('sales', fn ($sales): object => $sales->whereIn('status', Sale::VALID_SOLD_STATUSES))
+                    ->whereHas('listings', fn ($listing): object => $listing
+                        ->whereIn('status', Listing::STALE_INVENTORY_STATUSES)
+                        ->whereNotNull('listed_at')
+                        ->whereDate('listed_at', '<=', $threshold));
+            })
             ->latest()
-            ->paginate(50)
+            ->paginate((int) config('furimadeck.inventory.product_list_per_page'))
             ->withQueryString();
 
-        return view('products.index', [
+        return view('products.index-furupro-style', [
             'products' => $products,
             'filters' => $filters,
             'categories' => $this->activeCategories(),
             'suppliers' => $request->user()->suppliers()->orderBy('name')->get(),
+            'marketplaces' => Marketplace::query()->where('is_active', true)->orderBy('name')->get(),
+            'marketplaceFeeRates' => app(MarketplaceFeeService::class)->rates(Marketplace::query()->where('is_active', true)->orderBy('name')->get()),
+            'longTermInventoryDays' => (int) config('furimadeck.inventory.long_term_days'),
         ]);
     }
 
@@ -144,7 +163,7 @@ class ProductController extends Controller
         });
         $auditLogger->log($request->user(), Product::class, $product->id, 'product.created', null, $product->getAttributes(), $request->ip());
 
-        return redirect()->route('products.edit', $product)->with('success', '商品を登録しました。');
+        return redirect()->route('products.index')->with('success', '商品を登録しました。');
     }
 
     public function edit(Request $request, Product $product): View
@@ -152,7 +171,7 @@ class ProductController extends Controller
         $this->ensureOwner($request, $product);
 
         return view('products.edit', array_merge($this->formData($request, $product), [
-            'product' => $product->load(['images', 'attributeValues.categoryAttribute']),
+            'product' => $product->load(['images', 'attributeValues.categoryAttribute', 'validSales.marketplace']),
         ]));
     }
 
@@ -164,12 +183,13 @@ class ProductController extends Controller
         $before = $product->getAttributes();
         DB::transaction(function () use ($request, $product, $validated, $imageProcessor): void {
             $product->update($this->productValues($validated));
+            $this->syncSaleFromProduct($product, $validated['sale'] ?? []);
             $this->storeAttributeValues($product, $validated['attributes'] ?? []);
             $this->storeImages($product, $request, $imageProcessor);
         });
         $auditLogger->log($request->user(), Product::class, $product->id, 'product.updated', $before, $product->fresh()->getAttributes(), $request->ip());
 
-        return redirect()->route('products.edit', $product)->with('success', '商品を更新しました。');
+        return redirect()->route('products.index')->with('success', '商品を更新しました。');
     }
 
     public function destroy(Request $request, Product $product, AuditLogger $auditLogger): RedirectResponse
@@ -197,6 +217,8 @@ class ProductController extends Controller
         return [
             'categories' => $this->activeCategories(),
             'suppliers' => $request->user()->suppliers()->orderBy('name')->get(),
+            'marketplaces' => Marketplace::query()->where('is_active', true)->orderBy('name')->get(),
+            'marketplaceFeeRates' => app(MarketplaceFeeService::class)->rates(Marketplace::query()->where('is_active', true)->orderBy('name')->get()),
             'conditions' => Product::CONDITIONS,
             'inventoryStatuses' => Product::INVENTORY_STATUSES,
             'categoryAttributes' => $categoryId === null
@@ -227,8 +249,6 @@ class ProductController extends Controller
             'description_base' => ['nullable', 'string', 'max:10000'],
             'purchase_date' => ['nullable', 'date'],
             'purchase_unit_cost' => ['required', 'integer', 'min:0'],
-            'purchase_quantity' => ['required', 'integer', 'min:1', 'max:1000000'],
-            'quantity_available' => ['required', 'integer', 'min:0', 'max:1000000'],
             'purchase_shipping_cost' => ['nullable', 'integer', 'min:0'],
             'other_purchase_expense' => ['nullable', 'integer', 'min:0'],
             'supplier_id' => [
@@ -240,8 +260,12 @@ class ProductController extends Controller
             'manufacturer_model_number' => ['nullable', 'string', 'max:255'],
             'serial_number' => ['nullable', 'string', 'max:255'],
             'storage_location' => ['nullable', 'string', 'max:255'],
-            'inventory_status' => ['required', Rule::in(Product::INVENTORY_STATUSES)],
             'memo' => ['nullable', 'string', 'max:10000'],
+            'sale' => ['nullable', 'array'],
+            'sale.sold_price' => ['nullable', 'integer', 'min:0'],
+            'sale.marketplace_id' => ['nullable', 'integer', Rule::exists('marketplaces', 'id')->where('is_active', true), 'required_with:sale.sold_price'],
+            'sale.sales_fee_rate' => ['nullable', 'numeric', 'min:0', 'max:100', 'required_with:sale.sold_price'],
+            'sale.shipping_fee' => ['nullable', 'integer', 'min:0'],
             'attributes' => ['nullable', 'array'],
             'attributes.*.id' => ['required_with:attributes', 'integer'],
             'attributes.*.value_text' => ['nullable', 'string', 'max:1000'],
@@ -250,6 +274,9 @@ class ProductController extends Controller
         ]);
 
         $this->validateAttributeOwnership($validated);
+
+        $validated['purchase_quantity'] = $product?->purchase_quantity ?? 1;
+        $validated['quantity_available'] = $product?->quantity_available ?? 1;
 
         return $validated;
     }
@@ -277,9 +304,50 @@ class ProductController extends Controller
     private function productValues(array $validated): array
     {
         return collect($validated)
-            ->except(['attributes', 'images'])
+            ->except(['attributes', 'images', 'inventory_status', 'sale'])
             ->map(fn (mixed $value, string $key): mixed => in_array($key, ['purchase_shipping_cost', 'other_purchase_expense'], true) && $value === null ? 0 : $value)
+            ->put('inventory_status', Product::inventoryStatusForQuantity((int) $validated['quantity_available']))
             ->all();
+    }
+
+    /** @param array<string, mixed> $values */
+    private function syncSaleFromProduct(Product $product, array $values): void
+    {
+        if (! array_key_exists('sold_price', $values) || $values['sold_price'] === null || $values['sold_price'] === '') {
+            return;
+        }
+
+        $marketplace = Marketplace::query()->whereKey($values['marketplace_id'])->where('is_active', true)->firstOrFail();
+
+        $soldPrice = (int) $values['sold_price'];
+        $feeRate = (float) $values['sales_fee_rate'];
+        $shippingFee = (int) ($values['shipping_fee'] ?? 0);
+        $salesFee = (int) floor($soldPrice * $feeRate / 100);
+        $costBasis = (int) $product->purchase_unit_cost;
+        $profit = $soldPrice - $costBasis - $salesFee - $shippingFee;
+        $saleValues = [
+            'marketplace_id' => $marketplace->id,
+            'internal_sku_snapshot' => $product->internal_sku,
+            'product_name_snapshot' => $product->product_name,
+            'quantity' => 1,
+            'sold_price' => $soldPrice,
+            'sold_at' => now(),
+            'status' => Sale::STATUSES[3],
+            'cost_basis' => $costBasis,
+            'sales_fee' => $salesFee,
+            'sales_fee_rate' => $feeRate,
+            'shipping_fee' => $shippingFee,
+            'net_profit' => $profit,
+        ];
+        $sale = $product->validSales()->first();
+        if ($sale === null) {
+            $product->sales()->create(['user_id' => $product->user_id, ...$saleValues]);
+        } else {
+            $sale->update($saleValues);
+        }
+
+        $product->update(['quantity_available' => 0]);
+        $product->listings()->whereIn('status', ['ready', 'active'])->update(['status' => 'sold', 'ended_at' => now()]);
     }
 
     /** @param array<int, array{id: int, value_text?: string|null}> $attributes */
@@ -342,22 +410,36 @@ class ProductController extends Controller
     {
         return ProductCategory::query()
             ->where('is_active', true)
-            ->with('children.children')
-            ->whereNull('parent_id')
             ->orderBy('sort_order')
+            ->orderBy('name')
             ->get();
     }
 
     /** @return array<int, int> */
     private function categoryIdsForFilter(int $categoryId): array
     {
-        $category = ProductCategory::query()->with('children.children')->findOrFail($categoryId);
+        ProductCategory::query()->findOrFail($categoryId);
 
-        return collect([$category])
-            ->merge($category->children)
-            ->merge($category->children->flatMap->children)
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
+        $categoryIds = [(int) $categoryId];
+        $parentIds = $categoryIds;
+
+        while ($parentIds !== []) {
+            $childIds = ProductCategory::query()
+                ->where('is_active', true)
+                ->whereIn('parent_id', $parentIds)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+            $childIds = array_values(array_diff($childIds, $categoryIds));
+
+            if ($childIds === []) {
+                break;
+            }
+
+            $categoryIds = [...$categoryIds, ...$childIds];
+            $parentIds = $childIds;
+        }
+
+        return $categoryIds;
     }
 }

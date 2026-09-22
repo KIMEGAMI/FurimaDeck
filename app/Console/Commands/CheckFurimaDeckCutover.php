@@ -20,6 +20,10 @@ class CheckFurimaDeckCutover extends Command
         'sales',
         'audit_logs',
         'furimadeck_stripe_webhook_events',
+        'accounting_entries',
+        'import_batches',
+        'import_row_results',
+        'contact_inquiries',
     ];
 
     protected $signature = 'furimadeck:check-cutover';
@@ -33,7 +37,9 @@ class CheckFurimaDeckCutover extends Command
         $ready = $environmentReady && $ready;
         $googleOAuthReady = $this->checkGoogleOAuthSettings();
         $ready = $googleOAuthReady && $ready;
+        $mailReady = $this->checkMailSettings();
         $featureFlagsReady = $this->checkFeatureFlags();
+        $ready = $mailReady && $ready;
         $ready = $featureFlagsReady && $ready;
         $ready = $this->checkBillingSettings($environmentReady && $googleOAuthReady && $featureFlagsReady) && $ready;
         $ready = $this->checkSchema() && $ready;
@@ -83,6 +89,26 @@ class CheckFurimaDeckCutover extends Command
         }
 
         return $ready;
+    }
+
+    private function checkMailSettings(): bool
+    {
+        $mailer = (string) config('mail.default');
+        $from = (string) config('mail.from.address');
+        if (filter_var($from, FILTER_VALIDATE_EMAIL) === false || str_ends_with($from, '@localhost')) {
+            $this->error('NG: 本番のMAIL_FROM_ADDRESSが正しいメールアドレスではありません。');
+
+            return false;
+        }
+        if ($mailer === 'resend' && str_starts_with((string) config('services.resend.key'), 're_')) {
+            return true;
+        }
+        if ($mailer === 'smtp' && config('mail.mailers.smtp.host') === 'smtp.resend.com' && (int) config('mail.mailers.smtp.port') === 587 && config('mail.mailers.smtp.username') === 'resend' && filled(config('mail.mailers.smtp.password'))) {
+            return true;
+        }
+        $this->error('NG: 本番メールはResend（APIまたはsmtp.resend.com:587）に設定してください。');
+
+        return false;
     }
 
     private function checkFeatureFlags(): bool

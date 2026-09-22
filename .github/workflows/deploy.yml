@@ -1,4 +1,4 @@
-name: CD
+name: Legacy CD (disabled)
 
 on:
   workflow_dispatch:
@@ -17,7 +17,8 @@ env:
 
 jobs:
   deploy:
-    name: Deploy production
+    if: ${{ false }}
+    name: Legacy deploy disabled
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production

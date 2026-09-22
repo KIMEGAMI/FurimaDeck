@@ -14,6 +14,7 @@ use Illuminate\Notifications\Notifiable;
 #[Fillable([
     'name',
     'email',
+    'email_verified_at',
     'password',
     'google_id',
     'subscription_plan',
@@ -67,7 +68,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function hasActiveSubscription(): bool
     {
-        if ($this->isAdmin() || $this->isDemoUser()) {
+        if ($this->hasComplimentaryPremiumAccess()) {
             return true;
         }
 
@@ -102,9 +103,14 @@ class User extends Authenticatable implements MustVerifyEmail
         return is_string($demoEmail) && $demoEmail !== '' && $this->email === $demoEmail;
     }
 
+    public function hasComplimentaryPremiumAccess(): bool
+    {
+        return $this->isAdmin() || $this->isDemoUser();
+    }
+
     public function hasVerifiedEmail(): bool
     {
-        return $this->isDemoUser() || parent::hasVerifiedEmail();
+        return $this->isAdmin() || $this->isDemoUser() || parent::hasVerifiedEmail();
     }
 
     /** @return HasMany<AuctionItem, User> */
@@ -135,6 +141,17 @@ class User extends Authenticatable implements MustVerifyEmail
     public function sales(): HasMany
     {
         return $this->hasMany(Sale::class);
+    }
+
+    /** @return HasMany<AccountingEntry, User> */
+    public function accountingConnections(): HasMany
+    {
+        return $this->hasMany(AccountingConnection::class);
+    }
+
+    public function accountingEntries(): HasMany
+    {
+        return $this->hasMany(AccountingEntry::class);
     }
 
     /** @return HasMany<AiUsageLog, User> */

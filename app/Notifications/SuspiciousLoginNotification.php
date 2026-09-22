@@ -34,7 +34,7 @@ class SuspiciousLoginNotification extends Notification
             ->line('ログイン日時: '.$this->loggedInAt)
             ->line('IPアドレス: '.$this->ipAddress)
             ->line('心当たりがない場合は、すぐにパスワードを変更してください。')
-            ->action('パスワードを変更する', route('profile.edit'))
+            ->action('パスワードを変更する', route('furimadeck-account.edit'))
             ->line('このログインに心当たりがある場合、対応は不要です。');
     }
 }

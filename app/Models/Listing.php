@@ -8,6 +8,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Listing extends Model
 {
+    /** Listings that represent an item currently offered for sale. */
+    public const STALE_INVENTORY_STATUSES = ['ready', 'active'];
+
     public const STATUSES = [
         'draft',
         'ready',

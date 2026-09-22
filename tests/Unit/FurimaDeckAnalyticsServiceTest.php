@@ -6,6 +6,8 @@ use App\Models\Marketplace;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\FurimaDeckAnalyticsService;
+use Carbon\CarbonImmutable;
+use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -73,6 +75,40 @@ class FurimaDeckAnalyticsServiceTest extends TestCase
         $this->assertSame(3600, $summary['inventory_cost']);
     }
 
+    public function test_dashboard_monthly_graph_uses_only_valid_sales_for_the_user(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $marketplace = Marketplace::query()->create([
+            'code' => 'dashboard-calendar-marketplace',
+            'name' => 'カレンダー販売先',
+            'base_url' => 'https://example.test',
+            'fee_type' => 'percentage',
+            'default_fee_rate' => 0,
+            'is_active' => true,
+        ]);
+        $product = $this->createProduct($user, 'CALENDAR-001', 1, 2000);
+        $this->createSaleAt($user, $product, $marketplace, 'completed', 6000, 2000, '2025-10-15 12:00:00');
+        $this->createSaleAt($user, $product, $marketplace, 'completed', 12000, 5000, '2026-09-10 12:00:00');
+        $this->createSaleAt($user, $product, $marketplace, 'cancelled', 9000, 4000, '2026-09-10 14:00:00');
+        $otherProduct = $this->createProduct($otherUser, 'CALENDAR-OTHER-001', 1, 2000);
+        $this->createSaleAt($otherUser, $otherProduct, $marketplace, 'completed', 8000, 3000, '2026-09-10 16:00:00');
+
+        $dashboard = app(FurimaDeckAnalyticsService::class)->dashboard(
+            $user,
+            CarbonImmutable::create(2026, 9, 1),
+        );
+        $september = $dashboard['monthly_stats']->firstWhere('month', 9);
+        $october = $dashboard['monthly_stats']->firstWhere('key', '2025-10');
+        $this->assertSame('2025-10', $dashboard['monthly_stats']->first()['key']);
+        $this->assertSame('2026-09', $dashboard['monthly_stats']->last()['key']);
+        $this->assertSame(6000, $october['sales']);
+        $this->assertSame(2000, $october['profit']);
+        $this->assertSame(12000, $september['sales']);
+        $this->assertSame(5000, $september['profit']);
+        $this->assertSame(1, $september['count']);
+    }
+
     private function createProduct(User $user, string $sku, int $quantityAvailable, int $unitCost): Product
     {
         return $user->products()->create([
@@ -88,6 +124,11 @@ class FurimaDeckAnalyticsServiceTest extends TestCase
 
     private function createSale(User $user, Product $product, Marketplace $marketplace, string $status, int $soldPrice, int $netProfit): void
     {
+        $this->createSaleAt($user, $product, $marketplace, $status, $soldPrice, $netProfit, now());
+    }
+
+    private function createSaleAt(User $user, Product $product, Marketplace $marketplace, string $status, int $soldPrice, int $netProfit, DateTimeInterface|string $soldAt): void
+    {
         $user->sales()->create([
             'product_id' => $product->id,
             'marketplace_id' => $marketplace->id,
@@ -95,7 +136,7 @@ class FurimaDeckAnalyticsServiceTest extends TestCase
             'product_name_snapshot' => $product->product_name,
             'quantity' => 1,
             'sold_price' => $soldPrice,
-            'sold_at' => now(),
+            'sold_at' => $soldAt,
             'status' => $status,
             'cost_basis' => 0,
             'net_profit' => $netProfit,

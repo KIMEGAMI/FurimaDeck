@@ -116,7 +116,7 @@
                         </div>
                     </form>
 
-                    @if ((bool) config('demo.user_enabled'))
+                    @if ((bool) config('demo.user_enabled') && filled(config('demo.user_email')) && filled(config('demo.user_password')))
                         <form method="POST" action="{{ route('login.demo') }}" class="mt-6">
                             @csrf
                             <button type="submit" class="w-full rounded-md border border-cyan-300 bg-cyan-50 px-6 py-4 text-center font-bold text-cyan-700 shadow-sm transition hover:border-cyan-400 hover:bg-cyan-100">

@@ -12,6 +12,7 @@ class ProductCategory extends Model
         'parent_id',
         'name',
         'slug',
+        'source_path',
         'sort_order',
         'is_active',
     ];
@@ -37,5 +38,10 @@ class ProductCategory extends Model
     public function attributes(): HasMany
     {
         return $this->hasMany(CategoryAttribute::class, 'category_id')->orderBy('sort_order');
+    }
+
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class, 'category_id');
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\AuctionItem;
 use App\Models\AuctionItemImage;
+use App\Models\Sale;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use RuntimeException;
@@ -28,6 +30,11 @@ class ProfileController extends Controller
         return view('profile.edit', [
             'user' => $request->user(),
             'canDeleteAccount' => ! $this->isProtectedAccount($request->user()),
+            'salesTotal' => Schema::hasTable('sales')
+                ? (int) $request->user()->sales()
+                    ->whereIn('status', Sale::VALID_SOLD_STATUSES)
+                    ->sum('sold_price')
+                : 0,
         ]);
     }
 

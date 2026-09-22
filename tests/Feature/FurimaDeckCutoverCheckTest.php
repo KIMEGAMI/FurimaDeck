@@ -38,6 +38,12 @@ class FurimaDeckCutoverCheckTest extends TestCase
         config()->set('services.google.client_id', null);
         config()->set('services.google.client_secret', null);
         config()->set('services.google.redirect', null);
+        config()->set('mail.default', 'smtp');
+        config()->set('mail.from.address', 'noreply@furimadeck.example');
+        config()->set('mail.mailers.smtp.host', 'smtp.resend.com');
+        config()->set('mail.mailers.smtp.port', 587);
+        config()->set('mail.mailers.smtp.username', 'resend');
+        config()->set('mail.mailers.smtp.password', 'configured');
         config()->set('furimadeck.cutover_enabled', true);
         config()->set('furimadeck.product_management_enabled', true);
         config()->set('furimadeck.billing.stripe_secret', $this->stripeSecretFor('live'));

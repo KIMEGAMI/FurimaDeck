@@ -147,7 +147,7 @@
                     <h1 class="sr-only">フリマ販売の収益管理ならFurimaDeck</h1>
                     <div class="flex flex-wrap gap-3">
                         <a href="{{ route('register') }}" class="rounded-md bg-cyan-700 px-7 py-4 text-center text-sm font-black text-white shadow-lg shadow-cyan-900/20 hover:bg-cyan-800">はじめる</a>
-                        @if ((bool) config('demo.user_enabled'))
+                        @if ((bool) config('demo.user_enabled') && filled(config('demo.user_email')) && filled(config('demo.user_password')))
                             <form method="POST" action="{{ route('login.demo') }}">
                                 @csrf
                                 <button type="submit" class="rounded-md border border-cyan-300 bg-white/90 px-7 py-4 text-sm font-black text-black shadow-lg hover:bg-white">デモを見る</button>

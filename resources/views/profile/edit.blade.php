@@ -22,6 +22,12 @@
 
                 <div class="p-8">
                     @include('profile.partials.update-profile-information-form')
+
+                    <div class="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                        <p class="text-sm font-black text-emerald-900">累計売上</p>
+                        <p class="mt-2 text-2xl font-black text-slate-950">¥{{ number_format($salesTotal) }}</p>
+                        <p class="mt-1 text-xs font-bold text-emerald-800">キャンセル・返品を除く販売確定分</p>
+                    </div>
                 </div>
             </div>
 
@@ -37,6 +43,18 @@
                     @include('profile.partials.update-password-form')
                 </div>
             </div>
+
+
+                <div class="overflow-hidden rounded-3xl border border-amber-200 bg-white shadow">
+                    <div class="border-b border-amber-200 bg-amber-50 px-8 py-6">
+                        <h3 class="text-xl font-black text-amber-900">FurimaDeckデータ管理</h3>
+                        <p class="mt-1 text-sm font-bold text-amber-900">アカウントを残したまま、登録データを削除できます。</p>
+                    </div>
+                    <div class="flex flex-wrap gap-3 p-8">
+                        <a href="{{ route('furimadeck-account.data-delete.confirm') }}" class="rounded bg-amber-700 px-4 py-2 font-black text-white hover:bg-amber-800">データ全削除</a>
+                        <a href="{{ route('furimadeck-account.monthly-data-delete.confirm', ['month' => now()->format('Y-m')]) }}" class="rounded border border-amber-700 px-4 py-2 font-black text-amber-900 hover:bg-amber-100">期間（月）の削除</a>
+                    </div>
+                </div>
 
             @if ($canDeleteAccount)
                 <div class="overflow-hidden rounded-3xl border border-red-100 bg-white shadow">

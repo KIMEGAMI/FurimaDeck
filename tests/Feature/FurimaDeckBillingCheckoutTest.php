@@ -56,6 +56,19 @@ class FurimaDeckBillingCheckoutTest extends TestCase
         $this->assertSame('cus_furimadeck', $user->fresh()->stripe_customer_id);
     }
 
+    public function test_checkout_passes_configured_three_d_secure_mode(): void
+    {
+        config()->set('furimadeck.billing.stripe_3ds_request', 'challenge');
+        Http::fake([
+            'https://stripe.test/v1/customers' => Http::response(['id' => 'cus_3ds'], 200),
+            'https://stripe.test/v1/checkout/sessions' => Http::response(['url' => 'https://checkout.stripe.com/session'], 200),
+        ]);
+        $user = User::factory()->create(['email_verified_at' => now()]);
+
+        $this->actingAs($user)->post(route('furimadeck-billing.checkout'), ['billing_terms_confirmed' => '1'])->assertRedirect('https://checkout.stripe.com/session');
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://stripe.test/v1/checkout/sessions' && $request['payment_method_options[card][request_three_d_secure]'] === 'challenge');
+    }
+
     public function test_checkout_rejects_a_non_stripe_redirect_url(): void
     {
         Http::fake([
@@ -96,6 +109,34 @@ class FurimaDeckBillingCheckoutTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('furimadeck-billing.checkout'), ['billing_terms_confirmed' => '1'])
+            ->assertRedirect(route('furimadeck-billing.index'))
+            ->assertSessionHas('error');
+
+        Http::assertNothingSent();
+    }
+
+    public function test_admin_billing_is_complimentary_and_never_calls_stripe(): void
+    {
+        Http::fake();
+        $user = User::factory()->unverified()->create([
+            'is_admin' => true,
+            'subscription_plan' => User::SUBSCRIPTION_INACTIVE,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('furimadeck-billing.index'))
+            ->assertOk()
+            ->assertSee('管理者アカウント（決済不要）')
+            ->assertDontSee('Stripeで契約を管理')
+            ->assertDontSee('無料お試しを開始');
+
+        $this->actingAs($user)
+            ->post(route('furimadeck-billing.checkout'))
+            ->assertRedirect(route('furimadeck-billing.index'))
+            ->assertSessionHas('error');
+
+        $this->actingAs($user)
+            ->post(route('furimadeck-billing.portal'))
             ->assertRedirect(route('furimadeck-billing.index'))
             ->assertSessionHas('error');
 

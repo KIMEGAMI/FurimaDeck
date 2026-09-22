@@ -27,4 +27,18 @@ class FurimaDeckEntitlementsTest extends TestCase
 
         $this->assertNull(app(FurimaDeckEntitlements::class)->productLimit($user));
     }
+
+    public function test_admin_and_demo_user_have_complimentary_premium_access(): void
+    {
+        config()->set('demo.user_enabled', true);
+        config()->set('demo.user_email', 'demo@example.com');
+
+        $admin = new User(['is_admin' => true, 'subscription_plan' => User::SUBSCRIPTION_INACTIVE]);
+        $demo = new User(['email' => 'demo@example.com', 'subscription_plan' => User::SUBSCRIPTION_INACTIVE]);
+
+        $this->assertTrue($admin->hasComplimentaryPremiumAccess());
+        $this->assertTrue($admin->hasActiveSubscription());
+        $this->assertTrue($demo->hasComplimentaryPremiumAccess());
+        $this->assertTrue($demo->hasActiveSubscription());
+    }
 }

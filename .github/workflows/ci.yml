@@ -6,6 +6,7 @@ on:
       - main
   push:
     branches:
+      - main
       - 'codex/**'
       - 'codex-*'
   workflow_dispatch:
@@ -42,7 +43,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
-          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_sqlite, sqlite3, tokenizer, xml, zip
+          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
           coverage: none
 
       - name: Set up Node.js
@@ -62,8 +63,47 @@ jobs:
           cp .env.example .env
           php artisan key:generate --ansi
 
+      - name: Configure ephemeral E2E demo user
+        run: |
+          demo_password="$(openssl rand -hex 24)"
+          {
+            echo "APP_URL=http://127.0.0.1:8002"
+            echo "SESSION_DRIVER=file"
+            echo "CACHE_STORE=file"
+            echo "FURIMADECK_CUTOVER_ENABLED=true"
+            echo "FURIMADECK_PRODUCT_MANAGEMENT_ENABLED=true"
+            echo "FURIMADECK_DEMO_USER_ENABLED=true"
+            echo "FURIMADECK_DEMO_USER_EMAIL=demo@example.com"
+            echo "FURIMADECK_DEMO_USER_PASSWORD=${demo_password}"
+          } >> "$GITHUB_ENV"
+          {
+            echo "APP_URL=http://127.0.0.1:8002"
+            echo "SESSION_DRIVER=file"
+            echo "CACHE_STORE=file"
+            echo "FURIMADECK_CUTOVER_ENABLED=true"
+            echo "FURIMADECK_PRODUCT_MANAGEMENT_ENABLED=true"
+            echo "FURIMADECK_DEMO_USER_ENABLED=true"
+            echo "FURIMADECK_DEMO_USER_EMAIL=demo@example.com"
+            echo "FURIMADECK_DEMO_USER_PASSWORD=${demo_password}"
+          } >> .env
+
       - name: Build frontend assets
         run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser E2E tests
+        env:
+          APP_URL: http://127.0.0.1:8002
+          DB_CONNECTION: furimadeck
+          SESSION_DRIVER: file
+          CACHE_STORE: file
+          FURIMADECK_CUTOVER_ENABLED: true
+          FURIMADECK_PRODUCT_MANAGEMENT_ENABLED: true
+          FURIMADECK_DB_DRIVER: sqlite
+          FURIMADECK_DB_DATABASE: ${{ github.workspace }}/storage/framework/testing/furimadeck-e2e.sqlite
+        run: npm run test:e2e
 
       - name: Check PHP code style
         run: vendor/bin/pint --test
@@ -76,3 +116,60 @@ jobs:
 
       - name: Audit Node dependencies
         run: npm audit --audit-level=high
+  mariadb-gate:
+    name: MariaDB CSV gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
+          MARIADB_DATABASE: furimadeck_csv_gate
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
+          coverage: none
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --ansi
+
+      - name: Prepare application key
+        run: |
+          cp .env.example .env
+          php artisan key:generate --ansi
+
+      - name: Migrate isolated MariaDB database
+        env:
+          FURIMADECK_DB_DRIVER: mysql
+          FURIMADECK_DB_HOST: 127.0.0.1
+          FURIMADECK_DB_PORT: 3306
+          FURIMADECK_DB_DATABASE: furimadeck_csv_gate
+          FURIMADECK_DB_USERNAME: root
+          FURIMADECK_DB_PASSWORD: ""
+        run: php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force
+
+      - name: Run MariaDB CSV gate
+        env:
+          FURIMADECK_MARIADB_GATE: '1'
+          FURIMADECK_DB_DRIVER: mysql
+          FURIMADECK_DB_HOST: 127.0.0.1
+          FURIMADECK_DB_PORT: 3306
+          FURIMADECK_DB_DATABASE: furimadeck_csv_gate
+          FURIMADECK_DB_USERNAME: root
+          FURIMADECK_DB_PASSWORD: ""
+        run: vendor/bin/phpunit --no-coverage tests/Feature/FurimaDeckMariaDbCsvGateTest.php

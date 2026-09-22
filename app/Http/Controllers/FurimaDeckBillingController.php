@@ -14,21 +14,31 @@ class FurimaDeckBillingController extends Controller
 {
     public function index(Request $request): View
     {
-        [$invoices, $invoiceLoadFailed] = $this->invoicesFor($request->user());
+        $user = $request->user();
+        $complimentaryPremium = $user->hasComplimentaryPremiumAccess();
+        [$invoices, $invoiceLoadFailed] = $complimentaryPremium
+            ? [[], false]
+            : $this->invoicesFor($user);
 
         return view('furimadeck_billing.index', [
-            'user' => $request->user(),
+            'user' => $user,
             'price' => (int) config('furimadeck.billing.monthly_price_jpy'),
             'trialDays' => (int) config('furimadeck.billing.trial_period_days'),
             'invoices' => $invoices,
             'invoiceLoadFailed' => $invoiceLoadFailed,
+            'complimentaryPremium' => $complimentaryPremium,
+            'complimentaryPremiumLabel' => $user->isAdmin() ? '管理者アカウント' : 'デモユーザー',
         ]);
     }
 
     public function checkout(Request $request): RedirectResponse
     {
-        $request->validate(['billing_terms_confirmed' => ['accepted']]);
         $user = $request->user();
+        if ($user->hasComplimentaryPremiumAccess()) {
+            return $this->backWithError('このアカウントは決済不要でPremium機能を利用できます。');
+        }
+
+        $request->validate(['billing_terms_confirmed' => ['accepted']]);
         if ($user->hasActiveSubscription()) {
             return $this->backWithError('すでにPremium契約が有効です。');
         }
@@ -52,6 +62,7 @@ class FurimaDeckBillingController extends Controller
                 'client_reference_id' => (string) $user->id,
                 'metadata[user_id]' => (string) $user->id,
                 'subscription_data[metadata][user_id]' => (string) $user->id,
+                'payment_method_options[card][request_three_d_secure]' => $this->stripe3dsRequest(),
             ];
             if ($user->trial_used_at === null) {
                 $payload['subscription_data[trial_period_days]'] = (int) config('furimadeck.billing.trial_period_days');
@@ -72,6 +83,10 @@ class FurimaDeckBillingController extends Controller
     public function portal(Request $request): RedirectResponse
     {
         $user = $request->user();
+        if ($user->hasComplimentaryPremiumAccess()) {
+            return $this->backWithError('このアカウントにはStripe契約がありません。Premium機能は決済不要で利用できます。');
+        }
+
         $secret = $this->stripeSecret();
         if ($secret === null || ! is_string($user->stripe_customer_id) || $user->stripe_customer_id === '') {
             return $this->backWithError('契約管理画面を開けませんでした。契約情報を確認してください。');
@@ -108,7 +123,10 @@ class FurimaDeckBillingController extends Controller
     private function ensureCustomer(User $user, string $secret): string
     {
         if (is_string($user->stripe_customer_id) && $user->stripe_customer_id !== '') {
-            return $user->stripe_customer_id;
+            $existing = Http::timeout(10)->withToken($secret)->get($this->stripeApiBase().'/customers/'.rawurlencode($user->stripe_customer_id));
+            if ($existing->successful() && $existing->json('deleted') !== true) {
+                return $user->stripe_customer_id;
+            }
         }
 
         $response = Http::asForm()->timeout(10)->withToken($secret)->post($this->stripeApiBase().'/customers', [
@@ -163,6 +181,13 @@ class FurimaDeckBillingController extends Controller
             ->all();
 
         return [$invoices, false];
+    }
+
+    private function stripe3dsRequest(): string
+    {
+        $request = (string) config('furimadeck.billing.stripe_3ds_request', 'automatic');
+
+        return in_array($request, ['automatic', 'any', 'challenge'], true) ? $request : 'automatic';
     }
 
     private function stripeSecret(): ?string
