@@ -64,11 +64,17 @@ jobs:
 
       - name: Configure ephemeral E2E demo user
         run: |
+          demo_password="$(openssl rand -hex 24)"
           {
             echo "FURIMADECK_DEMO_USER_ENABLED=true"
             echo "FURIMADECK_DEMO_USER_EMAIL=demo@example.com"
-            echo "FURIMADECK_DEMO_USER_PASSWORD=$(openssl rand -hex 24)"
+            echo "FURIMADECK_DEMO_USER_PASSWORD=${demo_password}"
           } >> "$GITHUB_ENV"
+          {
+            echo "FURIMADECK_DEMO_USER_ENABLED=true"
+            echo "FURIMADECK_DEMO_USER_EMAIL=demo@example.com"
+            echo "FURIMADECK_DEMO_USER_PASSWORD=${demo_password}"
+          } >> .env
 
       - name: Build frontend assets
         run: npm run build
