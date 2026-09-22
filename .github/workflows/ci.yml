@@ -85,6 +85,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Verify ephemeral E2E demo authentication
+        env:
+          DB_CONNECTION: furimadeck
+          FURIMADECK_DB_DRIVER: sqlite
+          FURIMADECK_DB_DATABASE: ${{ github.workspace }}/storage/framework/testing/furimadeck-e2e.sqlite
         run: >-
           php artisan tinker --execute="
           if (! Auth::attempt(['email' => config('demo.user_email'), 'password' => config('demo.user_password')])) {
