@@ -39,8 +39,9 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
+          runs_json="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${HEAD_SHA}&per_page=100")"
           for workflow_name in CI Security; do
-            conclusion="$(gh run list --workflow "$workflow_name" --commit "$HEAD_SHA" --limit 20 --json status,conclusion --jq '[.[] | select(.status == "completed") | .conclusion] | if index("failure") then "failure" elif index("success") then "success" else "pending" end')"
+            conclusion="$(jq -r --arg workflow_name "$workflow_name" '[.workflow_runs[] | select(.name == $workflow_name and .status == "completed") | .conclusion] | if any(.[]; . == "failure" or . == "cancelled" or . == "timed_out") then "failure" elif any(.[]; . == "success") then "success" else "pending" end' <<< "$runs_json")"
             test "$conclusion" = success
           done
           echo "ready=true" >> "$GITHUB_OUTPUT"
