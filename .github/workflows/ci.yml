@@ -62,6 +62,14 @@ jobs:
           cp .env.example .env
           php artisan key:generate --ansi
 
+      - name: Configure ephemeral E2E demo user
+        run: |
+          {
+            echo "FURIMADECK_DEMO_USER_ENABLED=true"
+            echo "FURIMADECK_DEMO_USER_EMAIL=demo@example.com"
+            echo "FURIMADECK_DEMO_USER_PASSWORD=$(openssl rand -hex 24)"
+          } >> "$GITHUB_ENV"
+
       - name: Build frontend assets
         run: npm run build
 
