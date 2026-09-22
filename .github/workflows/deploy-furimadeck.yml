@@ -2,9 +2,16 @@ name: Deploy FurimaDeck
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - CI
+      - Security
+    types:
+      - completed
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: furimadeck-production-deploy
@@ -15,9 +22,36 @@ env:
   MIN_PHP_VERSION: '8.4.1'
 
 jobs:
+  quality-gate:
+    name: Wait for CI and Security
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Confirm both checks passed for the deployed commit
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          for workflow_name in CI Security; do
+            conclusion="$(gh run list --workflow "$workflow_name" --commit "$HEAD_SHA" --limit 20 --json status,conclusion --jq '[.[] | select(.status == "completed") | .conclusion] | if index("failure") then "failure" elif index("success") then "success" else "pending" end')"
+            test "$conclusion" = success
+          done
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
   deploy:
     name: Deploy FurimaDeck production
-    if: github.ref == 'refs/heads/main'
+    needs: quality-gate
+    if: >-
+      always()
+      && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      || (needs.quality-gate.result == 'success' && needs.quality-gate.outputs.ready == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production

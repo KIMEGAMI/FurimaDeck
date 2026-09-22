@@ -6,6 +6,7 @@ on:
       - main
   push:
     branches:
+      - main
       - 'codex/**'
       - 'codex-*'
   workflow_dispatch:
