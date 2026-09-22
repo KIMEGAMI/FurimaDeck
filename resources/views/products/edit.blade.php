@@ -27,7 +27,16 @@
                         const form = document.createElement('form');
                         form.method = 'POST';
                         form.action = button.dataset.deleteImageUrl;
-                        form.innerHTML = `<input type="hidden" name="_token" value="${document.querySelector('input[name="_token"]').value}"><input type="hidden" name="_method" value="DELETE">`;
+                        const csrfInput = document.createElement('input');
+                        csrfInput.type = 'hidden';
+                        csrfInput.name = '_token';
+                        csrfInput.value = document.querySelector('input[name="_token"]').value;
+                        form.append(csrfInput);
+                        const methodInput = document.createElement('input');
+                        methodInput.type = 'hidden';
+                        methodInput.name = '_method';
+                        methodInput.value = 'DELETE';
+                        form.append(methodInput);
                         document.body.append(form);
                         form.submit();
                     });
