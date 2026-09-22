@@ -9,6 +9,7 @@ writeFileSync(databasePath, '');
 
 const environment = {
   ...process.env,
+  DB_CONNECTION: 'furimadeck',
   FURIMADECK_DB_DRIVER: 'sqlite',
   FURIMADECK_DB_DATABASE: databasePath,
 };

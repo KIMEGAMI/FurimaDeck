@@ -21,6 +21,7 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       ...process.env,
+      DB_CONNECTION: 'furimadeck',
       MAIL_MAILER: 'log',
       FURIMADECK_DB_DRIVER: 'sqlite',
       FURIMADECK_DB_DATABASE: e2eDatabase,
