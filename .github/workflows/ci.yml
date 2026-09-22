@@ -96,7 +96,7 @@ jobs:
           CACHE_STORE: file
           FURIMADECK_DB_DRIVER: sqlite
           FURIMADECK_DB_DATABASE: ${{ github.workspace }}/storage/framework/testing/furimadeck-e2e.sqlite
-        run: npm run test:e2e
+        run: npm run test:e2e -- --max-failures=1
 
       - name: Check PHP code style
         run: vendor/bin/pint --test
