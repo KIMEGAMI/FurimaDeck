@@ -66,11 +66,13 @@ jobs:
         run: |
           demo_password="$(openssl rand -hex 24)"
           {
+            echo "APP_URL=http://127.0.0.1:8002"
             echo "FURIMADECK_DEMO_USER_ENABLED=true"
             echo "FURIMADECK_DEMO_USER_EMAIL=demo@example.com"
             echo "FURIMADECK_DEMO_USER_PASSWORD=${demo_password}"
           } >> "$GITHUB_ENV"
           {
+            echo "APP_URL=http://127.0.0.1:8002"
             echo "FURIMADECK_DEMO_USER_ENABLED=true"
             echo "FURIMADECK_DEMO_USER_EMAIL=demo@example.com"
             echo "FURIMADECK_DEMO_USER_PASSWORD=${demo_password}"
