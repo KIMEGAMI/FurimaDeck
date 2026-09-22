@@ -22,4 +22,4 @@ const run = (args) => {
 
 run(['artisan', 'migrate', '--database=furimadeck', '--path=database/migrations/furimadeck', '--force']);
 run(['artisan', 'db:seed', '--database=furimadeck', '--class=FurimaDeckMarketplaceSeeder', '--no-interaction']);
-run(['artisan', 'furimadeck:sync-demo-user']);
+run(['artisan', 'furimadeck:sync-demo-user', '--sync-password']);

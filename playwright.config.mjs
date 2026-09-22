@@ -22,6 +22,9 @@ export default defineConfig({
     env: {
       ...process.env,
       DB_CONNECTION: 'furimadeck',
+      FURIMADECK_DEMO_USER_ENABLED: process.env.FURIMADECK_DEMO_USER_ENABLED,
+      FURIMADECK_DEMO_USER_EMAIL: process.env.FURIMADECK_DEMO_USER_EMAIL,
+      FURIMADECK_DEMO_USER_PASSWORD: process.env.FURIMADECK_DEMO_USER_PASSWORD,
       MAIL_MAILER: 'log',
       FURIMADECK_DB_DRIVER: 'sqlite',
       FURIMADECK_DB_DATABASE: e2eDatabase,
