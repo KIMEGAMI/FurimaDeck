@@ -46,7 +46,6 @@ test('authenticated user can register a product', async ({ page }) => {
   await expect(page).toHaveURL(/dashboard/);
 
   await page.goto('/products/create');
-  console.log('E2E_PRODUCTS_CREATE', page.url(), await page.title(), (await page.locator('body').innerText()).slice(0, 240));
   const sku = `E2E-${Date.now()}`;
   await page.locator('input[name="internal_sku"]').fill(sku);
   await page.locator('input[name="product_name"]').fill('E2Eテスト商品');

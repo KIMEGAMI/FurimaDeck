@@ -69,6 +69,8 @@ jobs:
             echo "APP_URL=http://127.0.0.1:8002"
             echo "SESSION_DRIVER=file"
             echo "CACHE_STORE=file"
+            echo "FURIMADECK_CUTOVER_ENABLED=true"
+            echo "FURIMADECK_PRODUCT_MANAGEMENT_ENABLED=true"
             echo "FURIMADECK_DEMO_USER_ENABLED=true"
             echo "FURIMADECK_DEMO_USER_EMAIL=demo@example.com"
             echo "FURIMADECK_DEMO_USER_PASSWORD=${demo_password}"
@@ -77,6 +79,8 @@ jobs:
             echo "APP_URL=http://127.0.0.1:8002"
             echo "SESSION_DRIVER=file"
             echo "CACHE_STORE=file"
+            echo "FURIMADECK_CUTOVER_ENABLED=true"
+            echo "FURIMADECK_PRODUCT_MANAGEMENT_ENABLED=true"
             echo "FURIMADECK_DEMO_USER_ENABLED=true"
             echo "FURIMADECK_DEMO_USER_EMAIL=demo@example.com"
             echo "FURIMADECK_DEMO_USER_PASSWORD=${demo_password}"
@@ -94,9 +98,11 @@ jobs:
           DB_CONNECTION: furimadeck
           SESSION_DRIVER: file
           CACHE_STORE: file
+          FURIMADECK_CUTOVER_ENABLED: true
+          FURIMADECK_PRODUCT_MANAGEMENT_ENABLED: true
           FURIMADECK_DB_DRIVER: sqlite
           FURIMADECK_DB_DATABASE: ${{ github.workspace }}/storage/framework/testing/furimadeck-e2e.sqlite
-        run: npm run test:e2e -- --max-failures=1
+        run: npm run test:e2e
 
       - name: Check PHP code style
         run: vendor/bin/pint --test
