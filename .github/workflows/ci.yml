@@ -84,21 +84,12 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Verify ephemeral E2E demo authentication
+      - name: Run browser E2E tests
         env:
+          APP_URL: http://127.0.0.1:8002
           DB_CONNECTION: furimadeck
           FURIMADECK_DB_DRIVER: sqlite
           FURIMADECK_DB_DATABASE: ${{ github.workspace }}/storage/framework/testing/furimadeck-e2e.sqlite
-        run: >-
-          php artisan tinker --execute="
-          if (! Auth::attempt(['email' => config('demo.user_email'), 'password' => config('demo.user_password')])) {
-              fwrite(STDERR, 'Ephemeral E2E demo authentication failed.' . PHP_EOL);
-              exit(1);
-          }
-          echo 'Ephemeral E2E demo authentication is ready.' . PHP_EOL;
-          "
-
-      - name: Run browser E2E tests
         run: npm run test:e2e
 
       - name: Check PHP code style
