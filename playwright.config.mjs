@@ -21,6 +21,7 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       ...process.env,
+      APP_URL: 'http://127.0.0.1:8002',
       DB_CONNECTION: 'furimadeck',
       FURIMADECK_DEMO_USER_ENABLED: process.env.FURIMADECK_DEMO_USER_ENABLED,
       FURIMADECK_DEMO_USER_EMAIL: process.env.FURIMADECK_DEMO_USER_EMAIL,
