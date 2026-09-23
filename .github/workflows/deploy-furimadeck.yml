@@ -130,11 +130,11 @@ jobs:
           sudo -u www-data "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress
           sudo -u www-data "$NPM_BIN" ci --ignore-scripts
           sudo -u www-data "$NPM_BIN" run build
+          sudo -u www-data "$PHP_BIN" artisan optimize:clear
           sudo -u www-data "$PHP_BIN" artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force
           sudo -u www-data "$PHP_BIN" artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckCategorySeeder --force
           sudo -u www-data "$PHP_BIN" artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckMarketplaceSeeder --force
           sudo -u www-data "$PHP_BIN" artisan furimadeck:check-cutover
-          sudo -u www-data "$PHP_BIN" artisan optimize:clear
           sudo -u www-data "$PHP_BIN" artisan config:cache
           sudo -u www-data "$PHP_BIN" artisan route:cache
           sudo -u www-data "$PHP_BIN" artisan view:cache
