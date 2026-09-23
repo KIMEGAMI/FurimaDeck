@@ -224,7 +224,7 @@ class CheckFurimaDeckCutover extends Command
         }
 
         if ($mismatches !== []) {
-            $this->error('NG: FurimaDeckのStripe Priceが条件に一致しません。');
+            $this->error('NG: FurimaDeckのStripe Priceが有効なJPY月額プランと一致しません。');
             foreach ($mismatches as $mismatch) {
                 $this->line('NG詳細: '.$mismatch);
             }
