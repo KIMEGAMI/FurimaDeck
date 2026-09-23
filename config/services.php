@@ -22,17 +22,17 @@ return [
     ],
 
     'stripe' => [
-        'api_base' => env('FURIMADECK_STRIPE_API_BASE', env('STRIPE_API_BASE', 'https://api.stripe.com/v1')),
-        'secret' => env('FURIMADECK_STRIPE_SECRET', env('STRIPE_SECRET', env('STRIPE_SECRET_KEY'))),
-        'webhook_secret' => env('FURIMADECK_STRIPE_WEBHOOK_SECRET', env('STRIPE_WEBHOOK_SECRET')),
-        'subscription_price_id' => env('FURIMADECK_STRIPE_PRICE_ID', env('STRIPE_SUBSCRIPTION_PRICE_ID', env('STRIPE_PREMIUM_PRICE_ID'))),
-        'subscription_amount' => (int) env('FURIMADECK_MONTHLY_PRICE_JPY', env('STRIPE_SUBSCRIPTION_AMOUNT', env('STRIPE_PREMIUM_AMOUNT', 980))),
-        'subscription_currency' => env('FURIMADECK_STRIPE_CURRENCY', env('STRIPE_SUBSCRIPTION_CURRENCY', env('STRIPE_PREMIUM_CURRENCY', 'jpy'))),
-        'checkout_locale' => env('STRIPE_CHECKOUT_LOCALE', 'ja'),
-        'trial_period_days' => (int) env('STRIPE_TRIAL_PERIOD_DAYS', 7),
-        'portal_configuration_id' => env('STRIPE_PORTAL_CONFIGURATION_ID'),
-        'subscription_product_name' => env('STRIPE_PREMIUM_PRODUCT_NAME', 'FurimaDeck Premium'),
-        'subscription_product_description' => env('STRIPE_PREMIUM_PRODUCT_DESCRIPTION', 'FurimaDeck paid subscription.'),
+        'api_base' => env('FURIMADECK_STRIPE_API_BASE', 'https://api.stripe.com/v1'),
+        'secret' => env('FURIMADECK_STRIPE_SECRET'),
+        'webhook_secret' => env('FURIMADECK_STRIPE_WEBHOOK_SECRET'),
+        'subscription_price_id' => env('FURIMADECK_STRIPE_PRICE_ID'),
+        'subscription_amount' => (int) env('FURIMADECK_MONTHLY_PRICE_JPY', 980),
+        'subscription_currency' => env('FURIMADECK_STRIPE_CURRENCY', 'jpy'),
+        'checkout_locale' => env('FURIMADECK_STRIPE_CHECKOUT_LOCALE', 'ja'),
+        'trial_period_days' => (int) env('FURIMADECK_TRIAL_PERIOD_DAYS', 7),
+        'portal_configuration_id' => env('FURIMADECK_STRIPE_PORTAL_CONFIGURATION_ID'),
+        'subscription_product_name' => env('FURIMADECK_STRIPE_PRODUCT_NAME', 'FurimaDeck Premium'),
+        'subscription_product_description' => env('FURIMADECK_STRIPE_PRODUCT_DESCRIPTION', 'FurimaDeck paid subscription.'),
     ],
 
     'postmark' => [

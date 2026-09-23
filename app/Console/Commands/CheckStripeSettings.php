@@ -38,7 +38,7 @@ class CheckStripeSettings extends Command
         $ok = true;
 
         if (! is_string($secret) || $secret === '') {
-            $this->error('NG: STRIPE_SECRET または STRIPE_SECRET_KEY が未設定です。');
+            $this->error('NG: FURIMADECK_STRIPE_SECRET が未設定です。');
             $ok = false;
         } else {
             $mode = str_starts_with($secret, 'sk_live_') ? 'live' : (str_starts_with($secret, 'sk_test_') ? 'test' : 'unknown');
@@ -57,10 +57,10 @@ class CheckStripeSettings extends Command
 
         if (! is_string($priceId) || $priceId === '') {
             if ($isProduction) {
-                $this->error('NG: 本番環境では STRIPE_SUBSCRIPTION_PRICE_ID / STRIPE_PREMIUM_PRICE_ID が必須です。');
+                $this->error('NG: 本番環境では FURIMADECK_STRIPE_PRICE_ID が必須です。');
                 $ok = false;
             } else {
-                $this->warn('注意: STRIPE_SUBSCRIPTION_PRICE_ID / STRIPE_PREMIUM_PRICE_ID が未設定です。開発環境では動的Price fallbackを利用できます。');
+                $this->warn('注意: FURIMADECK_STRIPE_PRICE_ID が未設定です。開発環境では動的Price fallbackを利用できます。');
             }
         } elseif (! str_starts_with($priceId, 'price_')) {
             $this->error('NG: Price ID は price_ で始まる必要があります。Product ID(prod_...)ではありません。');
@@ -79,10 +79,10 @@ class CheckStripeSettings extends Command
         }
 
         if (! is_string($webhookSecret) || $webhookSecret === '') {
-            $this->error('NG: STRIPE_WEBHOOK_SECRET が未設定です。');
+            $this->error('NG: FURIMADECK_STRIPE_WEBHOOK_SECRET が未設定です。');
             $ok = false;
         } else {
-            $this->line('OK: STRIPE_WEBHOOK_SECRET は設定されています。');
+            $this->line('OK: FURIMADECK_STRIPE_WEBHOOK_SECRET は設定されています。');
         }
 
         if (! is_string($appUrl) || ! str_starts_with($appUrl, 'http')) {
@@ -102,9 +102,9 @@ class CheckStripeSettings extends Command
         }
 
         if ($trialPeriodDays === self::EXPECTED_TRIAL_PERIOD_DAYS) {
-            $this->line('OK: STRIPE_TRIAL_PERIOD_DAYS='.$trialPeriodDays);
+            $this->line('OK: FURIMADECK_TRIAL_PERIOD_DAYS='.$trialPeriodDays);
         } else {
-            $this->error('NG: STRIPE_TRIAL_PERIOD_DAYS は '.self::EXPECTED_TRIAL_PERIOD_DAYS.' にしてください。現在値='.$trialPeriodDays);
+            $this->error('NG: FURIMADECK_TRIAL_PERIOD_DAYS は '.self::EXPECTED_TRIAL_PERIOD_DAYS.' にしてください。現在値='.$trialPeriodDays);
             $ok = false;
         }
 

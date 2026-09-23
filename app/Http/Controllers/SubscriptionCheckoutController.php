@@ -43,7 +43,7 @@ class SubscriptionCheckoutController extends Controller
         if (! is_string($secret) || $secret === '') {
             return redirect()
                 ->route('subscriptions.index')
-                ->with('error', 'Stripeの設定が未完了です。STRIPE_SECRET または STRIPE_SECRET_KEY を設定してください。');
+                ->with('error', 'Stripeの設定が未完了です。FURIMADECK_STRIPE_SECRETを設定してください。');
         }
 
         if ($this->requiresConfiguredPriceId() && ! $this->hasConfiguredPriceId()) {
@@ -404,11 +404,11 @@ class SubscriptionCheckoutController extends Controller
         $param = $response->json('error.param');
 
         if ($type === 'authentication_error') {
-            return 'Stripe決済画面を作成できませんでした。STRIPE_SECRET または STRIPE_SECRET_KEY が正しいか確認してください。';
+            return 'Stripe決済画面を作成できませんでした。FURIMADECK_STRIPE_SECRETが正しいか確認してください。';
         }
 
         if ($param === 'line_items[0][price]') {
-            return 'Stripe決済画面を作成できませんでした。STRIPE_PREMIUM_PRICE_ID / STRIPE_SUBSCRIPTION_PRICE_ID が、現在のStripeキーと同じテスト/本番モードのPrice IDか確認してください。';
+            return 'Stripe決済画面を作成できませんでした。FURIMADECK_STRIPE_PRICE_IDが、現在のStripeキーと同じテスト/本番モードのPrice IDか確認してください。';
         }
 
         if ($param === 'success_url' || $param === 'cancel_url') {
