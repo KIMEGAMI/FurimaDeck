@@ -19,7 +19,7 @@ class SubscriptionPortalController extends Controller
         $secret = config('services.stripe.secret');
 
         if (! is_string($secret) || $secret === '') {
-            return $this->backWithError('Stripeの設定が未完了です。STRIPE_SECRET または STRIPE_SECRET_KEY を設定してください。');
+            return $this->backWithError('Stripeの設定が未完了です。FURIMADECK_STRIPE_SECRETを設定してください。');
         }
 
         $customerId = $this->resolveCustomerId($user, $secret);
@@ -40,7 +40,7 @@ class SubscriptionPortalController extends Controller
         $secret = config('services.stripe.secret');
 
         if (! is_string($secret) || $secret === '') {
-            return $this->backWithError('Stripeの設定が未完了です。STRIPE_SECRET または STRIPE_SECRET_KEY を設定してください。');
+            return $this->backWithError('Stripeの設定が未完了です。FURIMADECK_STRIPE_SECRETを設定してください。');
         }
 
         $customerId = $this->resolveCustomerId($user, $secret);
@@ -370,7 +370,7 @@ class SubscriptionPortalController extends Controller
         $param = $response->json('error.param');
 
         if ($type === 'authentication_error') {
-            return '契約管理画面を作成できませんでした。STRIPE_SECRET または STRIPE_SECRET_KEY が正しいか確認してください。';
+            return '契約管理画面を作成できませんでした。FURIMADECK_STRIPE_SECRETが正しいか確認してください。';
         }
 
         if ($code === 'billing_portal_not_configured' || $code === 'customer_portal_not_configured') {

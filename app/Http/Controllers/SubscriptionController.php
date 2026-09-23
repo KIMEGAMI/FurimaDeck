@@ -68,7 +68,7 @@ class SubscriptionController extends Controller
         if (! is_string($secret) || $secret === '') {
             return redirect()
                 ->route('subscriptions.index')
-                ->with('error', 'Stripeの設定が未完了です。STRIPE_SECRETを設定してください。');
+                ->with('error', 'Stripeの設定が未完了です。FURIMADECK_STRIPE_SECRETを設定してください。');
         }
 
         try {
