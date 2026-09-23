@@ -205,12 +205,29 @@ class CheckFurimaDeckCutover extends Command
 
         $price = $response->successful() ? $response->json() : null;
         $expectedAmount = (int) config('furimadeck.billing.monthly_price_jpy');
-        if (! is_array($price)
-            || data_get($price, 'active') !== true
-            || data_get($price, 'currency') !== 'jpy'
-            || data_get($price, 'recurring.interval') !== 'month'
-            || data_get($price, 'unit_amount') !== $expectedAmount) {
+        $mismatches = [];
+        if (! $response->successful() || ! is_array($price)) {
+            $mismatches[] = 'Stripe APIからPriceを取得できませんでした（HTTP '.$response->status().'）。';
+        } else {
+            if (data_get($price, 'active') !== true) {
+                $mismatches[] = 'Priceがactiveではありません。';
+            }
+            if (data_get($price, 'currency') !== 'jpy') {
+                $mismatches[] = '通貨がJPYではありません。';
+            }
+            if (data_get($price, 'recurring.interval') !== 'month') {
+                $mismatches[] = '請求間隔が月額ではありません。';
+            }
+            if (data_get($price, 'unit_amount') !== $expectedAmount) {
+                $mismatches[] = '金額が'.$expectedAmount.'円ではありません。';
+            }
+        }
+
+        if ($mismatches !== []) {
             $this->error('NG: FurimaDeckのStripe Priceが有効なJPY月額プランと一致しません。');
+            foreach ($mismatches as $mismatch) {
+                $this->line('NG詳細: '.$mismatch);
+            }
 
             return false;
         }
