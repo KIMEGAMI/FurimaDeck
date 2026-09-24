@@ -8,7 +8,7 @@ use Throwable;
 
 class CheckStripeSettings extends Command
 {
-    private const EXPECTED_PRODUCTION_APP_URL = 'https://furupro.shinji.work';
+    private const EXPECTED_PRODUCTION_APP_URL = 'https://furimadeck.kimegami.jp';
 
     private const EXPECTED_SUBSCRIPTION_AMOUNT = 980;
 

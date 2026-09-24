@@ -15,7 +15,7 @@ class StripeSettingsCheckTest extends TestCase
         $this->app->detectEnvironment(fn () => 'production');
 
         config([
-            'app.url' => 'https://furupro.shinji.work',
+            'app.url' => 'https://furimadeck.kimegami.jp',
             'services.stripe.secret' => 'sk_live_example',
             'services.stripe.subscription_price_id' => 'price_live_premium',
             'services.stripe.webhook_secret' => 'whsec_example',
@@ -49,7 +49,7 @@ class StripeSettingsCheckTest extends TestCase
         $this->app->detectEnvironment(fn () => 'production');
 
         config([
-            'app.url' => 'https://furupro.shinji.work',
+            'app.url' => 'https://furimadeck.kimegami.jp',
             'services.stripe.secret' => 'sk_live_example',
             'services.stripe.subscription_price_id' => 'price_live_wrong_amount',
             'services.stripe.webhook_secret' => 'whsec_example',

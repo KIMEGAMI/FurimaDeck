@@ -7,7 +7,7 @@
 | FurimaDeck 用の新規 DB | 実装済み・接続先の本番確認は未実施 | `config/furimadeck.php` と `docs/furimadeck-new-database.md` |
 | FurimaDeck 用 Stripe Webhook | 実装済み・Stripe 側 endpoint の登録は未確認 | `POST /furimadeck/stripe/webhook` |
 | FurimaDeck の本番公開 URL | DNS設定済み・HTTP/HTTPS到達不可 | `https://furimadeck.kimegami.jp` は `162.43.19.118` へ解決するが、2026-09-11時点で80/443番へ接続不可 |
-| 旧 FURUPRO の廃止または併存 | 未確定 | 既存 `DEPLOY.md` は `furupro.shinji.work` を前提 |
+| 旧 FURUPRO の廃止または併存 | 未確定 | 旧FURUPROのドメイン・設定をFurimaDeckへ流用しない |
 
 本番URLは `https://furimadeck.kimegami.jp` として扱う。DNSは `162.43.19.118` へ解決するが、2026-09-11時点でHTTP/HTTPSに接続できない。VPSのWebサーバー設定、ファイアウォール、TLS証明書を確認するまで公開しない。
 

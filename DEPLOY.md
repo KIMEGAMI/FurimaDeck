@@ -71,7 +71,7 @@ Set production values.
 APP_NAME="FURUPRO"
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://furupro.shinji.work
+APP_URL=https://furimadeck.kimegami.jp
 APP_FORCE_HTTPS=true
 
 DB_CONNECTION=mysql
@@ -92,7 +92,7 @@ If Google login is used, also set the Google OAuth values in `.env`.
 ```dotenv
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=https://furupro.shinji.work/auth/google/callback
+GOOGLE_REDIRECT_URI=https://furimadeck.kimegami.jp/auth/google/callback
 ```
 
 ## 4. Install Dependencies and Build Assets
@@ -159,12 +159,12 @@ Example:
 
 ```apache
 <VirtualHost *:80>
-    ServerName furupro.shinji.work
-    Redirect permanent / https://furupro.shinji.work/
+    ServerName furimadeck.kimegami.jp
+    Redirect permanent / https://furimadeck.kimegami.jp/
 </VirtualHost>
 
 <VirtualHost *:443>
-    ServerName furupro.shinji.work
+    ServerName furimadeck.kimegami.jp
     DocumentRoot /var/www/furugi/public
 
     <Directory /var/www/furugi/public>
@@ -176,8 +176,8 @@ Example:
     CustomLog ${APACHE_LOG_DIR}/furugi_access.log combined
 
     SSLEngine on
-    SSLCertificateFile /etc/letsencrypt/live/furupro.shinji.work/fullchain.pem
-    SSLCertificateKeyFile /etc/letsencrypt/live/furupro.shinji.work/privkey.pem
+    SSLCertificateFile /etc/letsencrypt/live/furimadeck.kimegami.jp/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/furimadeck.kimegami.jp/privkey.pem
 </VirtualHost>
 ```
 
@@ -194,17 +194,17 @@ If the server does not have a certificate yet, use Certbot before enabling the f
 
 ```bash
 sudo apt install -y certbot python3-certbot-apache
-sudo certbot --apache -d furupro.shinji.work
+sudo certbot --apache -d furimadeck.kimegami.jp
 sudo certbot renew --dry-run
 ```
 
 After HTTPS is enabled, verify these production values.
 
 ```dotenv
-APP_URL=https://furupro.shinji.work
+APP_URL=https://furimadeck.kimegami.jp
 APP_FORCE_HTTPS=true
 SESSION_SECURE_COOKIE=true
-GOOGLE_REDIRECT_URI=https://furupro.shinji.work/auth/google/callback
+GOOGLE_REDIRECT_URI=https://furimadeck.kimegami.jp/auth/google/callback
 ```
 
 PWA installation requires HTTPS in normal production browsers. The login screen's app install button will only appear when the browser judges the site installable.
