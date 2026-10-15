@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FurimaDeck 出品アシスト</title>
+  </head>
+  <body>
+    <main id="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">FURIMADECK</p>
+          <h1>出品アシスト</h1>
+        </div>
+        <span id="connection-state" class="state">未連携</span>
+      </header>
+      <section id="privacy-consent" class="panel consent-panel" aria-labelledby="privacy-consent-heading" hidden>
+        <h2 id="privacy-consent-heading">データ収集・利用に同意してください</h2>
+        <p>連携すると、アカウント表示名、商品情報・画像・掲載履歴・定型文・利用者が要求した売上CSVを、連携したFurimaDeckサーバーとの間で送受信します。確認済み掲載や定型文の変更はFurimaDeckに記録されます。連携トークンはChromeのセッション中だけ保存します。</p>
+        <p>商品画面で対応出品先を選ぶと、商品のIDと出品先をブラウザー内に最長10分保存してドラフト取得に使います。利用者が出品先ごとの任意権限を許可した場合、保存済みの商品名・説明・価格・カテゴリ・状態・配送情報・商品画像を、選択した出品先の公式入力画面へ入力できる欄だけ反映します。空欄を判定するため、選択した出品フォームのラベル・属性・選択肢・現在値を端末内で一時的に確認します。これらのフォーム情報やフリマのURL・ホスト名はFurimaDeckへ送信・保存せず、ページ本文全体・閲覧履歴・ログイン情報も収集しません。入力値や画像は選択したフリマサイトのページに渡り、サイト側の仕様によっては入力時に下書き保存や画像アップロード等の処理が行われる可能性があります。サイトごとのこの挙動は未検証です。拡張はフォーム送信・出品確定を行いませんが、サイト側の処理までは制御しません。各社の許可を得た機能ではなく、規約上の扱いが未確定または禁止と案内された出品先を含み、アカウント制限等のリスクがあります。内容を確認して確定するのは利用者です。情報は機能提供と安全な運用のためにのみ扱い、広告・プロファイリング・データ販売には使いません。</p>
+        <p><a href="https://furimadeck.kimegami.jp/privacy" target="_blank" rel="noopener noreferrer">プライバシーポリシー（収集・利用・共有・削除）</a></p>
+        <label class="consent-label"><input id="privacy-consent-check" type="checkbox" />上記のデータ収集と利用に同意します</label>
+        <button id="privacy-consent-accept" class="primary" type="button" disabled>同意して続ける</button>
+      </section>
+      <div id="feature-content" hidden>
+      <div class="settings-row">
+        <span id="detected-platform" class="hint">表示中のフリマサイト：未判定</span>
+        <button id="detect-platform" class="quiet" type="button">現在のページを判定</button>
+        <button id="open-settings" class="quiet" type="button">設定</button>
+      </div>
+      <section id="connect-panel" class="panel" hidden>
+        <label for="server-url">FurimaDeckのURL</label>
+        <input id="server-url" type="url" value="http://127.0.0.1:8001" autocomplete="url" />
+        <button id="connect-button" class="primary">アカウントを連携</button>
+        <p class="hint">承認後、商品情報の読み取り、確認済み掲載履歴の記録、定型文の管理ができます。</p>
+      </section>
+      <section id="connected-panel" class="panel" hidden>
+        <div class="toolbar">
+          <p id="account-name" class="account-name"></p>
+          <button id="disconnect-button" class="quiet">解除</button>
+        </div>
+        <p id="scope-warning" class="warning" hidden>連携権限が不足しています。「解除」の後に再連携して、商品・出品ドラフト・掲載履歴・定型文・CSVの権限を更新してください。</p>
+        <div class="panel">
+          <h2>商品から出品する</h2>
+          <p class="hint">商品編集画面の「出品先」をクリックすると公式出品画面を新しいタブで開きます。下の任意権限を許可済みの場合、登録済みデータのうち一意に判定できる空欄へ入力します。入力後は確認・修正してください。出品の送信・確定は行いません。</p>
+          <p class="warning">ラクマは公式サポートがツールによる入力も控えるよう案内しています。Yahoo!フリマ／オークションも自動出品ツール等の規則があり、本機能への個別許可は確認できていません。試作を有効にしても許可を得たことにはならず、アカウント制限の可能性があります。</p>
+          <div id="marketplace-permissions" class="marketplace-permissions" aria-live="polite"></div>
+        </div>
+        <div id="draft-panel" class="panel draft" hidden></div>
+        <details id="templates-panel" class="templates-panel">
+          <summary>定型文</summary>
+          <div id="template-list" class="template-list" aria-live="polite"></div>
+          <form id="template-form" class="template-form">
+            <label for="template-name">名前</label>
+            <input id="template-name" type="text" maxlength="80" required placeholder="例：発送予定のご案内" />
+            <label for="template-purpose">用途</label>
+            <select id="template-purpose">
+              <option value="greeting">挨拶</option>
+              <option value="size_answer">サイズ回答</option>
+              <option value="shipping">発送案内</option>
+              <option value="custom">その他</option>
+            </select>
+            <label for="template-body">本文</label>
+            <textarea id="template-body" maxlength="4000" rows="4" required></textarea>
+            <button id="template-save" type="submit" class="primary">定型文を保存</button>
+          </form>
+        </details>
+        <details id="exports-panel" class="templates-panel">
+          <summary>CSV入出力</summary>
+          <p class="hint">連携中のあなた自身の商品・掲載履歴・売上だけを出力します。</p>
+          <div class="export-actions">
+            <button type="button" class="quiet" data-export="products">商品CSV</button>
+            <button type="button" class="quiet" data-export="listings">掲載履歴CSV</button>
+            <button type="button" class="quiet" data-export="sales">売上CSV</button>
+            <button id="open-product-import" type="button" class="quiet">商品CSVを取り込む</button>
+          </div>
+          <p class="hint">取込はFurimaDeckの既存プレビュー画面で行います。列・重複・入力内容を確認してから確定してください。</p>
+        </details>
+      </section>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <footer>出品確定・外部サイトへの送信は行いません。</footer>
+    </main>
+    <script type="module" src="/src/popup.ts"></script>
+  </body>
+</html>

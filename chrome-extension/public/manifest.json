@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "FurimaDeck 出品アシスト",
+  "version": "0.1.15",
+  "description": "FurimaDeckの商品から各フリマ向け出品ドラフトを準備します。",
+  "icons": {
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["storage", "identity", "clipboardWrite", "activeTab", "scripting"],
+  "optional_host_permissions": [
+    "https://furimadeck.kimegami.jp/*",
+    "http://127.0.0.1/*",
+    "https://jp.mercari.com/*",
+    "https://fril.jp/*",
+    "https://paypayfleamarket-sec.yahoo.co.jp/*",
+    "https://auctions.yahoo.co.jp/*"
+  ],
+  "action": {
+    "default_title": "FurimaDeck 出品アシスト",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  }
+}

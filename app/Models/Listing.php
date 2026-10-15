@@ -113,6 +113,7 @@ class Listing extends Model
         'shipping_fee',
         'external_listing_url',
         'external_listing_id',
+        'record_method',
         'status',
         'listed_at',
         'ended_at',

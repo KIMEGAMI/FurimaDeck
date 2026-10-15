@@ -7,6 +7,20 @@
             @if(session('error'))<p class="mb-4 rounded bg-red-50 p-3 font-bold text-red-800">{{ session('error') }}</p>@endif
             <form method="POST" enctype="multipart/form-data" action="{{ route('products.update', $product) }}" class="rounded-lg bg-white p-6 shadow">
                 @csrf @method('PUT')
+                <div class="grid items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
+                    <aside class="rounded-xl border border-slate-200 bg-slate-50 p-4" aria-labelledby="marketplace-shortcuts-heading">
+                        <h3 id="marketplace-shortcuts-heading" class="text-base font-black text-slate-900">出品先</h3>
+                        <p class="mt-1 text-sm font-semibold text-slate-700">フリマの出品画面を新しいタブで開きます。拡張機能と連携し、対象サイトの任意権限を許可すると、登録済みの情報を識別できた空欄へ入力します。</p>
+                        <nav class="mt-4 grid gap-2" aria-label="フリマ出品画面">
+                            @foreach (config('chrome_extension.platforms') as $platformId => $platform)
+                                @if (($platform['enabled'] ?? false) && !empty($platform['listing_url']))
+                                    <a href="{{ $platform['listing_url'] }}" target="_blank" rel="noopener noreferrer" class="block rounded-lg border border-cyan-800 bg-cyan-800 px-3 py-2.5 text-center text-sm font-black text-white hover:bg-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-700" data-marketplace-shortcut="{{ $platformId }}" data-product-id="{{ $product->id }}">{{ $platform['name'] }}の出品画面を開く ↗</a>
+                                @endif
+                            @endforeach
+                        </nav>
+                        <p class="mt-3 text-xs font-semibold leading-5 text-slate-700">既入力・曖昧な項目は変更しません。実画面の項目対応と各社の許可は未確認です。ラクマは公式サポートからツール入力を控えるよう案内されています。入力後の確認・出品確定はご自身で行ってください。</p>
+                    </aside>
+                    <div class="min-w-0">
                 @include('products.partials.form')
                 <section class="mt-6 rounded-xl border border-cyan-200 bg-cyan-50 p-5">
                     <h3 class="text-lg font-black text-slate-900">販売情報</h3>
@@ -19,6 +33,8 @@
                     </div>
                 </section>
                 <button class="mt-6 rounded bg-cyan-600 px-5 py-3 font-black text-white">更新する</button>
+                    </div>
+                </div>
             </form>
             <script>
                 document.querySelectorAll('[data-delete-image-url]').forEach(function (button) {

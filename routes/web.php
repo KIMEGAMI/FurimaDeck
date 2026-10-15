@@ -80,6 +80,14 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('furimadeck.products')->group(function () {
+        Route::get('/chrome-extension/pair/{pairingId}', [\App\Http\Controllers\ChromeExtensionPairingController::class, 'show'])
+            ->name('chrome-extension.pairing.approve');
+        Route::post('/chrome-extension/pair/{pairingId}', [\App\Http\Controllers\ChromeExtensionPairingController::class, 'approve'])
+            ->name('chrome-extension.pairing.complete');
+        Route::get('/chrome-extension/devices', [\App\Http\Controllers\ChromeExtensionPairingController::class, 'devices'])
+            ->name('chrome-extension.devices.index');
+        Route::delete('/chrome-extension/devices/{deviceId}', [\App\Http\Controllers\ChromeExtensionPairingController::class, 'revokeDevice'])
+            ->name('chrome-extension.devices.revoke');
         Route::get('/furimadeck-dashboard', FurimaDeckDashboardController::class)->name('furimadeck-dashboard');
         Route::get('/furimadeck-billing', [FurimaDeckBillingController::class, 'index'])->name('furimadeck-billing.index');
         Route::post('/furimadeck-billing/checkout', [FurimaDeckBillingController::class, 'checkout'])->name('furimadeck-billing.checkout');

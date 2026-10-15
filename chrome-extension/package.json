@@ -1,0 +1,12 @@
+{
+  "name": "furimadeck-chrome-extension",
+  "private": true,
+  "version": "0.1.15",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test:chrome": "node tests/chrome-smoke.mjs",
+    "test:package": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/test-package.ps1",
+    "package:store": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/package-store.ps1"
+  }
+}

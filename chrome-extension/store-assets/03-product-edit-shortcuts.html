@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1280, initial-scale=1.0" />
+  <title>FurimaDeck product editing and marketplace shortcuts</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 1280px; height: 800px; margin: 0; }
+    body { overflow: hidden; background: #eff6ff; color: #0f172a; font-family: Arial, "Noto Sans JP", sans-serif; }
+    header { height: 68px; display: flex; align-items: center; gap: 15px; padding: 0 34px; background: #0f172a; color: #f8fafc; }
+    header img { width: 34px; height: 34px; border-radius: 8px; }
+    .brand { font-size: 19px; font-weight: 800; letter-spacing: .02em; }
+    .workspace { width: 1120px; margin: 30px auto; }
+    .breadcrumb { margin: 0 0 14px 2px; color: #475569; font-size: 13px; font-weight: 700; }
+    .title-row { display: flex; align-items: end; justify-content: space-between; margin-bottom: 18px; }
+    h1 { margin: 0; font-size: 27px; }
+    .badge { border: 1px solid #0e7490; border-radius: 999px; padding: 7px 12px; background: #ecfeff; color: #155e75; font-size: 12px; font-weight: 800; }
+    .layout { display: grid; grid-template-columns: 260px 1fr; gap: 20px; align-items: start; }
+    aside, section { border: 1px solid #cbd5e1; border-radius: 14px; background: #fff; box-shadow: 0 10px 24px #0f172a10; }
+    aside { padding: 20px; }
+    h2 { margin: 0; font-size: 17px; }
+    .intro { margin: 9px 0 17px; color: #475569; font-size: 12px; line-height: 1.7; }
+    .market { display: block; margin-top: 9px; border: 1px solid #0e7490; border-radius: 9px; padding: 12px 10px; background: #0e7490; color: #fff; text-align: center; text-decoration: none; font-size: 13px; font-weight: 800; }
+    .market.selected { outline: 3px solid #a5f3fc; outline-offset: 2px; background: #155e75; }
+    .risk { margin: 18px 0 0; border-left: 3px solid #d97706; padding: 9px 0 9px 10px; color: #713f12; font-size: 11px; line-height: 1.6; }
+    section { padding: 24px; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px; }
+    .sku { color: #475569; font-size: 12px; font-weight: 700; }
+    .content-grid { display: grid; grid-template-columns: 220px 1fr; gap: 22px; margin-top: 20px; }
+    .photo { display: grid; place-items: center; height: 205px; border: 1px solid #cbd5e1; border-radius: 12px; background: linear-gradient(145deg,#dbeafe,#f8fafc); color: #0e7490; font-size: 62px; }
+    .thumbs { display: flex; gap: 8px; margin-top: 10px; }
+    .thumb { width: 45px; height: 40px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f1f5f9; }
+    label { display: block; margin-bottom: 14px; color: #334155; font-size: 12px; font-weight: 800; }
+    input, textarea { display: block; width: 100%; margin-top: 6px; border: 1px solid #94a3b8; border-radius: 8px; padding: 11px 12px; background: #fff; color: #0f172a; font: 500 14px Arial, "Noto Sans JP", sans-serif; }
+    textarea { height: 110px; resize: none; line-height: 1.6; }
+    .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .fineprint { margin: 18px 0 0; color: #475569; font-size: 11px; line-height: 1.6; }
+    .save { display: inline-block; margin-top: 14px; border-radius: 8px; padding: 10px 18px; background: #0e7490; color: #fff; font-size: 13px; font-weight: 800; }
+  </style>
+</head>
+<body>
+  <header><img src="../public/icons/icon-128.png" alt="" /><div class="brand">FurimaDeck</div></header>
+  <main class="workspace">
+    <p class="breadcrumb">商品一覧　›　商品編集</p>
+    <div class="title-row"><h1>商品編集</h1><span class="badge">出品準備を商品画面から</span></div>
+    <div class="layout">
+      <aside>
+        <h2>出品先</h2>
+        <p class="intro">出品先を選ぶと公式の出品画面が新しいタブで開きます。連携・任意権限が有効な場合は、登録済み情報の入力を試みます。</p>
+        <a class="market" href="#">メルカリの出品画面を開く ↗</a>
+        <a class="market" href="#">ラクマの出品画面を開く ↗</a>
+        <a class="market selected" href="#">Yahoo!フリマの出品画面を開く ↗</a>
+        <a class="market" href="#">Yahoo!オークションの出品画面を開く ↗</a>
+        <p class="risk">実画面での項目対応は確認中です。入力結果を確認し、出品確定は利用者が行います。</p>
+      </aside>
+      <section>
+        <div class="section-head"><h2>商品情報</h2><span class="sku">商品ID：FD-DEMO-042</span></div>
+        <div class="content-grid">
+          <div><div class="photo" aria-label="商品画像のサンプル">◇</div><div class="thumbs"><i class="thumb"></i><i class="thumb"></i><i class="thumb"></i></div></div>
+          <div>
+            <label>商品名<input value="サンプル商品（出品準備用）" readonly /></label>
+            <label>商品説明<textarea readonly>商品の状態やサイズなど、出品に使う説明をここで管理します。フリマに反映したあとは、内容を確認して必要に応じて編集してください。</textarea></label>
+            <div class="bottom-grid"><label>販売価格<input value="¥1,980" readonly /></label><label>商品の状態<input value="目立った傷や汚れなし" readonly /></label></div>
+            <span class="save">商品を更新</span>
+          </div>
+        </div>
+        <p class="fineprint">この画面は商品単位の出品準備導線を示すサンプルです。サイトの出品ページで入力できる項目は、実画面の確認結果に応じて表示されます。</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
