@@ -37,9 +37,8 @@ The deployment workflow is for an already provisioned application checkout; it i
 
 For the database queue worker, keep `DB_QUEUE_RETRY_AFTER` longer than the worker's `--timeout`. The shipped values are 120 and 90 seconds respectively; each job-level timeout must also be below the retry window. Do not set these values equal or reverse their order. After changing the production environment, rebuild Laravel's config cache and restart the worker.
 
-Each manual workflow dispatch also requires `production_backup_reference` (a non-secret identifier for the verified backup) and `production_restore_tested` set to `true`. These inputs record the operator's attestation only; they do not inspect the backup or prove that a restore succeeded. Keep required reviewers enabled for the GitHub `production` environment.
+Each manual workflow dispatch requires `production_backup_reference`, a non-secret identifier for the backup the operator verified exists. This input records an operator attestation only; it does not inspect the backup or prove that a restore succeeded. Keep required reviewers enabled for the GitHub `production` environment.
 
 The deployment workflow checks PHP 8.4.1 or newer, a clean checkout, and absence of `public/hot` before installing dependencies. It refuses the known legacy path `/var/www/furugi`; this path check is a guardrail, not proof that any other path is a correct FurimaDeck target.
 
 The deployment user must be allowed to run the required commands as `www-data`, change ownership of the existing `vendor`, `node_modules`, and `public/build` directories to `www-data`, and reload Apache. The workflow changes ownership only for those generated directories to prevent the Composer/npm/Vite permission errors previously seen on the VPS; it refuses symlinks and does not recursively change ownership outside those directories. Prefer restricted passwordless sudo rules for only those commands. Review the GitHub Actions run and environment approval before any production deployment.
-
