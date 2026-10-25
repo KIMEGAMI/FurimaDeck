@@ -66,4 +66,3 @@ class FurimaDeckDeploymentWorkflowSafetyTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/^  (push|pull_request):/m', $matches['triggers']);
     }
 }
-
