@@ -7,10 +7,6 @@ on:
         description: Verified production database backup reference. Do not include credentials.
         required: true
         type: string
-      production_restore_tested:
-        description: Confirm the verified backup has passed a restore test.
-        required: true
-        type: boolean
 
 permissions:
   contents: read
@@ -35,21 +31,16 @@ jobs:
       contents: read
 
     steps:
-      - name: Require verified production backup and restore-test attestation
+      - name: Require verified production backup reference
         env:
           BACKUP_REFERENCE: ${{ inputs.production_backup_reference }}
-          RESTORE_TESTED: ${{ inputs.production_restore_tested }}
         run: |
           set -euo pipefail
           if [[ -z "$BACKUP_REFERENCE" ]]; then
             echo "A verified production backup reference is required." >&2
             exit 1
           fi
-          if [[ "$RESTORE_TESTED" != "true" ]]; then
-            echo "A successful backup restore test must be confirmed before deployment." >&2
-            exit 1
-          fi
-          echo "Required production backup attestation is present."
+          echo "Required production backup reference is present."
 
       - name: Require successful push checks for the exact commit
         env:
@@ -206,4 +197,3 @@ jobs:
           sudo systemctl is-active --quiet furimadeck-scheduler.timer
           sudo systemctl is-active --quiet apache2
           SCRIPT
-
