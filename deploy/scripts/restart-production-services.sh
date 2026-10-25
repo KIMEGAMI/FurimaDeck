@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/var/www/furugi}"
-QUEUE_SERVICE_NAME="${QUEUE_SERVICE_NAME:-furugi-queue.service}"
+APP_DIR="${APP_DIR:-/var/www/furimadeck}"
+QUEUE_SERVICE_NAME="${QUEUE_SERVICE_NAME:-furimadeck-queue.service}"
+SCHEDULER_TIMER_NAME="furimadeck-scheduler.timer"
 REBOOT_SERVER="false"
 
 for arg in "$@"; do
@@ -49,10 +50,19 @@ else
     echo "INFO: ${QUEUE_SERVICE_NAME} is not installed. Run install-startup-services.sh if queue workers are needed."
 fi
 
+if systemctl list-unit-files "${SCHEDULER_TIMER_NAME}" --no-pager | grep -q "${SCHEDULER_TIMER_NAME}"; then
+    systemctl restart "${SCHEDULER_TIMER_NAME}"
+else
+    echo "INFO: ${SCHEDULER_TIMER_NAME} is not installed. Run install-startup-services.sh to enable scheduled recovery."
+fi
+
 echo "==> Service status"
 systemctl --no-pager --full status apache2 || true
 if systemctl list-unit-files "${QUEUE_SERVICE_NAME}" --no-pager | grep -q "${QUEUE_SERVICE_NAME}"; then
     systemctl --no-pager --full status "${QUEUE_SERVICE_NAME}" || true
+fi
+if systemctl list-unit-files "${SCHEDULER_TIMER_NAME}" --no-pager | grep -q "${SCHEDULER_TIMER_NAME}"; then
+    systemctl --no-pager --full status "${SCHEDULER_TIMER_NAME}" || true
 fi
 
 if [[ "${REBOOT_SERVER}" == "true" ]]; then
@@ -62,3 +72,4 @@ if [[ "${REBOOT_SERVER}" == "true" ]]; then
 fi
 
 echo "Done: production services were restarted."
+
