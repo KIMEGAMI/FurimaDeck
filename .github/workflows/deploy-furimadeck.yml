@@ -2,12 +2,15 @@ name: Deploy FurimaDeck
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - CI
-      - Security
-    types:
-      - completed
+    inputs:
+      production_backup_reference:
+        description: Verified production database backup reference. Do not include credentials.
+        required: true
+        type: string
+      production_restore_tested:
+        description: Confirm the verified backup has passed a restore test.
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -23,36 +26,64 @@ env:
 
 jobs:
   quality-gate:
-    name: Wait for CI and Security
-    if: >-
-      github.event_name == 'workflow_run'
-      && github.event.workflow_run.conclusion == 'success'
-      && github.event.workflow_run.head_branch == 'main'
+    name: Verify CI and Security for this commit
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    outputs:
-      ready: ${{ steps.check.outputs.ready }}
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+
     steps:
-      - name: Confirm both checks passed for the deployed commit
-        id: check
+      - name: Require verified production backup and restore-test attestation
         env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          BACKUP_REFERENCE: ${{ inputs.production_backup_reference }}
+          RESTORE_TESTED: ${{ inputs.production_restore_tested }}
         run: |
           set -euo pipefail
-          runs_json="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${HEAD_SHA}&per_page=100")"
+          if [[ -z "$BACKUP_REFERENCE" ]]; then
+            echo "A verified production backup reference is required." >&2
+            exit 1
+          fi
+          if [[ "$RESTORE_TESTED" != "true" ]]; then
+            echo "A successful backup restore test must be confirmed before deployment." >&2
+            exit 1
+          fi
+          echo "Required production backup attestation is present."
+
+      - name: Require successful push checks for the exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${DEPLOY_SHA}&per_page=100")"
+
           for workflow_name in CI Security; do
-            conclusion="$(jq -r --arg workflow_name "$workflow_name" '[.workflow_runs[] | select(.name == $workflow_name and .status == "completed") | .conclusion] | if any(.[]; . == "failure" or . == "cancelled" or . == "timed_out") then "failure" elif any(.[]; . == "success") then "success" else "pending" end' <<< "$runs_json")"
-            test "$conclusion" = success
+            state="$(jq -r --arg workflow_name "$workflow_name" --arg deploy_sha "$DEPLOY_SHA" '
+              [.workflow_runs[]
+                | select(.name == $workflow_name
+                    and .head_sha == $deploy_sha
+                    and .head_branch == "main"
+                    and .event == "push")]
+              | sort_by(.run_number, .run_attempt, .created_at)
+              | last
+              | if . == null then "missing"
+                elif .status != "completed" then .status
+                else .conclusion
+                end
+            ' <<< "$runs_json")"
+
+            if [[ "$state" != "success" ]]; then
+              echo "$workflow_name has no successful completed push run for $DEPLOY_SHA (state: $state)." >&2
+              exit 1
+            fi
           done
-          echo "ready=true" >> "$GITHUB_OUTPUT"
 
   deploy:
-    name: Deploy FurimaDeck production
+    name: Manually deploy FurimaDeck production
     needs: quality-gate
-    if: >-
-      always()
-      && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
-      || (needs.quality-gate.result == 'success' && needs.quality-gate.outputs.ready == 'true'))
+    if: github.ref == 'refs/heads/main' && needs.quality-gate.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -61,7 +92,7 @@ jobs:
       - name: Check out reviewed main
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
 
       - name: Validate FurimaDeck deployment settings
         env:
@@ -75,9 +106,7 @@ jobs:
           test -n "$DEPLOY_USER"
           test -n "$DEPLOY_SSH_PRIVATE_KEY"
           test -n "$DEPLOY_SSH_KNOWN_HOSTS"
-          test -n "$DEPLOY_PATH"
-          test "$DEPLOY_PATH" != "/"
-          test "$DEPLOY_PATH" != "/var/www/furugi"
+          test "$DEPLOY_PATH" = "/var/www/furimadeck"
 
       - name: Configure SSH
         env:
@@ -96,34 +125,66 @@ jobs:
           DEPLOY_USER: ${{ secrets.FURIMADECK_DEPLOY_USER }}
           DEPLOY_PATH: ${{ vars.FURIMADECK_DEPLOY_PATH }}
           DEPLOY_PORT: ${{ vars.FURIMADECK_DEPLOY_PORT || env.FURIMADECK_DEPLOY_PORT }}
+          DEPLOY_SHA: ${{ github.sha }}
           MIN_PHP_VERSION: ${{ env.MIN_PHP_VERSION }}
         run: |
           printf -v DEPLOY_PATH_ARG '%q' "$DEPLOY_PATH"
+          printf -v DEPLOY_SHA_ARG '%q' "$DEPLOY_SHA"
           printf -v MIN_PHP_VERSION_ARG '%q' "$MIN_PHP_VERSION"
-          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "bash -s -- $DEPLOY_PATH_ARG $MIN_PHP_VERSION_ARG" <<'SCRIPT'
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "bash -s -- $DEPLOY_PATH_ARG $DEPLOY_SHA_ARG $MIN_PHP_VERSION_ARG" <<'SCRIPT'
           set -euo pipefail
 
           DEPLOY_PATH="$1"
-          MIN_PHP_VERSION="$2"
-          case "$DEPLOY_PATH" in
-            /|/var/www/furugi)
-              echo "Refusing to deploy FurimaDeck to a legacy or unsafe path." >&2
-              exit 1
-              ;;
-          esac
+          DEPLOY_SHA="$2"
+          MIN_PHP_VERSION="$3"
+          if [[ "$DEPLOY_PATH" != "/var/www/furimadeck" ]]; then
+            echo "Refusing to deploy FurimaDeck outside /var/www/furimadeck." >&2
+            exit 1
+          fi
 
           test -d "$DEPLOY_PATH"
           test -f "$DEPLOY_PATH/.env"
           test ! -e "$DEPLOY_PATH/public/hot"
           cd "$DEPLOY_PATH"
+          test "$(git branch --show-current)" = "main"
           git status --porcelain
           test -z "$(git status --porcelain)"
+          for unit in furimadeck-queue.service furimadeck-scheduler.timer apache2; do
+            if ! systemctl is-enabled --quiet "$unit" || ! systemctl is-active --quiet "$unit"; then
+              echo "Required production service is not enabled and active: $unit" >&2
+              exit 1
+            fi
+          done
+          if [[ ! -x /usr/bin/php ]]; then
+            echo "The PHP binary used by the systemd queue worker is missing: /usr/bin/php" >&2
+            exit 1
+          fi
+          PHP_BIN="$(command -v php)"
+          SYSTEMD_PHP_BIN="$(readlink -f /usr/bin/php)"
+          DEPLOY_PHP_REALPATH="$(readlink -f "$PHP_BIN")"
+          if [[ -z "$SYSTEMD_PHP_BIN" || "$SYSTEMD_PHP_BIN" != "$DEPLOY_PHP_REALPATH" ]]; then
+            echo "The deployment PHP binary differs from the systemd queue worker PHP binary." >&2
+            exit 1
+          fi
+          "$PHP_BIN" -r "if (version_compare(PHP_VERSION, '$MIN_PHP_VERSION', '<')) { fwrite(STDERR, 'PHP $MIN_PHP_VERSION or newer is required. Current: '.PHP_VERSION.PHP_EOL); exit(1); }"
           git fetch origin main
-          git merge --ff-only origin/main
-          php -r "if (version_compare(PHP_VERSION, '$MIN_PHP_VERSION', '<')) { fwrite(STDERR, 'PHP $MIN_PHP_VERSION or newer is required. Current: '.PHP_VERSION.PHP_EOL); exit(1); }"
+          REMOTE_MAIN_SHA="$(git rev-parse origin/main)"
+          if [[ "$REMOTE_MAIN_SHA" != "$DEPLOY_SHA" ]]; then
+            echo "main advanced after this deployment was dispatched; rerun after checking the new commit." >&2
+            exit 1
+          fi
+          git merge --ff-only "$DEPLOY_SHA"
+          for writable_path in "$DEPLOY_PATH/vendor" "$DEPLOY_PATH/node_modules" "$DEPLOY_PATH/public/build"; do
+            if [[ -L "$writable_path" ]]; then
+              echo "Refusing to change ownership of a symlinked build directory: $writable_path" >&2
+              exit 1
+            fi
+            if [[ -e "$writable_path" ]]; then
+              sudo chown -R www-data:www-data "$writable_path"
+            fi
+          done
           COMPOSER_BIN="$(command -v composer)"
           NPM_BIN="$(command -v npm)"
-          PHP_BIN="$(command -v php)"
           test -x "$COMPOSER_BIN"
           test -x "$NPM_BIN"
           test -x "$PHP_BIN"
@@ -138,6 +199,11 @@ jobs:
           sudo -u www-data "$PHP_BIN" artisan config:cache
           sudo -u www-data "$PHP_BIN" artisan route:cache
           sudo -u www-data "$PHP_BIN" artisan view:cache
-          sudo -u www-data "$PHP_BIN" artisan queue:restart || true
+          sudo systemctl restart furimadeck-queue.service
+          sudo systemctl restart furimadeck-scheduler.timer
           sudo systemctl reload apache2
+          sudo systemctl is-active --quiet furimadeck-queue.service
+          sudo systemctl is-active --quiet furimadeck-scheduler.timer
+          sudo systemctl is-active --quiet apache2
           SCRIPT
+

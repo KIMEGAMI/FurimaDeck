@@ -1,0 +1,21 @@
+[Unit]
+Description=FurimaDeck Laravel queue worker
+After=network.target mysql.service mariadb.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=@APP_DIR@
+# Keep DB_QUEUE_RETRY_AFTER above this worker timeout; the shipped default is 120 seconds.
+ExecStart=/usr/bin/php artisan queue:work database --sleep=3 --tries=3 --timeout=90
+ExecReload=/usr/bin/php artisan queue:restart
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+
