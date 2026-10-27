@@ -33,12 +33,46 @@ Optional `production` environment variable:
 
 Before the first deployment, a human must verify the exact target path, the dedicated FurimaDeck `.env` and database, a recent recoverable backup, HTTPS/Apache configuration, and the deployment user's restricted sudo permissions. The deployment workflow does not create or validate a backup. It runs migrations and seeders only after a reviewed commit passes CI and Security. Never point it at the old FURUPRO database or server path.
 
-The deployment workflow is for an already provisioned application checkout; it is not a first-install bootstrap. Before dispatching it, the checkout, production `.env`, database schema, and systemd units must already exist. The workflow checks that `furimadeck-queue.service`, `furimadeck-scheduler.timer`, and `apache2` are enabled and active before fetching or merging code or running migrations. For initial setup, provision the application and database first, apply the reviewed migrations, then have a root operator install and enable the units with `deploy/scripts/install-startup-services.sh`. After a workflow deployment, the queue worker and scheduler timer are restarted and all three services are checked again; a failed check fails the deployment.
+The deployment workflow is for an already provisioned application checkout; it is not a first-install bootstrap. Before dispatching it, the checkout, production `.env`, database schema, and systemd units must already exist. The workflow checks that `furimadeck-queue.service`, `furimadeck-scheduler.timer`, and `apache2` are enabled and active before fetching or merging code or running migrations. For initial setup, have a root-capable operator install and enable the units from the reviewed production checkout:
+
+```bash
+cd /var/www/furimadeck
+sudo bash deploy/scripts/install-startup-services.sh
+```
+
+This restarts Apache and the queue worker and starts the scheduler timer. It does not run database migrations or seeders.
+
+### Deployment sudo permissions
+
+The SSH account in `FURIMADECK_DEPLOY_USER` must be allowed to run the workflow's commands. The current workflow requires root permission only for these fixed operations:
+
+- Change ownership of `/var/www/furimadeck/vendor`, `/var/www/furimadeck/node_modules`, and `/var/www/furimadeck/public/build` to `www-data:www-data`.
+- Restart `furimadeck-queue.service` and `furimadeck-scheduler.timer`.
+- Check the active state of those units and Apache.
+
+The deployment account already needs the configured `sudo -u www-data` access for Composer, npm, and Artisan commands. Do not grant `(root) NOPASSWD: ALL`. Preserve existing sudoers entries, including the Apache reload permission, and add a separate validated drop-in with `visudo`. The following is the command scope used by the current workflow; confirm the `chown` binary path with `command -v chown` and replace `deploy-frimadeck` only if `FURIMADECK_DEPLOY_USER` is a different account:
+
+```sudoers
+Cmnd_Alias FURIMADECK_DEPLOY = \
+    /usr/bin/chown -R www-data:www-data /var/www/furimadeck/vendor, \
+    /usr/bin/chown -R www-data:www-data /var/www/furimadeck/node_modules, \
+    /usr/bin/chown -R www-data:www-data /var/www/furimadeck/public/build, \
+    /usr/bin/systemctl restart furimadeck-queue.service, \
+    /usr/bin/systemctl restart furimadeck-scheduler.timer, \
+    /usr/bin/systemctl reload apache2, \
+    /usr/bin/systemctl is-active --quiet furimadeck-queue.service, \
+    /usr/bin/systemctl is-active --quiet furimadeck-scheduler.timer, \
+    /usr/bin/systemctl is-active --quiet apache2
+
+deploy-frimadeck ALL=(root) NOPASSWD: FURIMADECK_DEPLOY
+```
+
+Install or edit the drop-in as a root-capable operator with `visudo -f /etc/sudoers.d/furimadeck-deploy`; validate with `visudo -c`. Verify the effective permissions as the deployment account with `sudo -n -l`. Do not paste private keys, tokens, or `.env` values into logs or chat.
+
+The workflow changes ownership only for those generated directories to prevent the Composer/npm/Vite permission errors previously seen on the VPS; it refuses symlinks and does not recursively change ownership outside those directories. Review the GitHub Actions run and production environment approval before deployment.
 
 For the database queue worker, keep `DB_QUEUE_RETRY_AFTER` longer than the worker's `--timeout`. The shipped values are 120 and 90 seconds respectively; each job-level timeout must also be below the retry window. Do not set these values equal or reverse their order. After changing the production environment, rebuild Laravel's config cache and restart the worker.
 
 Each manual workflow dispatch requires `production_backup_reference`, a non-secret identifier for the backup the operator verified exists. This input records an operator attestation only; it does not inspect the backup or prove that a restore succeeded. Keep required reviewers enabled for the GitHub `production` environment.
 
 The deployment workflow checks PHP 8.4.1 or newer, a clean checkout, and absence of `public/hot` before installing dependencies. It refuses the known legacy path `/var/www/furugi`; this path check is a guardrail, not proof that any other path is a correct FurimaDeck target.
-
-The deployment user must be allowed to run the required commands as `www-data`, change ownership of the existing `vendor`, `node_modules`, and `public/build` directories to `www-data`, and reload Apache. The workflow changes ownership only for those generated directories to prevent the Composer/npm/Vite permission errors previously seen on the VPS; it refuses symlinks and does not recursively change ownership outside those directories. Prefer restricted passwordless sudo rules for only those commands. Review the GitHub Actions run and environment approval before any production deployment.
