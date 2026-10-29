@@ -7,13 +7,13 @@
 - Chrome拡張（出品支援）は1.0の対象外とする。Chrome Web Storeへの登録状況にかかわらず、この候補では配布・サポート・リリース判定を行わない。
 - 商品編集画面の拡張向け案内は既定で非表示とし、回帰テストで表示されないことを確認する。拡張本体や外部フリマサイトでの入力動作は1.0の検証対象に含めない。
 
-## 2026-10-29 検証スナップショット（検証済み候補 HEAD `18d328dd7e53a173708b794b49acdaad96ea473b`）
+## 2026-10-29 検証スナップショット（実装・テスト対象HEAD `e779840627bd7470ef6921541ed00d6b2464016b`）
 
-- 2026-10-29の検証時点で、GitHub上のPR #35はopen・Draft・未merge・mergeable、287 changed files。提出済みレビューはなかった。現在の状態はPRを参照する。
-- 検証済み候補HEAD `18d328dd7e53a173708b794b49acdaad96ea473b` の GitHub Actions CI run 158（40828539390）とSecurity run 146（40828539400）はsuccess。CIのTest and build jobではComposer検証、E2E runtime安全性、Blade view compile、route検証、frontend build、browser E2E、PHP code style、PHP tests、Composer/npm auditが成功。MariaDB CSV gate jobも成功。
-- Chrome拡張（出品支援）は1.0対象外。商品編集画面に拡張案内を表示しないFeature testは、アプリ・テストコードHEAD `6ead1dbff22a487314669427f1e4e4b22d820020` で1件・11 assertions成功。後続 `18d328d` は検証記録の文書更新であり、拡張の表示コード・テストを変更していない。最新CIでも同テストを含むPHP tests jobが成功。
-- 開発R2商品画像フローは候補コードHEAD `c35bfe2` で1 test・20 assertions・終了コード0。後続の `6ead1db` と `18d328d` はR2のアプリコード・テストを変更していない。別途、候補仕様書の記録では本番R2の商品画像フローも24 assertions成功としている。どちらもVPS上のアプリや本番DBを確認した証明ではない。
-- CI #158 / Security #146は検証済み候補HEAD `18d328d` に対する結果である。その後のコミットはこの検証記録と `.env.example` の誤ったコメントだけを変更し、アプリ実装・テストコードは変更していない。マージ前に必ずPRの最新HEADに対する全チェック成功を確認する。
+- GitHub上のPR #35はopen・Draft・未merge。対象範囲は販売・在庫管理と対応条件を限定したfreee/Money Forward会計CSVで、Chrome拡張と仕訳API送信・読戻しは1.0対象外。
+- HEAD `e779840627bd7470ef6921541ed00d6b2464016b` のGitHub Actions CI #165/#166とSecurity #153/#154はすべてsuccess。CIにはComposer検証、E2E runtime安全性、Blade view compile、route検証、frontend build、Browser E2E、PHP code style、PHP tests、Composer/npm audit、MariaDB CSV gateが含まれる。
+- 候補worktreeの隔離PHPUnit全件は935 tests中929 passed・6 skipped、6,207 assertions、終了コード0。商品画像Featureテストは28 tests・333 assertions成功。追加した「商品DB削除後にprivate image cleanupが失敗しても成功画面を返し、PIIなしの警告ログを残す」回帰ケースを含む。
+- 開発R2商品画像フローの実接続記録とfreee/Money Forwardの試験CSV取込記録は、この文書の後続履歴およびPR本文に記載する。これらは本番VPS上のアプリ動作や利用者本人の税務上の区分を証明しない。
+- 1.0のChrome拡張案内非表示テストは最新CIのPHP testsに含まれ成功。拡張本体・外部フリマサイト連携は配布・サポートしない。
 - CI・R2試験の成功は、本番VPSの主要フロー、DB復元、メール/OAuth運用、税務上の正しさを証明しない。P0/P1および外部環境の未確認項目は、各ゲートを個別に完了するまでNO-GOとする。
 ## 隔離1.0候補の検証履歴（各項目は記載日時点。現行状態は冒頭のスナップショットを参照）
 
