@@ -133,6 +133,25 @@ jobs:
             --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
             docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
             zap-full-scan.py -t "$APP_URL" -m 5 -T 10 -J furimadeck-zap-report.json -r furimadeck-zap-report.html
+          test -s "$RUNNER_TEMP/zap/furimadeck-zap-report.json"
+          ZAP_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-report.json" node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync(process.env.ZAP_REPORT, 'utf8'));
+          const sites = Array.isArray(report.site) ? report.site : [];
+          const expectedHost = new URL(process.env.APP_URL).host;
+          const scannedTarget = sites.some((site) => {
+            try {
+              return new URL(site.name).host === expectedHost;
+            } catch {
+              return false;
+            }
+          });
+          if (!scannedTarget) {
+            throw new Error('ZAP report does not contain the configured loopback target');
+          }
+          const alertCount = sites.reduce((count, site) => count + (Array.isArray(site.alerts) ? site.alerts.length : 0), 0);
+          console.log(`Validated ZAP JSON report for the loopback target; alert groups: ${alertCount}`);
+          NODE
 
       - name: Report scan diagnostics
         if: always()
