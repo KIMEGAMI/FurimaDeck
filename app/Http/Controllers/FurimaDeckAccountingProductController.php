@@ -112,6 +112,7 @@ class FurimaDeckAccountingProductController extends Controller
                     $lockedProduct->accountingEntries()
                         ->where('entry_type', AccountingEntry::TYPE_PURCHASE)
                         ->update(['source_status' => 'review', 'confirmed_at' => null]);
+                    app(FurimaDeckAccountingEntryService::class)->refreshNewPurchaseEntry($request->user(), $lockedProduct);
                 }
 
                 foreach ($lockedProduct->sales()->where('status', 'pending')->get() as $pendingSale) {
