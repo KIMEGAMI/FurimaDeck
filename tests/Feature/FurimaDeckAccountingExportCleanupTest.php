@@ -58,6 +58,6 @@ class FurimaDeckAccountingExportCleanupTest extends TestCase
     private function invokeCleanup(string $path): void
     {
         $cleanup = new ReflectionMethod(FurimaDeckAccountingExportController::class, 'cleanupTemporaryCsv');
-        $cleanup->invoke(new FurimaDeckAccountingExportController(), $path);
+        $cleanup->invoke(new FurimaDeckAccountingExportController, $path);
     }
 }
