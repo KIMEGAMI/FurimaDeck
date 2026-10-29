@@ -880,6 +880,7 @@ class ListingLifecycleTest extends TestCase
             ->assertOk()
             ->assertDontSee('data-marketplace-shortcut')
             ->assertDontSee('出品画面を開く')
+            ->assertDontSee('拡張機能と連携')
             ->assertDontSee('メルカリ以外は現在、出品画面を開く機能のみです。')
             ->assertSee(route('listings.create', ['product_id' => $product->id]), false)
             ->assertSee('出品情報を登録すると、各項目の横から個別にコピーできます。')
