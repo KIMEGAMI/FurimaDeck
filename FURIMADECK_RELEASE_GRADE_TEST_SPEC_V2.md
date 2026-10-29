@@ -7,14 +7,15 @@
 - Chrome拡張（出品支援）は1.0の対象外とする。Chrome Web Storeへの登録状況にかかわらず、この候補では配布・サポート・リリース判定を行わない。
 - 商品編集画面の拡張向け案内は既定で非表示とし、回帰テストで表示されないことを確認する。拡張本体や外部フリマサイトでの入力動作は1.0の検証対象に含めない。
 
-## 現行候補スナップショット（2026-10-29、コード検証HEAD `39e81aaf26c62c982507669d9aa094efa70d04cd`）
+## 現行候補スナップショット（2026-10-29、コード検証HEAD `c558807c6ba488c37a1dfb05af561fbacdc8e4aa`）
 
-- PR #35はopen・Draft・未merge。baseは`main`の`320758d082bc1552dfc6a8743dc831f74752b894`。差分287ファイル、16コミット。PRレビューは未実施。
-- 対象HEADのGitHub CI #176とSecurity #164はsuccess。CIのMariaDB CSV gateとTest and buildが成功し、PHP tests、Browser E2E、frontend build、Pint、Composer/npm auditを含む。
-- 1.0対象は販売・在庫管理と条件を限定したfreee/Money Forward会計CSV。仕訳API送信・API読戻しは対象外。Chrome拡張も対象外で、候補PRの変更ファイルに拡張機能ファイルは含まれない。
-- `tests/Feature/FurimaDeckAccountingWorkflowTest.php` は、API送信・読戻し操作の非表示、各APIルートの404、既存キュー済みジョブが外部送信しないことを確認する回帰テストを含む。
-- リリース判定はNO-GO。残る外部ゲートは、仕様書P0/P1の本番相当確認、本番メール・Google OAuth運用、本番DB復元確認、限定CSV取引パターンの最終照合、PR差分レビュー。
-- このスナップショットのCI成功は、上記コード検証HEADに対するもの。以下の履歴は当時点の実行記録であり、HEADをまたいだ結果を同一実行とみなさない。次の仕様書更新コミットはドキュメントのみで、そのコミット上のCI完了を別途確認する。
+- PR #35はopen・Draft・未merge。baseは`main`の`320758d082bc1552dfc6a8743dc831f74752b894`。このコード検証HEAD時点で26コミット、差分280ファイル。人手による差分全体のレビューは未完了。
+- 同HEADのGitHub CI #195とSecurity #183はsuccess。CIではMariaDB CSV gate、Browser E2E、PHP tests、Blade/route検証、ビルド、コードスタイル、Composer/npm監査が成功。
+- 1.0対象は販売・在庫管理と、対応範囲を限定したfreee/Money Forward会計CSV。会計API送信・API読戻しは対象外で、サーバールートと既存キューを閉じる回帰テストを含む。Chrome拡張も対象外で、この候補差分に拡張ファイルはない。
+- この候補ではStripeの課金コントローラー、Webhook、課金画面をmain基準の内容に戻し、Stripe専用価格照合サービスを含めて候補差分から除外した。残るStripe関連差分は、認証済みユーザーを使う管理者課金画面テストのfixture 1行のみ。Stripeへの接続・課金・設定変更は行っていない。
+- CSV対応範囲は確定済み販売データに限定。仕入CSV、未確認の税区分、入金元や費用の実取引表現を確認できないパターンは出力停止。返金・返品のCSVは仕訳取込用ではなく、会計ソフト側で原仕訳と照合して手動処理する参考データ。
+- リリース判定はNO-GO。仕様書のP0/P1を本番相当で確認し、本番メール・Google OAuth、本番DB復元、許可されたCSVパターンの最終照合を終え、人手の差分レビューを完了する必要がある。
+- 上記のCI/Security結果はコード検証HEADに対するもの。ローカルやGitHubの成功だけで、本番VPSの運用・復元可能性・利用者本人の税務区分・未検証取引の会計上の正しさを保証しない。
 
 ## 履歴: 2026-10-29 旧検証スナップショット（実装・テスト基準HEAD `a453332dcefa3c1dbc0c86f5c85dfbe2c0857a27`）
 
