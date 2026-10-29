@@ -912,6 +912,64 @@ class FurimaDeckManualProductPurchaseReconciliationTest extends TestCase
         $this->assertTrue(Schema::connection('furimadeck')->hasTable('manual_product_purchase_reconciliation_refs'));
     }
 
+    public function test_updating_unsent_new_purchase_refreshes_pending_sale_cost_basis(): void
+    {
+        $user = $this->premiumUser();
+        $product = $this->newPurchaseAccountingProduct($user, 'PURCHASE-INFO-PENDING-SALE');
+        $marketplace = Marketplace::query()->firstOrCreate(
+            ['code' => 'purchase-info-pending-sale-test'],
+            [
+                'name' => '仕入情報更新テスト',
+                'base_url' => 'https://example.test',
+                'fee_type' => 'percentage',
+                'default_fee_rate' => 0,
+                'is_active' => true,
+            ],
+        );
+        $pendingSale = $user->sales()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $marketplace->id,
+            'internal_sku_snapshot' => $product->internal_sku,
+            'product_name_snapshot' => $product->product_name,
+            'quantity' => 1,
+            'sold_price' => 3000,
+            'sold_at' => '2026-10-10 12:00:00',
+            'status' => 'pending',
+            'cost_basis' => 1100,
+            'sales_fee' => 0,
+            'shipping_fee' => 0,
+            'purchase_shipping_cost' => 0,
+            'packing_cost' => 0,
+            'repair_cost' => 0,
+            'cleaning_cost' => 0,
+            'other_expense' => 0,
+            'net_profit' => 1900,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('furimadeck-accounting.products.purchase-info.update', $product), [
+                'purchase_date' => '2026-10-02',
+                'purchase_unit_cost' => 1200,
+                'purchase_shipping_cost' => 100,
+                'other_purchase_expense' => 0,
+                'supplier_id' => null,
+            ])
+            ->assertRedirect(route('furimadeck-accounting.products.purchase-info.edit', $product))
+            ->assertSessionHasNoErrors();
+
+        $purchaseEntry = AccountingEntry::query()
+            ->where('product_id', $product->id)
+            ->where('entry_type', AccountingEntry::TYPE_PURCHASE)
+            ->firstOrFail();
+        $this->assertSame('2026-10-02', $purchaseEntry->transaction_date?->toDateString());
+        $this->assertSame(1200, (int) $purchaseEntry->purchase_cost);
+        $this->assertSame(100, (int) $purchaseEntry->other_cost);
+        $this->assertSame('review', $purchaseEntry->source_status);
+        $this->assertNull($purchaseEntry->confirmed_at);
+        $this->assertSame(1300, (int) $pendingSale->fresh()->cost_basis);
+        $this->assertSame(1700, (int) $pendingSale->fresh()->net_profit);
+    }
+
     private function premiumUser(): User
     {
         return User::factory()->create([
