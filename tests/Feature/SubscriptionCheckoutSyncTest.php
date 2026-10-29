@@ -385,6 +385,7 @@ class SubscriptionCheckoutSyncTest extends TestCase
     public function test_billing_page_hides_checkout_buttons_for_demo_user(): void
     {
         config([
+            'demo.user_enabled' => true,
             'demo.user_email' => 'demo@example.com',
             'services.stripe.secret' => 'sk_test_example',
         ]);
