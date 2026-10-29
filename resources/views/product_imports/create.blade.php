@@ -4,7 +4,7 @@
         @if(session('success'))<p role="status" class="rounded border border-emerald-300 bg-emerald-50 p-4 font-bold text-emerald-900">{{ session('success') }}</p>@endif
         <section class="rounded bg-white p-6 shadow">
             <h3 class="text-lg font-black text-slate-900">完全バックアップCSVを復元</h3>
-            <p class="mt-2 text-sm text-slate-600">sellingは出品中、soldは売却済みとして復元します。既存の管理IDは上書きせずスキップします。</p>
+            <p class="mt-2 text-sm text-slate-600">未出品は出品を作らず、下書き・準備完了・出品中・終了・取消の状態を保って復元します。旧形式のsellingは出品中、soldは売却済みとして読み込みます。既存の管理IDは上書きせずスキップします。</p>
             <form method="POST" action="{{ route('products.imports.restore-preview') }}" enctype="multipart/form-data" class="mt-5 space-y-5">
                 @csrf
                 <label class="block text-sm font-bold text-slate-800">復元CSV

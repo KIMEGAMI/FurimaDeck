@@ -142,7 +142,7 @@ class FurimaDeckExportController extends Controller
                 (int) ($sale?->sold_price ?? $listing?->listing_price ?? 0),
                 $this->formatRate($rate),
                 (int) ($sale?->shipping_fee ?? $listing?->shipping_fee ?? 0),
-                $sale !== null ? 'sold' : 'selling',
+                $sale !== null ? 'sold' : ($listing?->status ?? 'unlisted'),
                 $sale?->sold_at?->format('Y-m-d') ?? '',
             ];
         });

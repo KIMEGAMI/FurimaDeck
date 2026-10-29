@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Listing;
 use App\Models\Marketplace;
 use App\Models\Product;
 use App\Models\ProductCategory;
@@ -114,11 +115,12 @@ class FurimaDeckRestoreCsvService
             if (Product::query()->where('user_id', $user->id)->where('internal_sku', $values['management_id'])->lockForUpdate()->exists()) {
                 return 'skipped';
             }
-            $marketplace = $this->marketplace($values['platform']);
-            if ($marketplace === null) {
+            $status = $this->status($values['status']);
+            $unlisted = $status === 'unlisted';
+            $marketplace = $values['platform'] === '' ? null : $this->marketplace($values['platform']);
+            if (! $unlisted && $marketplace === null) {
                 throw new RuntimeException('出品先が未登録または無効です。');
             }
-            $status = $this->status($values['status']);
             $soldAt = $status === 'sold' ? $this->date($values['sold_at']) : null;
             if ($status === 'sold' && $soldAt === null) {
                 throw new RuntimeException('SOLD商品のSOLD日は必須です。');
@@ -135,19 +137,26 @@ class FurimaDeckRestoreCsvService
                 'inventory_status' => $status === 'sold' ? 'out_of_stock' : 'in_stock',
                 'memo' => $values['comment'] !== '' ? $values['comment'] : null,
             ]);
-            $listing = $user->listings()->create([
-                'product_id' => $product->id,
-                'marketplace_id' => $marketplace->id,
-                'listing_title' => $values['title'],
-                'listing_description' => $values['comment'] !== '' ? $values['comment'] : null,
-                'listing_price' => $this->money($values['sold_price']),
-                'expected_fee_rate' => $this->rate($values['sales_fee_rate']),
-                'shipping_fee' => $this->money($values['shipping_fee']),
-                'status' => $status === 'sold' ? 'sold' : 'active',
-                'listed_at' => $status === 'sold' ? $soldAt : now(),
-                'ended_at' => $soldAt,
-            ]);
+            $listing = null;
+            if (! $unlisted) {
+                $listingStatus = $status === 'selling' ? 'active' : $status;
+                $listing = $user->listings()->create([
+                    'product_id' => $product->id,
+                    'marketplace_id' => $marketplace->id,
+                    'listing_title' => $values['title'],
+                    'listing_description' => $values['comment'] !== '' ? $values['comment'] : null,
+                    'listing_price' => $this->money($values['sold_price']),
+                    'expected_fee_rate' => $this->rate($values['sales_fee_rate']),
+                    'shipping_fee' => $this->money($values['shipping_fee']),
+                    'status' => $listingStatus,
+                    'listed_at' => $status === 'sold' ? $soldAt : ($listingStatus === 'active' ? now() : null),
+                    'ended_at' => $soldAt,
+                ]);
+            }
             if ($status === 'sold') {
+                if ($listing === null || $marketplace === null) {
+                    throw new RuntimeException('SOLD商品の出品情報を復元できません。');
+                }
                 $sale = $user->sales()->create([
                     'product_id' => $product->id,
                     'listing_id' => $listing->id,
@@ -197,7 +206,7 @@ class FurimaDeckRestoreCsvService
     private function validateRow(User $user, array $values): array
     {
         $errors = [];
-        foreach (['management_id' => '管理ID', 'title' => 'タイトル', 'platform' => '出品先', 'status' => 'ステータス'] as $key => $label) {
+        foreach (['management_id' => '管理ID', 'title' => 'タイトル', 'status' => 'ステータス'] as $key => $label) {
             if ($values[$key] === '') {
                 $errors[] = $label.'は必須です。';
             }
@@ -208,7 +217,11 @@ class FurimaDeckRestoreCsvService
         if (mb_strlen($values['title']) > self::MAX_TITLE_LENGTH) {
             $errors[] = 'タイトルは'.self::MAX_TITLE_LENGTH.'文字以内にしてください。';
         }
-        if ($this->marketplace($values['platform']) === null) {
+        $status = $this->status($values['status']);
+        $unlisted = $status === 'unlisted';
+        if ($unlisted && $values['platform'] !== '') {
+            $errors[] = '未出品商品の出品先は空欄にしてください。';
+        } elseif (! $unlisted && ($values['platform'] === '' || $this->marketplace($values['platform']) === null)) {
             $errors[] = '出品先が未登録または無効です。';
         }
         if (trim($values['parent_category'] ?? '') !== '' || trim($values['category'] ?? '') !== '') {
@@ -218,9 +231,8 @@ class FurimaDeckRestoreCsvService
                 $errors[] = $exception->getMessage();
             }
         }
-        $status = $this->status($values['status']);
-        if (! in_array($status, ['selling', 'sold'], true)) {
-            $errors[] = 'ステータスはsellingまたはsoldにしてください。';
+        if (! in_array($status, ['selling', 'sold', 'unlisted', ...Listing::USER_SETTABLE_STATUSES], true)) {
+            $errors[] = 'ステータスが復元用CSVの対応範囲外です。';
         }
         $hasInvalidMoney = false;
         foreach (['purchase_price', 'sold_price', 'shipping_fee'] as $key) {
