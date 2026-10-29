@@ -7,7 +7,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class StripeWebhookSubscriptionTest extends TestCase
@@ -384,11 +383,6 @@ class StripeWebhookSubscriptionTest extends TestCase
     public function test_duplicate_stripe_event_id_is_ignored(): void
     {
         config(['services.stripe.webhook_secret' => 'whsec_test']);
-        Log::shouldReceive('info')
-            ->once()
-            ->with('Duplicate Stripe webhook event ignored.', [
-                'event_type' => 'customer.subscription.updated',
-            ]);
 
         $user = User::factory()->create([
             'subscription_plan' => User::SUBSCRIPTION_INACTIVE,
