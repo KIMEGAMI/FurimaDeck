@@ -120,24 +120,6 @@ class FurimaDeckAccountingProductController extends Controller
                 }
 
                 foreach ($lockedProduct->listings()->whereNotIn('status', ['sold', 'ended', 'cancelled'])->get() as $listing) {
-                    $amounts = collect($pendingSale->only([
-                        'sold_price', 'cost_basis', 'sales_fee', 'shipping_fee', 'purchase_shipping_cost',
-                        'packing_cost', 'repair_cost', 'cleaning_cost', 'other_expense',
-                    ]))->map(fn (mixed $value): int => (int) ($value ?? 0))->all();
-                    $amounts['cost_basis'] = $lockedProduct->purchase_accounting_enabled
-                        ? app(FurimaDeckAccountingEntryService::class)->costBasisForNewSale($request->user(), $lockedProduct)
-                        : (int) $lockedProduct->purchase_unit_cost * (int) $pendingSale->quantity;
-                    if ($lockedProduct->purchase_accounting_enabled) {
-                        $amounts['purchase_shipping_cost'] = 0;
-                    }
-
-                    $pendingSale->update([
-                        'cost_basis' => $amounts['cost_basis'],
-                        'net_profit' => app(SaleProfitCalculator::class)->calculate($amounts),
-                    ]);
-                }
-
-                foreach ($lockedProduct->listings()->whereNotIn('status', ['sold', 'ended', 'cancelled'])->get() as $listing) {
                     if ($listing->listing_price === null) {
                         $listing->update(['expected_profit' => null, 'expected_margin' => null]);
 
