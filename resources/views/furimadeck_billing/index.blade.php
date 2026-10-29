@@ -27,10 +27,6 @@
                             @csrf
                             <button class="rounded bg-slate-800 px-4 py-2 font-bold text-white">Stripeで契約を管理</button>
                         </form>
-                    @elseif ($subscriptionSyncUnavailable)
-                        <p class="mt-5 rounded border border-amber-300 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
-                            Stripeの契約状態を確認できません。二重申込を避けるため、新しい決済は停止しています。時間をおいて再読み込みしてください。
-                        </p>
                     @else
                         <form method="POST" action="{{ route('furimadeck-billing.checkout') }}" class="mt-5 space-y-4">
                             @csrf
