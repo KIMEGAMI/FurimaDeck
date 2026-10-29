@@ -37,6 +37,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
       - name: Verify immutable workflow dependencies
         run: |
           node scripts/check-github-actions-pinned.mjs
@@ -48,12 +54,6 @@ jobs:
           php-version: ${{ env.PHP_VERSION }}
           extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
           coverage: none
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
 
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --no-progress --ansi
