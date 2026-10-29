@@ -1,11 +1,11 @@
 <?php
 
-namespace Tests\Feature;
+namespace Tests\\Feature;
 
-use App\Http\Middleware\SecurityHeaders;
-use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
-use Tests\TestCase;
+use App\\Http\\Middleware\\SecurityHeaders;
+use Illuminate\\Http\\Request;
+use Symfony\\Component\\HttpFoundation\\Response;
+use Tests\\TestCase;
 
 class SecurityHeadersTest extends TestCase
 {
@@ -51,7 +51,7 @@ class SecurityHeadersTest extends TestCase
         );
     }
 
-    public function test_html_responses_have_an_enforcing_csp_without_unsafe_script_sources(): void
+    public function test_html_responses_have_a_restrictive_enforcing_csp(): void
     {
         $response = $this->get(route('login'));
         $response->assertOk();
@@ -59,12 +59,44 @@ class SecurityHeadersTest extends TestCase
         $policy = $response->headers->get('Content-Security-Policy');
         $this->assertNotEmpty($policy, 'An enforcing Content-Security-Policy header is required.');
 
-        $scriptSource = collect(explode(';', (string) $policy))
-            ->map(fn (string $directive) => trim($directive))
-            ->first(fn (string $directive) => str_starts_with(strtolower($directive), 'script-src '));
+        $segments = collect(explode(';', (string) $policy))
+            ->map(fn (string $directive): array => preg_split('/\\s+/', trim($directive)) ?: [])
+            ->filter(fn (array $parts): bool => $parts !== [])
+            ->values();
 
-        $this->assertNotEmpty($scriptSource, 'The CSP must define script-src explicitly.');
-        $this->assertStringNotContainsString("'unsafe-inline'", strtolower((string) $scriptSource));
-        $this->assertStringNotContainsString("'unsafe-eval'", strtolower((string) $scriptSource));
+        $names = $segments->map(fn (array $parts): string => strtolower($parts[0]));
+        $this->assertCount(
+            $names->unique()->count(),
+            $names,
+            'CSP directives must not be duplicated because browsers ignore later duplicates.'
+        );
+
+        $directives = $segments->mapWithKeys(
+            fn (array $parts): array => [strtolower(array_shift($parts)) => array_map('strtolower', $parts)]
+        );
+
+        $this->assertContains("'self'", $directives->get('default-src', []), 'default-src must be restricted to this origin.');
+        $this->assertContains("'self'", $directives->get('script-src', []), 'script-src must allow the application origin.');
+        $this->assertContains("'none'", $directives->get('object-src', []), 'object-src must disable plugin content.');
+        $this->assertTrue(
+            in_array("'self'", $directives->get('base-uri', []), true)
+                || in_array("'none'", $directives->get('base-uri', []), true),
+            'base-uri must prevent untrusted base URL injection.'
+        );
+        $this->assertTrue(
+            in_array("'self'", $directives->get('frame-ancestors', []), true)
+                || in_array("'none'", $directives->get('frame-ancestors', []), true),
+            'frame-ancestors must restrict who can embed the application.'
+        );
+        $this->assertContains("'self'", $directives->get('form-action', []), 'form-action must be restricted to this origin.');
+
+        $scriptSources = $directives->get('script-src', []);
+        foreach (["'unsafe-inline'", "'unsafe-eval'", '*', 'http:', 'https:', 'data:'] as $unsafeSource) {
+            $this->assertNotContains(
+                $unsafeSource,
+                $scriptSources,
+                "script-src must not contain the broad or unsafe source {$unsafeSource}."
+            );
+        }
     }
 }
