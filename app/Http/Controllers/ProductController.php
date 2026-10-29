@@ -428,7 +428,25 @@ class ProductController extends Controller
         collect($images)
             ->groupBy(fn (ProductImage $image) => $image->storageDisk())
             ->each(function ($images, string $disk): void {
-                Storage::disk($disk)->delete($images->flatMap(fn (ProductImage $image) => [$image->original_path, $image->derived_path])->filter()->all());
+                $files = $images->flatMap(fn (ProductImage $image) => [$image->original_path, $image->derived_path])
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+                $deleted = false;
+
+                try {
+                    $deleted = Storage::disk($disk)->delete($files);
+                } catch (Throwable) {
+                    // Product deletion has already committed; leave cleanup visible in logs.
+                }
+
+                if (! $deleted) {
+                    Log::warning('Product image cleanup failed after product deletion.', [
+                        'disk' => $disk,
+                        'file_count' => count($files),
+                    ]);
+                }
             });
     }
 

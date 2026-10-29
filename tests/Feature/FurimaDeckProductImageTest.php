@@ -15,6 +15,7 @@ use App\Services\SaleLifecycleService;
 use App\Services\SaleProfitCalculator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -917,6 +918,39 @@ class FurimaDeckProductImageTest extends TestCase
         $this->assertDatabaseHas('product_images', ['id' => $image->id]);
         $this->assertTrue($disk->exists($image->original_path));
         $this->assertTrue($disk->exists($image->derived_path));
+    }
+
+    public function test_product_deletion_succeeds_and_logs_when_private_image_cleanup_fails(): void
+    {
+        $user = $this->verifiedUser();
+        $product = $this->productFor($user);
+        $image = $product->images()->create([
+            'original_path' => "products/{$user->id}/product-delete.webp",
+            'derived_path' => "products/{$user->id}/product-delete.thumb.webp",
+            'storage_disk' => ProductImage::PRIVATE_STORAGE_DISK,
+            'mime_type' => 'image/webp',
+            'file_size' => 1,
+            'position' => 0,
+        ]);
+
+        Storage::shouldReceive('disk')
+            ->once()
+            ->with(ProductImage::PRIVATE_STORAGE_DISK)
+            ->andThrow(new \RuntimeException('simulated R2 delete failure'));
+        Log::shouldReceive('warning')
+            ->once()
+            ->with('Product image cleanup failed after product deletion.', [
+                'disk' => ProductImage::PRIVATE_STORAGE_DISK,
+                'file_count' => 2,
+            ]);
+
+        $this->actingAs($user)
+            ->delete(route('products.destroy', $product), ['confirm_deletion' => '1'])
+            ->assertRedirect(route('products.index'))
+            ->assertSessionHas('success', '商品を削除しました。');
+
+        $this->assertDatabaseMissing('products', ['id' => $product->id]);
+        $this->assertDatabaseMissing('product_images', ['id' => $image->id]);
     }
 
     private function verifiedUser(): User
