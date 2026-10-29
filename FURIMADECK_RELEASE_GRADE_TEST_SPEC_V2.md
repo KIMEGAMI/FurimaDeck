@@ -7,16 +7,16 @@
 - Chrome拡張（出品支援）は1.0の対象外とする。Chrome Web Storeへの登録状況にかかわらず、この候補では配布・サポート・リリース判定を行わない。
 - 商品編集画面の拡張向け案内は既定で非表示とし、回帰テストで表示されないことを確認する。拡張本体や外部フリマサイトでの入力動作は1.0の検証対象に含めない。
 
-## 現行検証スナップショット（2026-10-29、PR HEAD `ea6d847032d9477dd5763b1e9206c0c10ce6efe8`、コードHEAD `a309ca3170127cef873282f611706f4e0eb30b10`）
+## 現行リリース判定（2026-10-29）
 
-- GitHub PR #35はopen・Draft・未merge。baseは`main`の`320758d082bc1552dfc6a8743dc831f74752b894`。候補差分は281ファイルで、全差分の人手レビューは未完了。
-- コードHEAD `a309ca3170127cef873282f611706f4e0eb30b10` のGitHub CI #207とSecurity #195はcompleted success。同じコードに仕様書更新のみを加えたPR HEAD `ea6d847032d9477dd5763b1e9206c0c10ce6efe8` のCI #209とSecurity #197もcompleted success。CIではPHP tests、Browser E2E、Blade/route検証、ビルド、コードスタイル、Composer/npm監査、MariaDB CSV gateが成功。
-- 1.0対象は販売・在庫管理と、対応範囲を限定したfreee/Money Forward会計CSV。会計API送信・読戻し、Chrome拡張は対象外。
-- 商品バックアップCSV復元で、未出品商品が出品中になり、既存出品状態もactiveに変わり得る不具合を修正。未出品とdraft/ready/active/ended/cancelledを区別し、旧`selling`値は互換性を保ってactiveへ復元する。対象回帰テストは7 tests・65 assertions成功し、同じコードHEADを含むGitHub CIも成功。
+- PR #35の現在のHEAD・Draft/merge状態・最新CI/Security結果は変動するため、[PR #35](https://github.com/KIMEGAMI/FurimaDeck/pull/35)とそのChecksを正本とする。この文書の過去のHEAD・run番号を現在状態として扱わない。
+- 2026-10-29時点で完全成功を確認した実装基準HEADは `303cba3cf5da5da70fc6fd14833833167ff9db6d`。同HEADのGitHub CI #211とSecurity #199は成功。以降の変更にはデプロイ中断時の復旧手順を追加した文書更新が含まれる。最新候補へのチェック完了はPR上で別途確認する。
+- PR #35はopen・Draft・未mergeで、候補差分は281ファイル。差分の人手レビューは未完了。
+- 1.0対象は販売・在庫管理と、対応範囲を限定したfreee/Money Forward会計CSV。会計仕訳API送信・API読戻し、Chrome拡張は対象外。
 - 会計CSVは確認済み販売データの限定パターンのみ。仕入CSV、未確認の税区分、費用処理を確定できない取引は出力停止。試験CSVの取込結果は利用者本人の税務区分や全取引の正しさを証明しない。
-- 独自のローカルDocker全体テストはGD等がない不完全な実行環境で13 errors / 3 failuresとなったため、合格根拠に含めない。GitHub CI #207はPHP拡張を含む所定環境で同HEADの全必須ジョブが成功。
-- リリース判定はNO-GO。P0/P1の本番相当の利用者フローと所有者分離、本番メール・Google OAuth、本番DBバックアップからの隔離復元、対応CSVの最終照合、281ファイルの差分レビューが残る。Stripeはユーザー申告の本番確認を尊重し、この候補では再操作しない。
+- 2026-10-29時点の判定はNO-GO。P0/P1の本番相当利用者フローと所有者分離、本番メール・Google OAuth、本番DBバックアップからの隔離復元、対応CSV範囲の最終照合、281ファイルの人手レビューが未完了。Stripeはユーザー申告の本番確認を尊重し、この候補では再操作しない。
 - CI/Security成功はVPS運用、本番DBの復元可能性、利用者本人の税務区分や未検証取引の会計上の正しさを保証しない。マージ・本番デプロイは未実施。
+
 ## 履歴: 2026-10-29 旧検証スナップショット（実装・テスト基準HEAD `a453332dcefa3c1dbc0c86f5c85dfbe2c0857a27`）
 
 > これは現行スナップショットではなく、過去の候補HEADに対する記録です。
