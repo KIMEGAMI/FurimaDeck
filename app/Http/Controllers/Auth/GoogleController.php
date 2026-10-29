@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\LoginSecurityService;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -36,9 +37,38 @@ class GoogleController extends Controller
                     'email' => 'Googleログインの有効期限が切れました。もう一度Googleログインをお試しください。',
                 ]);
         } catch (Throwable $exception) {
-            Log::warning('Google login failed before user resolution.', [
+            $context = [
                 'error_class' => $exception::class,
-            ]);
+            ];
+
+            if ($exception instanceof RequestException) {
+                $response = $exception->getResponse();
+                if ($response) {
+                    $context['http_status'] = $response->getStatusCode();
+                    $payload = json_decode((string) $response->getBody(), true);
+                    $oauthError = is_array($payload) ? ($payload['error'] ?? null) : null;
+                    if (is_string($oauthError) && in_array($oauthError, [
+                        'access_denied',
+                        'invalid_client',
+                        'invalid_grant',
+                        'invalid_request',
+                        'invalid_token',
+                        'server_error',
+                        'temporarily_unavailable',
+                        'unauthorized_client',
+                        'unsupported_grant_type',
+                    ], true)) {
+                        $context['oauth_error'] = $oauthError;
+                    }
+                }
+
+                $transportErrno = $exception->getHandlerContext()['errno'] ?? null;
+                if (is_int($transportErrno)) {
+                    $context['transport_errno'] = $transportErrno;
+                }
+            }
+
+            Log::warning('Google login failed before user resolution.', $context);
 
             return redirect()
                 ->route('login')
@@ -100,6 +130,7 @@ class GoogleController extends Controller
         }
 
         Auth::login($user, true);
+        $request->session()->regenerate();
         $this->loginSecurity->recordSuccessfulLogin($user, $request, 'Googleログイン');
 
         return redirect()->route((bool) config('furimadeck.cutover_enabled') ? 'furimadeck-dashboard' : 'dashboard');

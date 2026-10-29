@@ -93,7 +93,7 @@
     <meta name="twitter:image" content="{{ $image }}">
     <meta name="twitter:image:alt" content="{{ $siteName }}">
     <x-pwa-head />
-    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @foreach ($schemas as $schemaItem)
         <script type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>

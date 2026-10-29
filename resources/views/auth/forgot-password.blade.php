@@ -6,7 +6,12 @@
         </p>
     </div>
 
-    <x-auth-session-status class="mb-4" :status="session('status')" />
+    @if (session('status'))
+        <div class="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold leading-7 text-emerald-900" role="status">
+            <p class="font-black">送信しました</p>
+            <p class="mt-1">{{ session('status') }}</p>
+        </div>
+    @endif
 
     <form method="POST" action="{{ route('password.email') }}" class="space-y-5">
         @csrf

@@ -9,6 +9,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use RuntimeException;
 
 class FurimaDeckRestoreCsvService
@@ -16,6 +17,12 @@ class FurimaDeckRestoreCsvService
     private const HEADERS = ['management_id', 'title', 'comment', 'platform', 'parent_category', 'category', 'purchase_price', 'sold_price', 'sales_fee_rate', 'shipping_fee', 'status', 'sold_at'];
 
     private const MAX_CELL_LENGTH = 1000;
+
+    private const MAX_MANAGEMENT_ID_LENGTH = 80;
+
+    private const MAX_TITLE_LENGTH = 255;
+
+    private const MAX_UNSIGNED_AMOUNT = SaleProfitCalculator::MAX_UNSIGNED_AMOUNT;
 
     public function __construct(private readonly CsvEncodingService $encoding) {}
 
@@ -58,11 +65,22 @@ class FurimaDeckRestoreCsvService
 
                     continue;
                 }
-                $values = array_combine($headers, array_map(fn (mixed $value): string => mb_substr(trim((string) $value), 0, self::MAX_CELL_LENGTH), array_pad($row, count($headers), '')));
+                $rawValues = array_map(fn (mixed $value): string => trim((string) $value), array_pad($row, count($headers), ''));
+                $hasOversizedCell = false;
+                foreach ($rawValues as $rawValue) {
+                    if (mb_strlen($rawValue) > self::MAX_CELL_LENGTH) {
+                        $hasOversizedCell = true;
+                        break;
+                    }
+                }
+                $values = array_combine($headers, array_map(fn (string $value): string => mb_substr($value, 0, self::MAX_CELL_LENGTH), $rawValues));
                 if ($values === false) {
                     throw new RuntimeException('CSVの列を読み込めませんでした。');
                 }
                 $errors = $this->validateRow($user, $values);
+                if ($hasOversizedCell) {
+                    $errors[] = 'CSVのセルが1000文字を超えています。内容を短くしてください。';
+                }
                 if (($values['management_id'] ?? '') !== '') {
                     $managementIds[$values['management_id']][] = count($rows);
                 }
@@ -88,6 +106,11 @@ class FurimaDeckRestoreCsvService
     public function commit(User $user, array $values): string
     {
         return DB::transaction(function () use ($user, $values): string {
+            $errors = $this->validateRow($user, $values);
+            if ($errors !== []) {
+                throw new RuntimeException(implode(' ', array_unique($errors)));
+            }
+
             if (Product::query()->where('user_id', $user->id)->where('internal_sku', $values['management_id'])->lockForUpdate()->exists()) {
                 return 'skipped';
             }
@@ -125,26 +148,19 @@ class FurimaDeckRestoreCsvService
                 'ended_at' => $soldAt,
             ]);
             if ($status === 'sold') {
-                $soldPrice = $this->money($values['sold_price']);
-                $salesFee = (int) round($soldPrice * ($this->rate($values['sales_fee_rate']) / 100));
-                $shippingFee = $this->money($values['shipping_fee']);
-                $cost = $this->money($values['purchase_price']);
-                $user->sales()->create([
+                $sale = $user->sales()->create([
                     'product_id' => $product->id,
                     'listing_id' => $listing->id,
                     'marketplace_id' => $marketplace->id,
                     'internal_sku_snapshot' => $product->internal_sku,
                     'product_name_snapshot' => $product->product_name,
                     'quantity' => 1,
-                    'sold_price' => $soldPrice,
+                    ...$this->saleAmounts($values),
                     'sold_at' => $soldAt,
                     'status' => 'completed',
-                    'cost_basis' => $cost,
-                    'sales_fee' => $salesFee,
-                    'shipping_fee' => $shippingFee,
-                    'net_profit' => $soldPrice - $cost - $salesFee - $shippingFee,
                     'completed_at' => $soldAt,
                 ]);
+                app(FurimaDeckAccountingEntryService::class)->recordSale($user, $sale);
             }
 
             return 'imported';
@@ -186,6 +202,12 @@ class FurimaDeckRestoreCsvService
                 $errors[] = $label.'は必須です。';
             }
         }
+        if (mb_strlen($values['management_id']) > self::MAX_MANAGEMENT_ID_LENGTH) {
+            $errors[] = '管理IDは'.self::MAX_MANAGEMENT_ID_LENGTH.'文字以内にしてください。';
+        }
+        if (mb_strlen($values['title']) > self::MAX_TITLE_LENGTH) {
+            $errors[] = 'タイトルは'.self::MAX_TITLE_LENGTH.'文字以内にしてください。';
+        }
         if ($this->marketplace($values['platform']) === null) {
             $errors[] = '出品先が未登録または無効です。';
         }
@@ -200,13 +222,26 @@ class FurimaDeckRestoreCsvService
         if (! in_array($status, ['selling', 'sold'], true)) {
             $errors[] = 'ステータスはsellingまたはsoldにしてください。';
         }
+        $hasInvalidMoney = false;
         foreach (['purchase_price', 'sold_price', 'shipping_fee'] as $key) {
             if ($this->moneyStringIsInvalid($values[$key])) {
-                $errors[] = $key.'は0以上の整数にしてください。';
+                $errors[] = $key.'は0以上'.number_format(self::MAX_UNSIGNED_AMOUNT).'以下の整数にしてください。';
+                $hasInvalidMoney = true;
             }
+        }
+        $hasInvalidRate = $this->rateStringIsInvalid($values['sales_fee_rate']);
+        if ($hasInvalidRate) {
+            $errors[] = '販売手数料率は0から100までの数値（小数点以下2桁まで）にしてください。';
         }
         if ($status === 'sold' && $this->date($values['sold_at']) === null) {
             $errors[] = 'SOLD商品のSOLD日はYYYY-MM-DD形式で必須です。';
+        }
+        if ($status === 'sold' && ! $hasInvalidMoney && ! $hasInvalidRate) {
+            try {
+                $this->saleAmounts($values);
+            } catch (InvalidArgumentException) {
+                $errors[] = '計算後の利益が保存可能な範囲を超えています。価格・仕入れ値・送料を確認してください。';
+            }
         }
 
         return $errors;
@@ -239,19 +274,75 @@ class FurimaDeckRestoreCsvService
         return strtolower(trim($status));
     }
 
+    /** @param array<string, string> $values @return array{sold_price:int,cost_basis:int,sales_fee:int,shipping_fee:int,net_profit:int} */
+    private function saleAmounts(array $values): array
+    {
+        $soldPrice = $this->money($values['sold_price']);
+        $cost = $this->money($values['purchase_price']);
+        $salesFee = app(MarketplaceFeeService::class)->amountAtRate($soldPrice, $this->rate($values['sales_fee_rate']));
+        $shippingFee = $this->money($values['shipping_fee']);
+
+        return [
+            'sold_price' => $soldPrice,
+            'cost_basis' => $cost,
+            'sales_fee' => $salesFee,
+            'shipping_fee' => $shippingFee,
+            'net_profit' => app(SaleProfitCalculator::class)->calculate([
+                'sold_price' => $soldPrice,
+                'cost_basis' => $cost,
+                'sales_fee' => $salesFee,
+                'shipping_fee' => $shippingFee,
+            ]),
+        ];
+    }
+
     private function money(string $value): int
     {
+        if ($this->moneyStringIsInvalid($value)) {
+            throw new RuntimeException('価格・仕入れ値・送料は0以上'.number_format(self::MAX_UNSIGNED_AMOUNT).'以下の整数にしてください。');
+        }
+
         return (int) str_replace([',', '円', '¥', '￥', ' '], '', mb_convert_kana($value, 'n'));
     }
 
     private function moneyStringIsInvalid(string $value): bool
     {
-        return $value !== '' && preg_match('/^\d+$/', str_replace([',', '円', '¥', '￥', ' '], '', mb_convert_kana($value, 'n'))) !== 1;
+        if ($value === '') {
+            return false;
+        }
+
+        $digits = str_replace([',', '円', '¥', '￥', ' '], '', mb_convert_kana($value, 'n'));
+        if (preg_match('/\A\d+\z/', $digits) !== 1) {
+            return true;
+        }
+
+        $digits = ltrim($digits, '0');
+        if ($digits === '') {
+            return false;
+        }
+
+        $maxUnsignedAmount = (string) self::MAX_UNSIGNED_AMOUNT;
+
+        return strlen($digits) > strlen($maxUnsignedAmount)
+            || (strlen($digits) === strlen($maxUnsignedAmount) && strcmp($digits, $maxUnsignedAmount) > 0);
     }
 
     private function rate(string $value): float
     {
-        return is_numeric($value) ? max(0, (float) $value) : 0;
+        if ($this->rateStringIsInvalid($value)) {
+            throw new RuntimeException('販売手数料率は0から100までの数値（小数点以下2桁まで）にしてください。');
+        }
+
+        return (float) $value;
+    }
+
+    private function rateStringIsInvalid(string $value): bool
+    {
+        if (preg_match('/\A\d+(?:\.\d{1,2})?\z/', $value) !== 1) {
+            return true;
+        }
+
+        return (float) $value > 100;
     }
 
     private function date(string $value): ?CarbonImmutable

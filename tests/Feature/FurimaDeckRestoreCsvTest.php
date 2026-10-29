@@ -8,6 +8,8 @@ use App\Models\Marketplace;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\User;
+use App\Services\MarketplaceFeeService;
+use App\Services\SaleProfitCalculator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -49,6 +51,27 @@ class FurimaDeckRestoreCsvTest extends TestCase
         $this->assertSame(2, Product::query()->where('user_id', $user->id)->count());
         $this->assertDatabaseHas('listings', ['user_id' => $user->id, 'status' => 'active', 'listing_price' => 2500], 'furimadeck');
         $this->assertDatabaseHas('sales', ['user_id' => $user->id, 'sold_price' => 3000, 'cost_basis' => 1200, 'sales_fee' => 300, 'shipping_fee' => 210, 'net_profit' => 1290], 'furimadeck');
+    }
+
+    public function test_restore_csv_uses_shared_marketplace_fee_rounding(): void
+    {
+        $user = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
+        $csv = implode("\n", [
+            'management_id,title,comment,platform,parent_category,category,purchase_price,sold_price,sales_fee_rate,shipping_fee,status,sold_at',
+            'RESTORE-FEE,端数手数料,,ヤフオク,,,0,105,10,0,sold,2026-10-24',
+        ]);
+
+        $this->actingAs($user)->post(route('products.imports.restore-preview'), [
+            'csv_file' => UploadedFile::fake()->createWithContent('restore-fee.csv', $csv),
+        ])->assertRedirect();
+        $batch = ImportBatch::query()->firstOrFail();
+        $this->assertSame(1, $batch->success_rows);
+        $this->actingAs($user)->post(route('products.imports.commit', $batch))->assertRedirect(route('products.index'));
+
+        $sale = Sale::query()->where('user_id', $user->id)->firstOrFail();
+        $this->assertSame(10, app(MarketplaceFeeService::class)->amountAtRate(105, 10));
+        $this->assertSame(10, $sale->sales_fee);
+        $this->assertSame(95, $sale->net_profit);
     }
 
     public function test_restore_export_delete_and_import_round_trip_with_100_products(): void
@@ -123,6 +146,25 @@ class FurimaDeckRestoreCsvTest extends TestCase
         $user = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
         $csv = "management_id,title,comment,platform,parent_category,category,purchase_price,sold_price,sales_fee_rate,shipping_fee,status,sold_at\nBAD-001,商品,,ヤフオク,,,1000,2000,10,0,sold,\n";
         $this->actingAs($user)->post(route('products.imports.restore-preview'), ['csv_file' => UploadedFile::fake()->createWithContent('invalid-restore.csv', $csv)])->assertRedirect();
+        $batch = ImportBatch::query()->firstOrFail();
+        $this->assertSame(1, $batch->failed_rows);
+        $this->actingAs($user)->post(route('products.imports.commit', $batch))->assertStatus(422);
+        $this->assertSame(0, Product::query()->where('user_id', $user->id)->count());
+        $this->assertSame(0, Sale::query()->where('user_id', $user->id)->count());
+    }
+
+    public function test_restore_rejects_profit_above_shared_calculator_limit_before_commit(): void
+    {
+        $user = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
+        $csv = implode("\n", [
+            'management_id,title,comment,platform,parent_category,category,purchase_price,sold_price,sales_fee_rate,shipping_fee,status,sold_at',
+            'BAD-PROFIT,利益上限超過,,ヤフオク,,,0,'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.',0,0,sold,2026-10-24',
+        ]);
+
+        $this->actingAs($user)->post(route('products.imports.restore-preview'), [
+            'csv_file' => UploadedFile::fake()->createWithContent('profit-overflow.csv', $csv),
+        ])->assertRedirect();
+
         $batch = ImportBatch::query()->firstOrFail();
         $this->assertSame(1, $batch->failed_rows);
         $this->actingAs($user)->post(route('products.imports.commit', $batch))->assertStatus(422);

@@ -1,0 +1,11 @@
+title = "FurimaDeck Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow only synthetic Stripe key-shaped placeholders in the cutover feature test history."
+condition = "AND"
+paths = ['''(^|/)tests/Feature/FurimaDeckCutoverCheckTest\.php$''']
+regexTarget = "match"
+regexes = ['''^sk_(live|test)_configured$''']

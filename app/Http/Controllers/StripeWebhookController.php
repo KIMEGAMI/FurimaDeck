@@ -86,7 +86,6 @@ class StripeWebhookController extends Controller
         } catch (QueryException $exception) {
             if ($this->isDuplicateWebhookEvent($exception)) {
                 Log::info('Duplicate Stripe webhook event ignored.', [
-                    'stripe_event_id' => $eventId,
                     'event_type' => $eventType,
                 ]);
 
@@ -195,10 +194,7 @@ class StripeWebhookController extends Controller
             return;
         }
 
-        Log::info('Stripe subscription trial will end.', [
-            'subscription_id' => data_get($subscription, 'id'),
-            'customer_id' => data_get($subscription, 'customer'),
-        ]);
+        Log::info('Stripe subscription trial will end.');
     }
 
     private function handleInvoiceSubscriptionSync(mixed $invoice, string $reason): void
@@ -212,7 +208,6 @@ class StripeWebhookController extends Controller
         if (! is_string($subscriptionId) || $subscriptionId === '') {
             Log::info('Stripe invoice event did not include subscription id.', [
                 'reason' => $reason,
-                'invoice_id' => data_get($invoice, 'id'),
             ]);
 
             return;
@@ -230,8 +225,6 @@ class StripeWebhookController extends Controller
 
         Log::info('Stripe invoice event synced subscription state.', [
             'reason' => $reason,
-            'invoice_id' => data_get($invoice, 'id'),
-            'subscription_id' => $subscriptionId,
         ]);
 
         $this->syncSubscription($subscription);
@@ -297,8 +290,7 @@ class StripeWebhookController extends Controller
                 ->get($this->stripeApiBase().'/subscriptions/'.rawurlencode($subscriptionId));
         } catch (Throwable $exception) {
             Log::warning('Stripe webhook subscription fetch failed.', [
-                'subscription_id' => $subscriptionId,
-                'error' => $exception->getMessage(),
+                'exception_type' => $exception::class,
             ]);
 
             return [];

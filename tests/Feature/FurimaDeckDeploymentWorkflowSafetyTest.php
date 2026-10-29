@@ -30,6 +30,9 @@ class FurimaDeckDeploymentWorkflowSafetyTest extends TestCase
         $this->assertIsString($queueUnit);
         $this->assertStringContainsString('name: Deploy FurimaDeck', $workflow);
         $this->assertStringContainsString("if: github.ref == 'refs/heads/main'", $workflow);
+        $this->assertMatchesRegularExpression('/production_backup_reference:\R\s+description:[^\r\n]*\R\s+required: true\R\s+type: string/m', $workflow);
+        $this->assertStringContainsString('BACKUP_REFERENCE: ${{ inputs.production_backup_reference }}', $workflow);
+        $this->assertStringNotContainsString('production_restore_tested', $workflow);
         $this->assertStringContainsString('test "$DEPLOY_PATH" = "/var/www/furimadeck"', $workflow);
         $this->assertStringContainsString('if [[ "$DEPLOY_PATH" != "/var/www/furimadeck" ]]', $workflow);
         $this->assertStringContainsString('secrets.FURIMADECK_DEPLOY_HOST', $workflow);
@@ -49,13 +52,18 @@ class FurimaDeckDeploymentWorkflowSafetyTest extends TestCase
 
         $preflightPosition = strpos($workflow, 'for unit in furimadeck-queue.service furimadeck-scheduler.timer apache2');
         $phpRuntimeCheckPosition = strpos($workflow, 'SYSTEMD_PHP_BIN="$(readlink -f /usr/bin/php)"');
+        $backupGatePosition = strpos($workflow, 'Require verified production backup reference');
+        $deployPosition = strpos($workflow, '      - name: Deploy over SSH');
         $mergePosition = strpos($workflow, 'git merge --ff-only "$DEPLOY_SHA"');
         $migrationPosition = strpos($workflow, 'artisan migrate --database=furimadeck');
 
         $this->assertNotFalse($preflightPosition);
         $this->assertNotFalse($phpRuntimeCheckPosition);
+        $this->assertNotFalse($backupGatePosition);
+        $this->assertNotFalse($deployPosition);
         $this->assertNotFalse($mergePosition);
         $this->assertNotFalse($migrationPosition);
+        $this->assertLessThan($deployPosition, $backupGatePosition);
         $this->assertLessThan($mergePosition, $phpRuntimeCheckPosition);
         $this->assertLessThan($mergePosition, $preflightPosition);
         $this->assertLessThan($migrationPosition, $preflightPosition);

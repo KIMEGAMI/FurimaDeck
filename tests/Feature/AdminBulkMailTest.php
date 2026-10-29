@@ -24,7 +24,7 @@ class AdminBulkMailTest extends TestCase
         $response
             ->assertOk()
             ->assertSee('一斉メール送信', false)
-            ->assertSee('saas.system.shinji@gmail.com', false);
+            ->assertSee('info@kimegami.jp', false);
     }
 
     public function test_regular_user_cannot_view_bulk_mail_page(): void
@@ -44,7 +44,7 @@ class AdminBulkMailTest extends TestCase
         Mail::fake();
         config([
             'mail.default' => 'smtp',
-            'admin_mail.from_address' => 'saas.system.shinji@gmail.com',
+            'admin_mail.from_address' => 'info@kimegami.jp',
         ]);
 
         $admin = User::factory()->create([

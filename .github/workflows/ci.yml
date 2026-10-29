@@ -55,13 +55,25 @@ jobs:
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --no-progress --ansi
 
+      - name: Validate Composer metadata
+        run: composer validate --no-check-publish
+
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
+
+      - name: Test E2E runtime safety
+        run: npm run test:e2e-runtime
 
       - name: Prepare application key
         run: |
           cp .env.example .env
           php artisan key:generate --ansi
+
+      - name: Compile Blade views
+        run: php artisan view:cache
+
+      - name: Validate FurimaDeck routes
+        run: php artisan route:list --path=furimadeck
 
       - name: Configure ephemeral E2E demo user
         run: |
@@ -109,6 +121,9 @@ jobs:
         run: vendor/bin/pint --test
 
       - name: Run PHP tests
+        env:
+          FURIMADECK_R2_LIVE_TEST: '0'
+          FURIMADECK_R2_PRODUCTION_LIVE_TEST: '0'
         run: composer test
 
       - name: Audit PHP dependencies

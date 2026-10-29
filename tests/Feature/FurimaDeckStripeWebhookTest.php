@@ -26,6 +26,7 @@ class FurimaDeckStripeWebhookTest extends TestCase
         ])->assertSuccessful();
         config()->set('furimadeck.cutover_enabled', true);
         config()->set('furimadeck.billing.stripe_webhook_secret', 'whsec_test_example');
+        config()->set('furimadeck.billing.stripe_price_id', 'price_furimadeck_980');
     }
 
     protected function tearDown(): void
@@ -68,6 +69,36 @@ class FurimaDeckStripeWebhookTest extends TestCase
         $this->assertSame('active', $user->fresh()->subscription_status);
     }
 
+    public function test_subscription_for_another_price_cannot_grant_premium(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'stripe_customer_id' => 'cus_furimadeck',
+        ]);
+
+        $this->postWebhook($this->subscriptionEvent('evt_wrong_price', time(), 'active', time() + 604800, 'price_another_product'))->assertOk();
+
+        $this->assertSame(User::SUBSCRIPTION_INACTIVE, $user->fresh()->subscription_plan);
+        $this->assertNull($user->fresh()->stripe_subscription_id);
+    }
+
+    public function test_subscription_event_for_another_price_revokes_stale_access_for_the_tracked_subscription(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'stripe_customer_id' => 'cus_furimadeck',
+            'stripe_subscription_id' => 'sub_furimadeck',
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+            'premium_ends_at' => now()->addMonth(),
+        ]);
+
+        $this->postWebhook($this->subscriptionEvent('evt_changed_to_wrong_price', time(), 'active', time() + 604800, 'price_another_product'))->assertOk();
+
+        $this->assertSame(User::SUBSCRIPTION_INACTIVE, $user->fresh()->subscription_plan);
+        $this->assertFalse($user->fresh()->hasActiveSubscription());
+    }
+
     public function test_invalid_signature_is_rejected_without_recording_an_event(): void
     {
         $payload = json_encode($this->subscriptionEvent('evt_invalid', time(), 'active', time() + 604800), JSON_THROW_ON_ERROR);
@@ -104,7 +135,7 @@ class FurimaDeckStripeWebhookTest extends TestCase
     }
 
     /** @return array<string, mixed> */
-    private function subscriptionEvent(string $eventId, int $createdAt, string $status, int $periodEnd): array
+    private function subscriptionEvent(string $eventId, int $createdAt, string $status, int $periodEnd, string $priceId = 'price_furimadeck_980'): array
     {
         return [
             'id' => $eventId,
@@ -114,6 +145,7 @@ class FurimaDeckStripeWebhookTest extends TestCase
                 'id' => 'sub_furimadeck',
                 'customer' => 'cus_furimadeck',
                 'status' => $status,
+                'items' => ['data' => [['price' => ['id' => $priceId]]]],
                 'current_period_end' => $periodEnd,
                 'trial_start' => $status === 'trialing' ? $createdAt : null,
                 'trial_end' => $status === 'trialing' ? $periodEnd : null,

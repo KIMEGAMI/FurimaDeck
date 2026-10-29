@@ -7,11 +7,9 @@ use App\Models\User;
 use App\Services\EmailVerificationDelivery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
-use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class RegisteredUserController extends Controller
@@ -23,9 +21,6 @@ class RegisteredUserController extends Controller
         return view('auth.register');
     }
 
-    /**
-     * @throws ValidationException
-     */
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
@@ -49,40 +44,22 @@ class RegisteredUserController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        Auth::login($user);
-        $request->session()->regenerate();
+        $sent = $this->emailVerificationDelivery->send($user, 'registration');
 
-        if (! $this->emailVerificationDelivery->send($user, 'registration')) {
-            return $this->redirectToVerificationNoticeWithMailWarning();
-        }
-
-        return redirect()->route('verification.notice');
-    }
-
-    private function redirectToVerificationNoticeWithMailWarning(): RedirectResponse
-    {
-        return redirect()
-            ->route('verification.notice')
-            ->with('status', EmailVerificationDelivery::failureStatus());
+        return redirect()->route('verification.notice')->with(
+            'status',
+            $sent ? 'verification-link-requested' : EmailVerificationDelivery::failureStatus(),
+        );
     }
 
     private function handleExistingRegistrationAttempt(Request $request, User $user): RedirectResponse
     {
-        if ($user->hasVerifiedEmail() || ! Hash::check((string) $request->password, $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => 'このメールアドレスは既に登録されています。ログイン画面からログインしてください。',
-            ]);
-        }
-
-        Auth::login($user);
-        $request->session()->regenerate();
-
-        if (! $this->emailVerificationDelivery->send($user, 'repeated_registration')) {
-            return $this->redirectToVerificationNoticeWithMailWarning();
+        if (! $user->hasVerifiedEmail() && Hash::check((string) $request->password, $user->password)) {
+            $this->emailVerificationDelivery->send($user, 'repeated_registration');
         }
 
         return redirect()
             ->route('verification.notice')
-            ->with('status', EmailVerificationDelivery::sentStatus());
+            ->with('status', 'verification-link-requested');
     }
 }

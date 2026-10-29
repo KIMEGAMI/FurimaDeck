@@ -18,6 +18,7 @@ class ContactFormTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('お問い合わせフォーム', false);
+        $response->assertSee(config('legal.contact_email'), false);
         $response->assertSee('name="message"', false);
     }
 
@@ -65,6 +66,24 @@ class ContactFormTest extends TestCase
         ]);
     }
 
+    public function test_contact_submissions_are_throttled_before_an_extra_inquiry_is_saved(): void
+    {
+        Mail::fake();
+        config(['furimadeck.public_rate_limits.contact_per_minute' => 1]);
+
+        $payload = [
+            'name' => 'Test User',
+            'email' => 'sender@example.com',
+            'subject' => '使い方について',
+            'message' => '商品登録について確認したいです。',
+        ];
+
+        $this->from('/contact')->post('/contact', $payload)->assertRedirect('/contact');
+        $this->from('/contact')->post('/contact', $payload)->assertTooManyRequests();
+
+        $this->assertDatabaseCount('contact_inquiries', 1);
+    }
+
     public function test_contact_mail_keeps_message_line_breaks_and_escapes_content(): void
     {
         $html = View::make('emails.contact', [
@@ -76,9 +95,9 @@ class ContactFormTest extends TestCase
             ],
         ])->render();
 
-        $this->assertStringContainsString('1行目<br>', $html);
-        $this->assertStringContainsString('2行目<br>', $html);
-        $this->assertMatchesRegularExpression('/<br>\s*&lt;script&gt;/', $html);
+        $this->assertStringContainsString('white-space:pre-wrap', $html);
+        $this->assertStringContainsString("1行目\n2行目", $html);
+        $this->assertStringContainsString("2行目\n\n&lt;script&gt;", $html);
         $this->assertStringContainsString('&lt;script&gt;alert(&#039;xss&#039;)&lt;/script&gt;', $html);
         $this->assertStringNotContainsString("<script>alert('xss')</script>", $html);
     }

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <x-pwa-head />
     @php
         $pageSeo = config('seo.pages.register');
         $siteName = config('seo.site_name', 'FurimaDeck');

@@ -35,6 +35,12 @@ class Product extends Model
 
     public const INVENTORY_STATUSES = ['in_stock', 'out_of_stock'];
 
+    public const PURCHASE_DOCUMENT_TYPES = ['receipt', 'invoice', 'other'];
+
+    public const PURCHASE_TAX_CATEGORIES = ['standard_10', 'reduced_8', 'exempt', 'non_taxable', 'out_of_scope', 'unknown'];
+
+    public const PURCHASE_INVOICE_ISSUERS = ['qualified', 'unqualified', 'not_applicable', 'unknown'];
+
     public const INVENTORY_STATUS_LABELS = [
         'in_stock' => '在庫あり',
         'out_of_stock' => '在庫なし',
@@ -76,6 +82,15 @@ class Product extends Model
         'condition',
         'description_base',
         'purchase_date',
+        'purchase_info_confirmed',
+        'purchase_accounting_enabled',
+        'purchase_document_type',
+        'purchase_tax_category',
+        'purchase_invoice_issuer',
+        'purchase_payment_sources',
+        'purchase_evidence',
+        'purchase_special_case_data',
+        'purchase_document_reviewed_at',
         'purchase_unit_cost',
         'purchase_quantity',
         'quantity_available',
@@ -95,6 +110,12 @@ class Product extends Model
     {
         return [
             'purchase_date' => 'date',
+            'purchase_info_confirmed' => 'boolean',
+            'purchase_accounting_enabled' => 'boolean',
+            'purchase_payment_sources' => 'array',
+            'purchase_evidence' => 'array',
+            'purchase_special_case_data' => 'encrypted:array',
+            'purchase_document_reviewed_at' => 'datetime',
             'purchase_unit_cost' => 'integer',
             'purchase_quantity' => 'integer',
             'quantity_available' => 'integer',
@@ -102,6 +123,10 @@ class Product extends Model
             'other_purchase_expense' => 'integer',
         ];
     }
+
+    protected $hidden = [
+        'purchase_special_case_data',
+    ];
 
     public function user(): BelongsTo
     {
@@ -136,6 +161,16 @@ class Product extends Model
     public function sales(): HasMany
     {
         return $this->hasMany(Sale::class);
+    }
+
+    public function accountingEntries(): HasMany
+    {
+        return $this->hasMany(AccountingEntry::class);
+    }
+
+    public function manualPurchaseReconciliations(): HasMany
+    {
+        return $this->hasMany(ManualProductPurchaseReconciliation::class);
     }
 
     public function validSales(): HasMany

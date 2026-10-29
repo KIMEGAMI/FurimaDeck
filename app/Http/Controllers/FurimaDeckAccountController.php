@@ -133,8 +133,16 @@ class FurimaDeckAccountController extends Controller
         $importBatchIds = DB::table('import_batches')->where('user_id', $user->id)->pluck('id');
 
         DB::transaction(function () use ($user, $importBatchIds): void {
+            $this->deleteRowsForUser('accounting_sync_batches', $user->id);
             $this->deleteRowsForUser('accounting_entries', $user->id);
             $this->deleteRowsForUser('accounting_connections', $user->id);
+            $this->deleteRowsForUser('accounting_purchase_cap_reviews', $user->id);
+            $this->deleteRowsForUser('extension_devices', $user->id);
+            $this->deleteRowsForUser('extension_message_templates', $user->id);
+            $this->deleteRowsForUser('notices', $user->id);
+            if (Schema::hasTable('extension_pairings')) {
+                DB::table('extension_pairings')->where('approved_user_id', $user->id)->delete();
+            }
             $this->deleteRowsForUser('ai_usage_logs', $user->id);
             $this->deleteRowsForUser('ai_response_caches', $user->id);
             $this->deleteRowsForUser('audit_logs', $user->id);

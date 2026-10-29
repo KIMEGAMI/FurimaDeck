@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Marketplace;
 use App\Models\ProductCategory;
 use App\Models\User;
+use App\Services\FurimaDeckSalesAnalysisService;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -147,6 +149,65 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             ->assertDontSee('¥8,999');
     }
 
+    public function test_monthly_analysis_uses_japan_time_for_utc_sale_boundaries(): void
+    {
+        config()->set('app.timezone', 'Asia/Tokyo');
+
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        $marketplace = Marketplace::query()->create([
+            'code' => 'analysis-month-boundary',
+            'name' => '月境界テスト',
+            'base_url' => 'https://example.test',
+            'fee_type' => 'percentage',
+            'default_fee_rate' => 0,
+            'is_active' => true,
+        ]);
+        $product = $user->products()->create([
+            'internal_sku' => 'ANALYTICS-MONTH-BOUNDARY',
+            'product_name' => '月境界分析商品',
+            'condition' => 'used',
+            'purchase_unit_cost' => 0,
+            'purchase_quantity' => 1,
+            'quantity_available' => 0,
+            'inventory_status' => 'out_of_stock',
+        ]);
+
+        foreach ([
+            ['2026-08-31 14:59:59', 10000],
+            ['2026-08-31 15:00:00', 20000],
+            ['2026-09-30 14:59:59', 30000],
+            ['2026-09-30 15:00:00', 50000],
+        ] as [$timestamp, $amount]) {
+            $user->sales()->create([
+                'product_id' => $product->id,
+                'marketplace_id' => $marketplace->id,
+                'internal_sku_snapshot' => $product->internal_sku,
+                'product_name_snapshot' => $product->product_name,
+                'quantity' => 1,
+                'sold_price' => $amount,
+                'sold_at' => CarbonImmutable::parse($timestamp, 'UTC'),
+                'status' => 'completed',
+                'cost_basis' => 0,
+                'sales_fee' => 0,
+                'shipping_fee' => 0,
+                'net_profit' => $amount,
+            ]);
+        }
+
+        $report = app(FurimaDeckSalesAnalysisService::class)->report(
+            $user,
+            CarbonImmutable::createFromFormat('!Y-m', '2026-09', 'Asia/Tokyo'),
+        );
+
+        $this->assertSame(50000, $report['summary']['sales_total']);
+        $this->assertSame(50000, $report['summary']['profit_total']);
+        $this->assertSame(2, $report['summary']['sale_count']);
+    }
+
     public function test_product_inventory_is_shown_without_inventing_sales_data(): void
     {
         $user = User::factory()->create([
@@ -214,9 +275,10 @@ class FurimaDeckSalesAnalysisTest extends TestCase
         $this->actingAs($user)
             ->get(route('furimadeck-accounting.index', ['year' => 2026]))
             ->assertOk()
-            ->assertSee('確定申告・会計連携')
+            ->assertSee('会計データ')
             ->assertSee('2026年分 準備状況')
-            ->assertSee('会計連携は現在未設定です');
+            ->assertSee('freeeまたはMoney Forwardの勘定科目・税区分を設定すると、会計ソフト用CSVを作成できます。')
+            ->assertSee('仕訳の登録はCSVを会計サービス側で取り込んで行います。');
     }
 
     public function test_premium_user_can_sync_and_download_common_accounting_csv(): void
@@ -227,11 +289,11 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             'subscription_status' => 'active',
         ]);
 
-        $this->actingAs($user)->post(route('furimadeck-accounting.sync'), ['year' => 2026])->assertRedirect(route('furimadeck-accounting.index', ['year' => 2026]));
+        $this->actingAs($user)->post(route('furimadeck-accounting.sync'), ['year' => 2026])->assertRedirect(route('furimadeck-accounting.index', ['year' => 2026, 'section' => 'csv']));
         $this->actingAs($user)->get(route('furimadeck-accounting.csv', ['year' => 2026]))->assertOk()->assertHeader('content-type', 'text/csv; charset=UTF-8')->assertDownload('furimadeck-accounting-2026.csv');
     }
 
-    public function test_vendor_csv_redirects_with_error_when_account_mapping_is_missing(): void
+    public function test_vendor_csv_redirects_with_error_when_no_accounting_entries_exist(): void
     {
         $user = User::factory()->create([
             'email_verified_at' => now(),
@@ -240,11 +302,12 @@ class FurimaDeckSalesAnalysisTest extends TestCase
         ]);
 
         config()->set('furimadeck.accounting.export_accounts', []);
+        config()->set('furimadeck.accounting.vendor_journal_export_enabled', true);
 
         $this->actingAs($user)
-            ->get(route('furimadeck-accounting.freee', ['year' => 2026]))
-            ->assertRedirect(route('furimadeck-accounting.index', ['year' => 2026]))
-            ->assertSessionHas('error', '会計CSVの勘定科目設定が不足しています: settlement, sales, fees, cost, inventory');
+            ->post(route('furimadeck-accounting.freee', ['year' => 2026]), ['year' => 2026])
+            ->assertRedirect(route('furimadeck-accounting.index', ['section' => 'csv', 'year' => 2026]))
+            ->assertSessionHas('error', '対象期間に確認済みの販売データがありません。仕入CSVはFurimaDeck 1.0の対応対象外のため、仕入は会計サービス側で別途登録してください。');
     }
 
     public function test_premium_user_can_view_marketplace_suitability_analysis(): void

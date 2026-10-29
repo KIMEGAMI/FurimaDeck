@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\FurimaDeckStripeSubscriptionPriceMatcher;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -14,7 +15,7 @@ class FurimaDeckStripeWebhookController extends Controller
 {
     private const WEBHOOK_TOLERANCE_SECONDS = 300;
 
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, FurimaDeckStripeSubscriptionPriceMatcher $priceMatcher): Response
     {
         if (! (bool) config('furimadeck.cutover_enabled')) {
             return response('Not found', 404);
@@ -49,7 +50,7 @@ class FurimaDeckStripeWebhookController extends Controller
                 'checkout.session.completed' => $this->handleCheckoutCompleted($object),
                 'customer.subscription.created',
                 'customer.subscription.updated',
-                'customer.subscription.deleted' => $this->syncSubscription($object, $eventCreatedAt),
+                'customer.subscription.deleted' => $this->syncSubscription($object, $eventCreatedAt, $priceMatcher),
                 default => null,
             };
         } catch (Throwable) {
@@ -76,7 +77,7 @@ class FurimaDeckStripeWebhookController extends Controller
         }
     }
 
-    private function syncSubscription(mixed $subscription, ?int $eventCreatedAt): void
+    private function syncSubscription(mixed $subscription, ?int $eventCreatedAt, FurimaDeckStripeSubscriptionPriceMatcher $priceMatcher): void
     {
         if (! is_array($subscription)) {
             return;
@@ -99,6 +100,18 @@ class FurimaDeckStripeWebhookController extends Controller
         }
 
         $subscriptionId = data_get($subscription, 'id');
+        if (! $priceMatcher->matchesConfiguredPrice($subscription)) {
+            if (is_string($subscriptionId) && $subscriptionId === $user->stripe_subscription_id) {
+                $user->forceFill([
+                    'subscription_plan' => User::SUBSCRIPTION_INACTIVE,
+                    'subscription_status' => null,
+                    'stripe_subscription_event_created_at' => $eventCreated ?? $user->stripe_subscription_event_created_at,
+                ])->save();
+            }
+
+            return;
+        }
+
         $customerId = data_get($subscription, 'customer');
         $status = (string) data_get($subscription, 'status', '');
         $periodEnd = is_numeric(data_get($subscription, 'current_period_end'))
