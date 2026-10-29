@@ -21,7 +21,7 @@ test('rejects mutable action tags and unpinned container tags', () => {
 
   assert.equal(findings.length, 2);
   assert.match(findings[0], /workflow.yml:2: uses must use a full 40-character commit SHA/);
-  assert.match(findings[1], /workflow.yml:4: image must use an immutable sha256 image digest/);
+  assert.match(findings[1], /workflow.yml:5: image must use an immutable sha256 image digest/);
 });
 
 test('allows local actions and accepts digest-pinned Docker actions', () => {
