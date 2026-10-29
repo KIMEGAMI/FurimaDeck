@@ -18,7 +18,7 @@ export function findUnpinnedWorkflowReferences(contents, source = '<workflow>') 
   const findings = [];
 
   contents.split(/\r?\n/).forEach((line, index) => {
-    const match = line.match(/^\s*(uses|image):\s*(.*?)\s*$/);
+    const match = line.match(/^\s*(?:-\s*)?(uses|image):\s*(.*?)\s*$/);
     if (!match) {
       return;
     }
