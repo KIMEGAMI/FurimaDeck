@@ -912,7 +912,7 @@ class FurimaDeckManualProductPurchaseReconciliationTest extends TestCase
         $this->assertTrue(Schema::connection('furimadeck')->hasTable('manual_product_purchase_reconciliation_refs'));
     }
 
-    public function test_updating_unsent_new_purchase_refreshes_pending_sale_cost_basis(): void
+    public function test_updating_unsent_new_purchase_defers_snapshot_and_pending_sale_refresh_until_evidence_review(): void
     {
         $user = $this->premiumUser();
         $product = $this->newPurchaseAccountingProduct($user, 'PURCHASE-INFO-PENDING-SALE');
@@ -961,11 +961,34 @@ class FurimaDeckManualProductPurchaseReconciliationTest extends TestCase
             ->where('product_id', $product->id)
             ->where('entry_type', AccountingEntry::TYPE_PURCHASE)
             ->firstOrFail();
-        $this->assertSame('2026-10-02', $purchaseEntry->transaction_date?->toDateString());
-        $this->assertSame(1200, (int) $purchaseEntry->purchase_cost);
+        $this->assertSame('2026-10-02', $product->fresh()->purchase_date?->toDateString());
+        $this->assertSame('2026-10-01', $purchaseEntry->transaction_date?->toDateString());
+        $this->assertSame(1000, (int) $purchaseEntry->purchase_cost);
         $this->assertSame(100, (int) $purchaseEntry->other_cost);
         $this->assertSame('review', $purchaseEntry->source_status);
         $this->assertNull($purchaseEntry->confirmed_at);
+        $this->assertSame(1100, (int) $pendingSale->fresh()->cost_basis);
+        $this->assertSame(1900, (int) $pendingSale->fresh()->net_profit);
+
+        $reviewedEvidence = [
+            'document_type' => 'receipt',
+            'tax_category' => 'standard_10',
+            'invoice_issuer' => 'qualified',
+            'reviewed' => '1',
+        ];
+        $this->actingAs($user)
+            ->post(route('furimadeck-accounting.products.purchase.update', $product), [
+                'purchase_evidence' => [
+                    'purchase_unit_cost' => $reviewedEvidence,
+                    'purchase_shipping_cost' => $reviewedEvidence,
+                ],
+            ])
+            ->assertRedirect(route('furimadeck-accounting.products.purchase.edit', $product))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('2026-10-02', $purchaseEntry->fresh()->transaction_date?->toDateString());
+        $this->assertSame(1200, (int) $purchaseEntry->fresh()->purchase_cost);
+        $this->assertSame(100, (int) $purchaseEntry->fresh()->other_cost);
         $this->assertSame(1300, (int) $pendingSale->fresh()->cost_basis);
         $this->assertSame(1700, (int) $pendingSale->fresh()->net_profit);
     }
