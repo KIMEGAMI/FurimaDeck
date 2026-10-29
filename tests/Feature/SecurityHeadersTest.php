@@ -1,11 +1,11 @@
 <?php
 
-namespace Tests\\Feature;
+namespace Tests\Feature;
 
-use App\\Http\\Middleware\\SecurityHeaders;
-use Illuminate\\Http\\Request;
-use Symfony\\Component\\HttpFoundation\\Response;
-use Tests\\TestCase;
+use App\Http\Middleware\SecurityHeaders;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Tests\TestCase;
 
 class SecurityHeadersTest extends TestCase
 {
@@ -60,7 +60,7 @@ class SecurityHeadersTest extends TestCase
         $this->assertNotEmpty($policy, 'An enforcing Content-Security-Policy header is required.');
 
         $segments = collect(explode(';', (string) $policy))
-            ->map(fn (string $directive): array => preg_split('/\\s+/', trim($directive)) ?: [])
+            ->map(fn (string $directive): array => preg_split('/\s+/', trim($directive)) ?: [])
             ->filter(fn (array $parts): bool => $parts !== [])
             ->values();
 
