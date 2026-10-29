@@ -21,13 +21,13 @@ class PwaController extends Controller
             'orientation' => 'portrait-primary',
             'icons' => [
                 [
-                    'src' => asset('images/icons/icon-192.png'),
+                    'src' => asset('images/icons/icon-192.png').'?v=3',
                     'sizes' => '192x192',
                     'type' => 'image/png',
                     'purpose' => 'any maskable',
                 ],
                 [
-                    'src' => asset('images/icons/icon-512.png'),
+                    'src' => asset('images/icons/icon-512.png').'?v=3',
                     'sizes' => '512x512',
                     'type' => 'image/png',
                     'purpose' => 'any maskable',

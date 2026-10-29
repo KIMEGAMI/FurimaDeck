@@ -7,6 +7,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 class ProductImageProcessor
 {
@@ -15,6 +16,8 @@ class ProductImageProcessor
      */
     public function process(UploadedFile $file, int $userId): array
     {
+        $disk = ProductImage::privateStorageDisk();
+
         if (! function_exists('imagewebp')) {
             throw new RuntimeException('画像処理機能が利用できません。しばらくしてからもう一度お試しください。');
         }
@@ -23,33 +26,53 @@ class ProductImageProcessor
 
         $contents = file_get_contents($file->getRealPath());
         $source = $contents === false ? false : @imagecreatefromstring($contents);
+        unset($contents);
 
         if ($source === false) {
             throw new RuntimeException('画像を処理できませんでした。別の画像をお試しください。');
         }
 
         $source = $this->applyOrientation($source, $file);
-        $main = $this->resize($source, (int) config('furimadeck.product_images.max_dimension'));
-        $thumbnail = $this->resize($source, (int) config('furimadeck.product_images.thumbnail_dimension'));
-        imagedestroy($source);
-
         $directory = 'products/'.$userId;
         $identifier = (string) Str::uuid();
         $mainPath = $directory.'/'.$identifier.'.webp';
         $thumbnailPath = $directory.'/'.$identifier.'.thumb.webp';
-        Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->makeDirectory('products');
-        Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->makeDirectory($directory);
 
+        $main = null;
+        $thumbnail = null;
+        $mainFileSize = 0;
         try {
-            $mainWritten = Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->put($mainPath, $this->encodeWebp($main));
-            $thumbnailWritten = Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->put($thumbnailPath, $this->encodeWebp($thumbnail));
-        } finally {
+            $main = $this->resize($source, (int) config('furimadeck.product_images.max_dimension'));
+            imagedestroy($source);
+            $source = null;
+
+            $thumbnail = $this->resize($main, (int) config('furimadeck.product_images.thumbnail_dimension'));
+            $mainWritten = $this->storeWebp($main, $mainPath, $disk);
             imagedestroy($main);
-            imagedestroy($thumbnail);
+            $main = null;
+
+            $thumbnailWritten = $mainWritten && $this->storeWebp($thumbnail, $thumbnailPath, $disk);
+            if ($mainWritten && $thumbnailWritten) {
+                $mainFileSize = Storage::disk($disk)->size($mainPath);
+            }
+        } catch (Throwable $exception) {
+            $this->deleteAfterFailure($disk, [$mainPath, $thumbnailPath]);
+
+            throw $exception;
+        } finally {
+            if ($source instanceof \GdImage) {
+                imagedestroy($source);
+            }
+            if ($main instanceof \GdImage) {
+                imagedestroy($main);
+            }
+            if ($thumbnail instanceof \GdImage) {
+                imagedestroy($thumbnail);
+            }
         }
 
         if (! $mainWritten || ! $thumbnailWritten) {
-            Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->delete([$mainPath, $thumbnailPath]);
+            $this->deleteAfterFailure($disk, [$mainPath, $thumbnailPath]);
 
             throw new RuntimeException('画像の保存に失敗しました。しばらくしてからもう一度お試しください。');
         }
@@ -58,7 +81,7 @@ class ProductImageProcessor
             'original_path' => $mainPath,
             'derived_path' => $thumbnailPath,
             'mime_type' => 'image/webp',
-            'file_size' => Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->size($mainPath),
+            'file_size' => $mainFileSize,
         ];
     }
 
@@ -118,25 +141,50 @@ class ProductImageProcessor
         $targetWidth = max(1, (int) round($width * $ratio));
         $targetHeight = max(1, (int) round($height * $ratio));
         $target = imagecreatetruecolor($targetWidth, $targetHeight);
+        if ($target === false) {
+            throw new RuntimeException('画像の縮小に必要なメモリを確保できませんでした。小さい画像をお試しください。');
+        }
 
         imagealphablending($target, false);
         imagesavealpha($target, true);
-        imagefill($target, 0, 0, imagecolorallocatealpha($target, 0, 0, 0, 127));
-        imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+        $transparent = imagecolorallocatealpha($target, 0, 0, 0, 127);
+        if ($transparent === false || ! imagefill($target, 0, 0, $transparent)
+            || ! imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height)) {
+            imagedestroy($target);
+
+            throw new RuntimeException('画像を縮小できませんでした。別の画像をお試しください。');
+        }
 
         return $target;
     }
 
-    private function encodeWebp(\GdImage $image): string
+    private function storeWebp(\GdImage $image, string $path, string $disk): bool
     {
-        ob_start();
-        $encoded = imagewebp($image, null, (int) config('furimadeck.product_images.webp_quality'));
-        $contents = ob_get_clean();
-
-        if (! $encoded || $contents === false) {
-            throw new RuntimeException('画像をWebP形式に変換できませんでした。別の画像をお試しください。');
+        $stream = tmpfile();
+        if ($stream === false) {
+            return false;
         }
 
-        return $contents;
+        try {
+            $encoded = imagewebp($image, $stream, (int) config('furimadeck.product_images.webp_quality'));
+            $stat = fstat($stream);
+            if (! $encoded || ! is_array($stat) || (int) ($stat['size'] ?? 0) < 1 || ! rewind($stream)) {
+                return false;
+            }
+
+            return Storage::disk($disk)->put($path, $stream);
+        } finally {
+            fclose($stream);
+        }
+    }
+
+    /** @param array<int, string> $paths */
+    private function deleteAfterFailure(string $disk, array $paths): void
+    {
+        try {
+            Storage::disk($disk)->delete($paths);
+        } catch (Throwable) {
+            // Preserve the original upload error; the source upload is never deleted here.
+        }
     }
 }

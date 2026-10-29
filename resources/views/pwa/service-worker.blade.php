@@ -3,10 +3,10 @@ const OFFLINE_TITLE = @json($offlineTitle);
 const OFFLINE_MESSAGE = @json($offlineMessage);
 const OFFLINE_RETRY_LABEL = @json($offlineRetryLabel);
 const CORE_ASSETS = [
-    '/favicon.ico',
+    '/favicon.ico?v=3',
     '/images/logo.png',
-    '/images/icons/icon-192.png',
-    '/images/icons/icon-512.png'
+    '/images/icons/icon-192.png?v=3',
+    '/images/icons/icon-512.png?v=3'
 ];
 
 self.addEventListener('install', (event) => {

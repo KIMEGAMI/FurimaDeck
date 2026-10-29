@@ -25,9 +25,12 @@
             </p>
 
             <div class="mt-7 flex justify-center">
-                <a href="{{ route('maintenance.login') }}" class="inline-flex items-center justify-center rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-200 focus:outline-none focus:ring-4 focus:ring-cyan-200/40">
-                    管理者ログインへ
-                </a>
+                <form method="POST" action="{{ route('maintenance.login') }}">
+                    @csrf
+                    <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-200 focus:outline-none focus:ring-4 focus:ring-cyan-200/40">
+                        管理者ログインへ
+                    </button>
+                </form>
             </div>
 
             <div class="mt-8 rounded-2xl border border-white/10 bg-white/10 p-4 text-left">

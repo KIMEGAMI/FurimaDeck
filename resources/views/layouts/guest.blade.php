@@ -10,8 +10,8 @@
         <title>{{ config('app.name', 'FurimaDeck') }}</title>
 
         <x-pwa-head />
-        <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
-        <link rel="shortcut icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
+        <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
+        <link rel="shortcut icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

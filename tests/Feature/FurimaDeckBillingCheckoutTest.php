@@ -118,7 +118,7 @@ class FurimaDeckBillingCheckoutTest extends TestCase
     public function test_admin_billing_is_complimentary_and_never_calls_stripe(): void
     {
         Http::fake();
-        $user = User::factory()->unverified()->create([
+        $user = User::factory()->create([
             'is_admin' => true,
             'subscription_plan' => User::SUBSCRIPTION_INACTIVE,
         ]);

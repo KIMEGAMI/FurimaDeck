@@ -1594,6 +1594,21 @@ class AuctionItemController extends Controller
             return null;
         }
 
+        $imageSize = @getimagesize($fullPath);
+        $width = is_array($imageSize) ? (int) ($imageSize[0] ?? 0) : 0;
+        $height = is_array($imageSize) ? (int) ($imageSize[1] ?? 0) : 0;
+        $maxSourcePixels = (int) config('furimadeck.product_images.max_source_pixels');
+
+        if (
+            $maxSourcePixels < 1
+            || $width < 1
+            || $height < 1
+            || $width > intdiv(PHP_INT_MAX, $height)
+            || ($width * $height) > $maxSourcePixels
+        ) {
+            return null;
+        }
+
         $extension = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
         $image = match ($extension) {
             'jpg', 'jpeg' => \imagecreatefromjpeg($fullPath),

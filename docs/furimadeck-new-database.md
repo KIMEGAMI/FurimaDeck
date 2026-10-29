@@ -6,7 +6,10 @@ FurimaDeck uses a clean database and does not import legacy FURUPRO data.
 
 Product images are validated on upload, converted to WebP, and saved at a
 maximum dimension of 2000px. A separate thumbnail at a maximum dimension of
-400px is generated for list views. The uploaded source file is not retained.
+400px is generated for list views. Uploads are limited to 2 MB and 12 million
+source pixels; the thumbnail is derived from the resized main image, and WebP
+output is streamed through a temporary file. The uploaded source file is not
+retained.
 
 The PHP runtime that serves FurimaDeck must have the following extensions
 enabled before product management is turned on:
@@ -14,6 +17,13 @@ enabled before product management is turned on:
 ```text
 gd
 exif
+```
+
+On Debian or Ubuntu, install the matching PHP packages before enabling product
+management:
+
+```bash
+sudo apt install -y php-gd php-exif
 ```
 
 `gd` performs resizing and WebP conversion. `exif` normalizes the orientation

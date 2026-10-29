@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Auth\Events\Verified;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
@@ -30,6 +31,74 @@ class EmailVerificationTest extends TestCase
         $response = $this->actingAs($user)->get('/verify-email');
 
         $response->assertStatus(200);
+    }
+
+    public function test_guest_can_view_verification_notice(): void
+    {
+        $this->get(route('verification.notice'))->assertOk();
+        $this->assertGuest();
+    }
+
+    public function test_guest_can_resend_verification_email_with_valid_credentials(): void
+    {
+        Notification::fake();
+        $user = User::factory()->unverified()->create([
+            'email' => 'pending@example.com',
+            'password' => 'password',
+        ]);
+
+        $this->post(route('verification.send'), [
+            'email' => 'pending@example.com',
+            'password' => 'password',
+        ])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'verification-link-requested');
+
+        $this->assertGuest();
+        Notification::assertSentTo($user, VerifyEmail::class);
+    }
+
+    public function test_guest_verification_resend_does_not_reveal_invalid_credentials(): void
+    {
+        Notification::fake();
+        User::factory()->unverified()->create([
+            'email' => 'pending@example.com',
+            'password' => 'password',
+        ]);
+
+        $this->post(route('verification.send'), [
+            'email' => 'pending@example.com',
+            'password' => 'wrong-password',
+        ])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'verification-link-requested')
+            ->assertSessionHasNoErrors();
+
+        $this->assertGuest();
+        Notification::assertNothingSent();
+    }
+
+    public function test_guest_verification_resend_returns_generic_status_when_delivery_fails(): void
+    {
+        $user = User::factory()->unverified()->create([
+            'email' => 'pending@example.com',
+            'password' => 'password',
+        ]);
+
+        Notification::shouldReceive('send')
+            ->once()
+            ->andThrow(new TransportException('SMTP failed'));
+
+        $this->post(route('verification.send'), [
+            'email' => 'pending@example.com',
+            'password' => 'password',
+        ])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'verification-link-requested')
+            ->assertSessionHasNoErrors();
+
+        $this->assertGuest();
+        $this->assertFalse($user->fresh()->hasVerifiedEmail());
     }
 
     public function test_verification_email_resend_does_not_fail_when_mail_transport_fails(): void
@@ -68,7 +137,7 @@ class EmailVerificationTest extends TestCase
         $this->assertFalse($user->fresh()->hasVerifiedEmail());
     }
 
-    public function test_email_verification_link_does_not_authenticate_guests(): void
+    public function test_guest_can_verify_email_and_must_log_in_afterward(): void
     {
         $user = User::factory()->unverified()->create();
 
@@ -82,10 +151,12 @@ class EmailVerificationTest extends TestCase
 
         $response = $this->get($verificationUrl);
 
-        Event::assertNotDispatched(Verified::class);
-        $this->assertFalse($user->fresh()->hasVerifiedEmail());
+        Event::assertDispatched(Verified::class);
+        $this->assertTrue($user->fresh()->hasVerifiedEmail());
         $this->assertGuest();
-        $response->assertRedirect(route('login'));
+        $response
+            ->assertRedirect(route('login', absolute: false))
+            ->assertSessionHas('status', 'email-verified-login');
     }
 
     public function test_authenticated_user_can_verify_their_own_email(): void

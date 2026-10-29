@@ -81,7 +81,7 @@ jobs:
 
     steps:
       - name: Check out reviewed main
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v4
         with:
           ref: ${{ github.sha }}
 
@@ -164,6 +164,8 @@ jobs:
             echo "main advanced after this deployment was dispatched; rerun after checking the new commit." >&2
             exit 1
           fi
+          echo "Entering Laravel maintenance mode before changing the live application. If deployment stops before it is cleared, keep the site unavailable until code and services are checked."
+          sudo -u www-data "$PHP_BIN" artisan down
           git merge --ff-only "$DEPLOY_SHA"
           for writable_path in "$DEPLOY_PATH/vendor" "$DEPLOY_PATH/node_modules" "$DEPLOY_PATH/public/build"; do
             if [[ -L "$writable_path" ]]; then
@@ -196,4 +198,5 @@ jobs:
           sudo systemctl is-active --quiet furimadeck-queue.service
           sudo systemctl is-active --quiet furimadeck-scheduler.timer
           sudo systemctl is-active --quiet apache2
+          sudo -u www-data "$PHP_BIN" artisan up
           SCRIPT

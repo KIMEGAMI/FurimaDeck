@@ -1,8 +1,8 @@
 @if ($errors->any())<div class="mb-5 rounded bg-red-50 p-4 font-bold text-red-800">{{ $errors->first() }}</div>@endif
 @php($editing = isset($product))
-@php($purchaseDate = $editing && $product->purchase_date ? $product->purchase_date->format('Y-m-d') : '')
 @php($remainingImageSlots = max(0, (int) config('furimadeck.product_images.max_count') - ($editing ? $product->images->count() : 0)))
 @php($selectedCategoryId = (string) old('category_id', $product->category_id ?? ''))
+@php($selectedInitialMarketplaceId = (string) old('initial_marketplace_id', ''))
 @php($categoryList = $categories->map(fn ($category) => ['id' => $category->id, 'parent_id' => $category->parent_id, 'name' => $category->name])->values())
 @include('products.partials.images')
 <section class="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -18,9 +18,17 @@
 </div>
 <label class="block text-sm font-bold text-slate-700">商品状態<select name="condition" class="mt-1 w-full rounded border-slate-300 text-slate-900">@foreach($conditions as $condition)<option value="{{ $condition }}" @selected(old('condition', $product->condition ?? 'used') === $condition)>{{ \App\Models\Product::conditionLabel($condition) }}</option>@endforeach</select></label>
 <label class="block text-sm font-bold text-slate-700 md:col-span-2">商品説明<textarea name="description_base" rows="5" maxlength="10000" placeholder="商品の特徴、状態、注意点などを入力してください。" class="mt-1 w-full rounded border-slate-300 text-slate-900">{{ old('description_base', $product->description_base ?? '') }}</textarea></label>
-<div class="md:col-span-2 mt-2 border-t border-slate-200 pt-4"><h3 class="text-base font-black text-slate-900">仕入・商品詳細（任意）</h3><p class="mt-1 text-sm text-slate-600">登録後に編集できる補足情報です。</p></div>
-<label class="block text-sm font-bold text-slate-700">仕入単価<input required min="0" type="number" name="purchase_unit_cost" value="{{ old('purchase_unit_cost', $product->purchase_unit_cost ?? 0) }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
 </div></section>
+@unless($editing)
+<section class="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-4">
+    <h3 class="text-base font-black text-slate-900">初回出品価格（任意）</h3>
+    <p class="mt-1 text-sm text-slate-700">販売先と価格を入力すると、商品登録と同時に出品下書きを作成します。</p>
+    <div class="mt-3 grid gap-4 md:grid-cols-2">
+        <label class="block text-sm font-bold text-slate-700">販売先<select name="initial_marketplace_id" class="mt-1 w-full rounded border-slate-300 text-slate-900"><option value="">選択してください</option>@foreach($marketplaces as $marketplace)<option value="{{ $marketplace->id }}" @selected($selectedInitialMarketplaceId === (string) $marketplace->id)>{{ $marketplace->name }}</option>@endforeach</select></label>
+        <label class="block text-sm font-bold text-slate-700">出品価格<input min="0" type="number" name="initial_listing_price" value="{{ old('initial_listing_price', '') }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"><span class="mt-1 block text-xs font-normal text-slate-600">登録後に「出品管理」で編集・追加できます。</span></label>
+    </div>
+</section>
+@endunless
 <script>
     const categoryInput = document.getElementById('category_id');
 

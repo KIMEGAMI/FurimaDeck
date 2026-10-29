@@ -24,7 +24,12 @@ class MarketplaceFeeService
 
     public function amount(int $soldPrice, Marketplace $marketplace): int
     {
-        $rateInBasisPoints = (int) round($this->rate($marketplace) * self::RATE_SCALE);
+        return $this->amountAtRate($soldPrice, $this->rate($marketplace));
+    }
+
+    public function amountAtRate(int $soldPrice, float $rate): int
+    {
+        $rateInBasisPoints = (int) round($rate * self::RATE_SCALE);
 
         return intdiv(max(0, $soldPrice) * $rateInBasisPoints, self::PERCENT_SCALE * self::RATE_SCALE);
     }

@@ -4,8 +4,11 @@ use App\Models\AuctionItem;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+
+Schedule::command('furimadeck:accounting-recover-stale-sends')->everyMinute()->withoutOverlapping();
 
 Artisan::command('furugi:dummy-sales', function () {
     $user = User::query()->first();

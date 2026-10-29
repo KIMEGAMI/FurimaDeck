@@ -12,10 +12,17 @@ use App\Http\Controllers\CategorySalesController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FurimaDeckAccountController;
+use App\Http\Controllers\FurimaDeckAccountingBatchController;
 use App\Http\Controllers\FurimaDeckAccountingConnectionController;
 use App\Http\Controllers\FurimaDeckAccountingController;
 use App\Http\Controllers\FurimaDeckAccountingExportController;
+use App\Http\Controllers\FurimaDeckAccountingJournalVerificationController;
+use App\Http\Controllers\FurimaDeckAccountingProductController;
+use App\Http\Controllers\FurimaDeckAccountingPurchaseCapReviewController;
+use App\Http\Controllers\FurimaDeckAccountingPurchaseReconciliationController;
+use App\Http\Controllers\FurimaDeckAccountingSaleController;
 use App\Http\Controllers\FurimaDeckAccountingSyncController;
+use App\Http\Controllers\FurimaDeckAccountingSyncResolutionController;
 use App\Http\Controllers\FurimaDeckAccountingVendorExportController;
 use App\Http\Controllers\FurimaDeckAccountingWorkflowController;
 use App\Http\Controllers\FurimaDeckActivityController;
@@ -43,6 +50,7 @@ use App\Http\Controllers\SubscriptionCheckoutController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\SubscriptionPortalController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Middleware\EnsureFurimaDeckAccountingProviderApiEnabled;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/auth/google', [GoogleController::class, 'redirect'])->name('google.redirect');
@@ -64,13 +72,13 @@ Route::get('/privacy', [LegalPageController::class, 'privacy'])->name('legal.pri
 Route::get('/commercial-transactions', [LegalPageController::class, 'commercial'])->name('legal.commercial');
 Route::get('/faq', [LegalPageController::class, 'faq'])->name('legal.faq');
 Route::get('/contact', [ContactController::class, 'create'])->name('legal.contact');
-Route::post('/contact', [ContactController::class, 'store'])->name('legal.contact.store');
+Route::post('/contact', [ContactController::class, 'store'])->middleware('throttle:public-contact')->name('legal.contact.store');
 
 Route::get('/features', [MarketingPageController::class, 'features'])->name('marketing.features');
 Route::get('/pricing', [MarketingPageController::class, 'pricing'])->name('marketing.pricing');
 Route::get('/use-cases', [MarketingPageController::class, 'useCases'])->name('marketing.use-cases');
 
-Route::get('/maintenance-login', MaintenanceLoginController::class)->middleware('furupro.legacy')->name('maintenance.login');
+Route::post('/maintenance-login', MaintenanceLoginController::class)->name('maintenance.login');
 
 Route::get('/', HomeController::class)->name('home');
 
@@ -81,6 +89,7 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('furimadeck.products')->group(function () {
         Route::get('/furimadeck-dashboard', FurimaDeckDashboardController::class)->name('furimadeck-dashboard');
+        Route::view('/manual', 'manual')->name('furimadeck-manual');
         Route::get('/furimadeck-billing', [FurimaDeckBillingController::class, 'index'])->name('furimadeck-billing.index');
         Route::post('/furimadeck-billing/checkout', [FurimaDeckBillingController::class, 'checkout'])->name('furimadeck-billing.checkout');
         Route::post('/furimadeck-billing/portal', [FurimaDeckBillingController::class, 'portal'])->name('furimadeck-billing.portal');
@@ -93,6 +102,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('/furimadeck-account', [FurimaDeckAccountController::class, 'update'])->name('furimadeck-account.update');
         Route::delete('/furimadeck-account', [FurimaDeckAccountController::class, 'destroy'])->name('furimadeck-account.destroy');
         Route::get('/furimadeck-activity', [FurimaDeckActivityController::class, 'index'])->name('furimadeck-activity.index');
+        Route::get('/furimadeck-accounting/products/{product}/purchase-info', [FurimaDeckAccountingProductController::class, 'purchaseInfo'])->name('furimadeck-accounting.products.purchase-info.edit');
+        Route::put('/furimadeck-accounting/products/{product}/purchase-info', [FurimaDeckAccountingProductController::class, 'updatePurchaseInfo'])->name('furimadeck-accounting.products.purchase-info.update');
         Route::middleware('furimadeck.premium')->group(function () {
             Route::get('/furimadeck-export/products', [FurimaDeckExportController::class, 'products'])->name('furimadeck-export.products');
             Route::get('/furimadeck-export/products/backup', [FurimaDeckExportController::class, 'productBackup'])->name('furimadeck-export.products-backup');
@@ -110,6 +121,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/furimadeck-sales', [FurimaDeckSaleController::class, 'index'])->name('furimadeck-sales.index');
             Route::get('/furimadeck-sales/create', [FurimaDeckSaleController::class, 'create'])->name('furimadeck-sales.create');
             Route::post('/furimadeck-sales', [FurimaDeckSaleController::class, 'store'])->name('furimadeck-sales.store');
+            Route::get('/furimadeck-sales/{sale}/edit', [FurimaDeckSaleController::class, 'edit'])->name('furimadeck-sales.edit');
+            Route::put('/furimadeck-sales/{sale}', [FurimaDeckSaleController::class, 'update'])->name('furimadeck-sales.update');
             Route::post('/furimadeck-sales/{sale}/cancel', [FurimaDeckSaleController::class, 'cancel'])->name('furimadeck-sales.cancel');
             Route::patch('/furimadeck-sales/{sale}/status', [FurimaDeckSaleController::class, 'advanceStatus'])->name('furimadeck-sales.status');
             Route::post('/furimadeck-sales/{sale}/return', [FurimaDeckSaleController::class, 'returnSale'])->name('furimadeck-sales.return');
@@ -124,13 +137,33 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/furimadeck-analytics/suitability', [FurimaDeckSalesAnalysisController::class, 'marketplaceSuitability'])->name('furimadeck-analytics.suitability');
             Route::get('/furimadeck-improvement', [FurimaDeckSalesImprovementController::class, 'index'])->name('furimadeck-improvement.index');
             Route::get('/furimadeck-accounting', [FurimaDeckAccountingController::class, 'index'])->name('furimadeck-accounting.index');
+            Route::get('/furimadeck-accounting/purchase-caps', [FurimaDeckAccountingPurchaseCapReviewController::class, 'index'])->name('furimadeck-accounting.purchase-caps.index');
+            Route::post('/furimadeck-accounting/purchase-caps', [FurimaDeckAccountingPurchaseCapReviewController::class, 'store'])->name('furimadeck-accounting.purchase-caps.store');
+            Route::put('/furimadeck-accounting/purchase-caps/{review}', [FurimaDeckAccountingPurchaseCapReviewController::class, 'update'])->name('furimadeck-accounting.purchase-caps.update');
+            Route::get('/furimadeck-accounting/products/{product}/purchase', [FurimaDeckAccountingProductController::class, 'purchase'])->name('furimadeck-accounting.products.purchase.edit');
+            Route::post('/furimadeck-accounting/products/{product}/purchase', [FurimaDeckAccountingProductController::class, 'updatePurchase'])->name('furimadeck-accounting.products.purchase.update');
+            Route::get('/furimadeck-accounting/sales/{sale}/expenses', [FurimaDeckAccountingSaleController::class, 'edit'])->name('furimadeck-accounting.sales.expenses.edit');
+            Route::put('/furimadeck-accounting/sales/{sale}/amounts', [FurimaDeckAccountingSaleController::class, 'updateAmounts'])->name('furimadeck-accounting.sales.amounts.update');
+            Route::put('/furimadeck-accounting/sales/{sale}/expenses', [FurimaDeckAccountingSaleController::class, 'update'])->name('furimadeck-accounting.sales.expenses.update');
+            Route::put('/furimadeck-accounting/sales/{sale}/expense-sources/{provider}', [FurimaDeckAccountingSaleController::class, 'updateProviderSources'])
+                ->whereIn('provider', ['freee', 'money_forward'])
+                ->name('furimadeck-accounting.sales.expense-sources.update');
+            Route::post('/furimadeck-accounting/products/{product}/purchase-reconciliation/{provider}', [FurimaDeckAccountingPurchaseReconciliationController::class, 'store'])
+                ->whereIn('provider', ['freee', 'money_forward'])
+                ->name('products.accounting-purchase-reconciliation.store');
             Route::post('/furimadeck-accounting/sync', [FurimaDeckAccountingExportController::class, 'sync'])->name('furimadeck-accounting.sync');
+            Route::post('/furimadeck-accounting/purchases/prepare', [FurimaDeckAccountingWorkflowController::class, 'preparePurchases'])->name('furimadeck-accounting.purchases.prepare');
             Route::post('/furimadeck-accounting/review', [FurimaDeckAccountingWorkflowController::class, 'review'])->name('furimadeck-accounting.review');
             Route::post('/furimadeck-accounting/confirm', [FurimaDeckAccountingWorkflowController::class, 'confirm'])->name('furimadeck-accounting.confirm');
-            Route::post('/furimadeck-accounting/{accountingEntry}/send/freee', [FurimaDeckAccountingSyncController::class, 'freee'])->name('furimadeck-accounting.send.freee');
-            Route::post('/furimadeck-accounting/{accountingEntry}/send/money-forward', [FurimaDeckAccountingSyncController::class, 'moneyForward'])->name('furimadeck-accounting.send.money-forward');
+            Route::post('/furimadeck-accounting/send/freee', [FurimaDeckAccountingBatchController::class, 'sendFreee'])->middleware(EnsureFurimaDeckAccountingProviderApiEnabled::class)->name('furimadeck-accounting.send.freee.batch');
+            Route::post('/furimadeck-accounting/send/money-forward', [FurimaDeckAccountingBatchController::class, 'sendMoneyForward'])->middleware(EnsureFurimaDeckAccountingProviderApiEnabled::class)->name('furimadeck-accounting.send.money-forward.batch');
+            Route::post('/furimadeck-accounting/{accountingEntry}/send/freee', [FurimaDeckAccountingSyncController::class, 'freee'])->middleware(EnsureFurimaDeckAccountingProviderApiEnabled::class)->name('furimadeck-accounting.send.freee');
+            Route::post('/furimadeck-accounting/{accountingEntry}/send/money-forward', [FurimaDeckAccountingSyncController::class, 'moneyForward'])->middleware(EnsureFurimaDeckAccountingProviderApiEnabled::class)->name('furimadeck-accounting.send.money-forward');
+            Route::post('/furimadeck-accounting/{accountingEntry}/sync/{provider}/resolve', [FurimaDeckAccountingSyncResolutionController::class, 'resolve'])->name('furimadeck-accounting.sync.resolve');
+            Route::post('/furimadeck-accounting/{accountingEntry}/sync/{provider}/verify', [FurimaDeckAccountingJournalVerificationController::class, 'verify'])->middleware(EnsureFurimaDeckAccountingProviderApiEnabled::class)->name('furimadeck-accounting.sync.verify');
             Route::get('/furimadeck-accounting.csv', [FurimaDeckAccountingExportController::class, 'csv'])->name('furimadeck-accounting.csv');
-            Route::get('/furimadeck-accounting/freee.csv', [FurimaDeckAccountingVendorExportController::class, 'freee'])->name('furimadeck-accounting.freee');
+            Route::get('/furimadeck-accounting-adjustments.csv', [FurimaDeckAccountingExportController::class, 'adjustmentsCsv'])->name('furimadeck-accounting.adjustments.csv');
+            Route::post('/furimadeck-accounting/freee.csv', [FurimaDeckAccountingVendorExportController::class, 'freee'])->name('furimadeck-accounting.freee');
             Route::get('/furimadeck-accounting/connect/{provider}', [FurimaDeckAccountingConnectionController::class, 'connect'])->name('furimadeck-accounting.connect');
             Route::get('/furimadeck-accounting/callback/{provider}', [FurimaDeckAccountingConnectionController::class, 'callback'])->name('furimadeck-accounting.callback');
             Route::get('/furimadeck-accounting/freee/setup', [FurimaDeckAccountingConnectionController::class, 'freeeSetup'])->name('furimadeck-accounting.freee.setup');
@@ -138,7 +171,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/furimadeck-accounting/money-forward/setup', [FurimaDeckAccountingConnectionController::class, 'moneyForwardSetup'])->name('furimadeck-accounting.money-forward.setup');
             Route::post('/furimadeck-accounting/money-forward/setup', [FurimaDeckAccountingConnectionController::class, 'saveMoneyForwardSetup'])->name('furimadeck-accounting.money-forward.setup.save');
             Route::delete('/furimadeck-accounting/connect/{provider}', [FurimaDeckAccountingConnectionController::class, 'disconnect'])->name('furimadeck-accounting.disconnect');
-            Route::get('/furimadeck-accounting/money-forward.csv', [FurimaDeckAccountingVendorExportController::class, 'moneyForward'])->name('furimadeck-accounting.money-forward');
+            Route::post('/furimadeck-accounting/money-forward.csv', [FurimaDeckAccountingVendorExportController::class, 'moneyForward'])->name('furimadeck-accounting.money-forward');
         });
         Route::get('/products/category-attributes', [ProductController::class, 'categoryAttributes'])
             ->name('products.category-attributes');
@@ -148,6 +181,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('/products/{product}/images/order', [ProductController::class, 'reorderImages'])->name('products.images.order');
         Route::delete('/products/{product}/images/{image}', [ProductController::class, 'destroyImage'])->name('products.images.destroy');
         Route::resource('products', ProductController::class)->except('show');
+        Route::patch('/listings/{listing}/marketplace-price', [ListingController::class, 'updateMarketplaceAndPrice'])->name('listings.marketplace-price');
         Route::resource('listings', ListingController::class)->except('show');
         Route::get('/suppliers', [SupplierController::class, 'index'])->name('suppliers.index');
         Route::post('/suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
@@ -155,40 +189,43 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/suppliers/{supplier}', [SupplierController::class, 'destroy'])->name('suppliers.destroy');
     });
 
+    // Administrative pages remain available after the FurimaDeck cutover.
+    // They are protected by the surrounding auth/verified middleware and
+    // perform their own administrator authorization checks.
+    Route::get('/admin/maintenance', [MaintenanceController::class, 'index'])
+        ->name('admin.maintenance.index');
+
+    Route::patch('/admin/maintenance', [MaintenanceController::class, 'update'])
+        ->name('admin.maintenance.update');
+
+    Route::post('/admin/notices', [AdminNoticeController::class, 'store'])
+        ->name('admin.notices.store');
+
+    Route::get('/admin/users', [AdminUserController::class, 'index'])
+        ->name('admin.users.index');
+
+    Route::delete('/admin/users/{user}', [AdminUserController::class, 'destroy'])
+        ->name('admin.users.destroy');
+
+    Route::get('/admin/bulk-mail', [BulkMailController::class, 'index'])
+        ->name('admin.bulk-mail.index');
+
+    Route::post('/admin/bulk-mail', [BulkMailController::class, 'store'])
+        ->name('admin.bulk-mail.store');
+
+    Route::get('/admin/growth', [GrowthController::class, 'index'])
+        ->name('admin.growth.index');
+
+    Route::patch('/admin/growth/inquiries/{contactInquiry}', [GrowthController::class, 'handleInquiry'])
+        ->name('admin.growth.inquiries.handle');
+
+    Route::get('/notices', [NoticeController::class, 'index'])
+        ->name('notices.index');
+
+    Route::get('/notices/{notice}', [NoticeController::class, 'show'])
+        ->name('notices.show');
+
     Route::middleware('furupro.legacy')->group(function () {
-
-        Route::get('/admin/maintenance', [MaintenanceController::class, 'index'])
-            ->name('admin.maintenance.index');
-
-        Route::patch('/admin/maintenance', [MaintenanceController::class, 'update'])
-            ->name('admin.maintenance.update');
-
-        Route::post('/admin/notices', [AdminNoticeController::class, 'store'])
-            ->name('admin.notices.store');
-
-        Route::get('/admin/users', [AdminUserController::class, 'index'])
-            ->name('admin.users.index');
-
-        Route::delete('/admin/users/{user}', [AdminUserController::class, 'destroy'])
-            ->name('admin.users.destroy');
-
-        Route::get('/admin/bulk-mail', [BulkMailController::class, 'index'])
-            ->name('admin.bulk-mail.index');
-
-        Route::post('/admin/bulk-mail', [BulkMailController::class, 'store'])
-            ->name('admin.bulk-mail.store');
-
-        Route::get('/admin/growth', [GrowthController::class, 'index'])
-            ->name('admin.growth.index');
-
-        Route::patch('/admin/growth/inquiries/{contactInquiry}', [GrowthController::class, 'handleInquiry'])
-            ->name('admin.growth.inquiries.handle');
-
-        Route::get('/notices', [NoticeController::class, 'index'])
-            ->name('notices.index');
-
-        Route::get('/notices/{notice}', [NoticeController::class, 'show'])
-            ->name('notices.show');
 
         Route::get('/auction-items/csv-import', [AuctionItemController::class, 'csvImport'])
             ->middleware('premium')

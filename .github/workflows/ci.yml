@@ -7,8 +7,6 @@ on:
   push:
     branches:
       - main
-      - 'codex/**'
-      - 'codex-*'
   workflow_dispatch:
 
 permissions:
@@ -37,35 +35,55 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Verify immutable workflow dependencies
+        run: |
+          node scripts/check-github-actions-pinned.mjs
+          node --test scripts/check-github-actions-pinned.test.mjs
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: ${{ env.PHP_VERSION }}
           extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
           coverage: none
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --no-progress --ansi
 
+      - name: Validate Composer metadata
+        run: composer validate --no-check-publish
+
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
+
+      - name: Test E2E runtime safety
+        run: npm run test:e2e-runtime
 
       - name: Prepare application key
         run: |
           cp .env.example .env
           php artisan key:generate --ansi
 
+      - name: Compile Blade views
+        run: php artisan view:cache
+
+      - name: Validate FurimaDeck routes
+        run: php artisan route:list --path=furimadeck
+
       - name: Configure ephemeral E2E demo user
         run: |
           demo_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${demo_password}"
           {
             echo "APP_URL=http://127.0.0.1:8002"
             echo "SESSION_DRIVER=file"
@@ -109,7 +127,15 @@ jobs:
         run: vendor/bin/pint --test
 
       - name: Run PHP tests
-        run: composer test
+        env:
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+          FURIMADECK_R2_LIVE_TEST: '0'
+          FURIMADECK_R2_PRODUCTION_LIVE_TEST: '0'
+        run: |
+          php artisan config:clear --ansi
+          vendor/bin/phpunit --list-groups
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues --exclude-group=live-r2 --exclude-group=mariadb-gate
 
       - name: Audit PHP dependencies
         run: composer audit --locked --no-interaction
@@ -122,7 +148,7 @@ jobs:
     timeout-minutes: 10
     services:
       mariadb:
-        image: mariadb:11.4
+        image: mariadb@sha256:d1891ede5a559f1086f55053bb8cc1569b0298338c4d72d71725a7f74f6ba620
         env:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
           MARIADB_DATABASE: furimadeck_csv_gate
@@ -136,10 +162,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: ${{ env.PHP_VERSION }}
           extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip

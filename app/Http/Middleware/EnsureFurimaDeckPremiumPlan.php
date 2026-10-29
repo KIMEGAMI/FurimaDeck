@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -10,7 +11,9 @@ class EnsureFurimaDeckPremiumPlan
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user()?->hasActiveSubscription()) {
+        $user = $request->user();
+
+        if ($user instanceof User && $user->hasActiveSubscription()) {
             return $next($request);
         }
 
@@ -20,7 +23,7 @@ class EnsureFurimaDeckPremiumPlan
             'furimadeck-improvement.index' => '販売改善はPremiumプランで利用できます。',
             default => 'この機能はPremiumプランで利用できます。',
         };
-        if ($request->expectsJson()) {
+        if ($request->is('api/*') || $request->expectsJson()) {
             return response()->json(['message' => $message], 403);
         }
 

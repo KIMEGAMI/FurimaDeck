@@ -60,7 +60,7 @@
             <section class="mt-8 rounded-2xl border border-lime-300/25 bg-slate-950/80 p-5 shadow-2xl backdrop-blur-md">
                 <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div><p class="text-xs font-black tracking-[0.18em] text-lime-300">PROFIT SUMMARY</p><h2 class="mt-1 text-xl font-black text-white">利益サマリー</h2><p class="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-200">今月の利益、利益率、出品中商品の見込み利益をまとめて確認できます。仕入れ・値下げ・追加出品の判断に使ってください。</p></div>
-                    <a href="{{ $isPremium ? route('furimadeck-sales.index') : route('furimadeck-billing.index') }}" class="inline-flex items-center justify-center rounded-lg bg-lime-300 px-5 py-3 text-sm font-black text-slate-950 hover:bg-lime-200">売上詳細を見る</a>
+                    <a href="{{ $isPremium ? route('furimadeck-analytics.index') : route('furimadeck-billing.index') }}" class="inline-flex items-center justify-center rounded-lg bg-lime-300 px-5 py-3 text-sm font-black text-slate-950 hover:bg-lime-200">売上分析を見る</a>
                 </div>
                 <div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <article class="rounded-xl border border-lime-300/20 bg-lime-400/10 p-4"><p class="text-xs font-black text-lime-200">今月利益</p><p class="mt-2 text-2xl font-black {{ $currentMonth['profit'] < 0 ? 'text-red-300' : 'text-lime-200' }}">¥{{ number_format($currentMonth['profit']) }}</p><p class="mt-2 text-xs font-bold text-slate-200">利益率 {{ number_format($dashboard['current_month_profit_margin'], 1) }}%</p></article>
@@ -71,11 +71,11 @@
             </section>
 
             <section class="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-5">
-                <article class="rounded-2xl border border-cyan-300/20 bg-slate-950/75 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-slate-200">総商品数</p><p class="mt-3 text-3xl font-black text-white">{{ number_format($portfolio['product_count']) }}</p></article>
-                <article class="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-cyan-200">出品中</p><p class="mt-3 text-3xl font-black text-cyan-100">{{ number_format($portfolio['active_listing_count']) }}</p></article>
-                <article class="rounded-2xl border border-violet-300/20 bg-violet-400/10 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-violet-200">売上登録件数</p><p class="mt-3 text-3xl font-black text-violet-100">{{ number_format($portfolio['sold_count']) }}</p><p class="mt-2 text-xs font-bold text-slate-300">在庫0の商品 {{ number_format($portfolio['zero_stock_product_count']) }}件</p></article>
-                <article class="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-emerald-200">累計売上</p><p class="mt-3 text-2xl font-black text-emerald-100">¥{{ number_format($summary['sales_total']) }}</p></article>
-                <article class="rounded-2xl border border-orange-300/20 bg-orange-400/10 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-orange-200">累計販売手数料</p><p class="mt-3 text-2xl font-black text-orange-100">¥{{ number_format($summary['sales_fee_total']) }}</p></article>
+                <article class="rounded-2xl border border-cyan-300/30 bg-slate-950/90 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-slate-200">総商品数</p><p class="mt-3 text-3xl font-black text-white">{{ number_format($portfolio['product_count']) }}</p></article>
+                <article class="rounded-2xl border border-cyan-300/30 bg-slate-950/90 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-cyan-200">出品中</p><p class="mt-3 text-3xl font-black text-cyan-100">{{ number_format($portfolio['active_listing_count']) }}</p></article>
+                <article class="rounded-2xl border border-violet-300/30 bg-slate-950/90 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-violet-200">売上登録件数</p><p class="mt-3 text-3xl font-black text-violet-100">{{ number_format($portfolio['sold_count']) }}</p><p class="mt-2 text-xs font-bold text-slate-300">在庫0の商品 {{ number_format($portfolio['zero_stock_product_count']) }}件</p></article>
+                <article class="rounded-2xl border border-emerald-300/30 bg-slate-950/90 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-emerald-200">累計売上</p><p class="mt-3 text-2xl font-black text-emerald-100">¥{{ number_format($summary['sales_total']) }}</p></article>
+                <article class="rounded-2xl border border-orange-300/30 bg-slate-950/90 p-5 shadow-xl backdrop-blur-md"><p class="text-sm font-bold text-orange-200">累計販売手数料</p><p class="mt-3 text-2xl font-black text-orange-100">¥{{ number_format($summary['sales_fee_total']) }}</p></article>
             </section>
 
             <section class="mt-8 rounded-2xl border border-emerald-300/25 bg-slate-950/80 p-5 shadow-2xl backdrop-blur-md">
@@ -127,4 +127,19 @@
             });
         }
     </script>
+    <footer class="border-t border-cyan-100 bg-white py-8">
+        <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 text-sm font-bold text-cyan-900 sm:px-6 lg:px-8">
+            <nav class="flex flex-wrap gap-x-5 gap-y-2" aria-label="フッター">
+                <a href="{{ route('marketing.features') }}" class="hover:text-cyan-600">機能</a>
+                <a href="{{ route('marketing.use-cases') }}" class="hover:text-cyan-600">活用例</a>
+                <a href="{{ route('marketing.pricing') }}" class="hover:text-cyan-600">料金</a>
+                <a href="{{ route('legal.terms') }}" class="hover:text-cyan-600">利用規約</a>
+                <a href="{{ route('legal.privacy') }}" class="hover:text-cyan-600">プライバシーポリシー</a>
+                <a href="{{ route('legal.commercial') }}" class="hover:text-cyan-600">特定商取引法に基づく表記</a>
+                <a href="{{ route('legal.faq') }}" class="hover:text-cyan-600">よくある質問</a>
+                <a href="{{ route('legal.contact') }}" class="hover:text-cyan-600">お問い合わせ</a>
+            </nav>
+            <p>&copy; 2026 FurimaDeck. All rights reserved.</p>
+        </div>
+    </footer>
 </x-app-layout>

@@ -1,4 +1,7 @@
-@php($pageSeo = config('seo.pages')['legal.contact'] ?? [])
+@php
+    $pageSeo = config('seo.pages')['legal.contact'] ?? [];
+    $contactEmail = config('legal.contact_email');
+@endphp
 
 <x-legal-layout
     title="お問い合わせ"
@@ -7,6 +10,9 @@
 >
     <h2>お問い合わせフォーム</h2>
     <p>FurimaDeckの使い方、不具合、アカウント、個人情報の取り扱いに関するお問い合わせを受け付けています。</p>
+    @if ($contactEmail)
+        <p class="mt-3">メールでのお問い合わせ: <a href="mailto:{{ $contactEmail }}" class="font-bold text-cyan-800 underline underline-offset-2">{{ $contactEmail }}</a></p>
+    @endif
     <p>状況が分かるように、発生した画面、操作内容、表示されたエラーの概要を添えてください。パスワード、APIキー、決済カード番号などの機密情報は入力しないでください。</p>
 
     <form method="POST" action="{{ route('legal.contact.store') }}" class="not-prose mt-8 space-y-6 rounded-lg border border-slate-200 bg-slate-50 p-5">

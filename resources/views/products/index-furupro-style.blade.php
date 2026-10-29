@@ -3,7 +3,7 @@
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-2xl font-black text-cyan-200">商品一覧</h2>
-                <p class="mt-1 text-sm font-bold text-cyan-100">画像、在庫、仕入原価、出品状況をまとめて確認できます。</p>
+                <p class="mt-1 text-sm font-bold text-cyan-100">画像、在庫、出品状況、売上情報をまとめて確認できます。</p>
             </div>
             <div class="grid grid-cols-2 gap-3">
                 <a href="{{ route('products.create') }}" class="inline-flex items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white shadow transition hover:bg-blue-800">商品を登録</a>
@@ -18,7 +18,6 @@
                     <div class="mb-6 rounded-2xl border border-{{ $color }}-200 bg-{{ $color }}-50 px-6 py-5 font-bold text-{{ $color }}-800">{{ session($flashKey) }}</div>
                 @endif
             @endforeach
-
             <section class="mb-6 rounded-3xl border border-slate-200 bg-white p-4 shadow">
                 <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
                     @foreach (['' => 'すべて', 'in_stock' => '在庫あり', 'out_of_stock' => '在庫なし'] as $status => $label)
@@ -26,9 +25,9 @@
                             $isActive = ($filters['inventory_status'] ?? '') === $status;
                             $tone = $status === 'out_of_stock' ? 'bg-slate-600' : 'bg-emerald-600';
                         @endphp
-                        <a href="{{ route('products.index', array_filter(['inventory_status' => $status, 'keyword' => $filters['keyword'] ?? null, 'category_id' => $filters['category_id'] ?? null, 'supplier_id' => $filters['supplier_id'] ?? null])) }}" class="rounded-2xl px-4 py-3 text-center text-sm font-black transition {{ $isActive ? $tone.' text-white shadow' : 'bg-slate-100 text-slate-900 hover:bg-slate-200' }}">{{ $label }}</a>
+                        <a href="{{ route('products.index', array_filter(['inventory_status' => $status, 'keyword' => $filters['keyword'] ?? null, 'category_id' => $filters['category_id'] ?? null])) }}" class="rounded-2xl px-4 py-3 text-center text-sm font-black transition {{ $isActive ? $tone.' text-white shadow' : 'bg-slate-100 text-slate-900 hover:bg-slate-200' }}">{{ $label }}</a>
                     @endforeach
-                    <a href="{{ route('products.index', array_filter(['inventory_status' => $filters['inventory_status'] ?? null, 'keyword' => $filters['keyword'] ?? null, 'category_id' => $filters['category_id'] ?? null, 'supplier_id' => $filters['supplier_id'] ?? null, 'stale_days' => $longTermInventoryDays])) }}" class="rounded-2xl px-4 py-3 text-center text-sm font-black transition {{ ($filters['stale_days'] ?? null) == $longTermInventoryDays ? 'bg-amber-500 text-slate-950 shadow' : 'bg-amber-50 text-amber-950 hover:bg-amber-100' }}">{{ $longTermInventoryDays }}日以上未販売</a>
+                    <a href="{{ route('products.index', array_filter(['inventory_status' => $filters['inventory_status'] ?? null, 'keyword' => $filters['keyword'] ?? null, 'category_id' => $filters['category_id'] ?? null, 'stale_days' => $longTermInventoryDays])) }}" class="rounded-2xl px-4 py-3 text-center text-sm font-black transition {{ ($filters['stale_days'] ?? null) == $longTermInventoryDays ? 'bg-amber-500 text-slate-950 shadow' : 'bg-amber-50 text-amber-950 hover:bg-amber-100' }}">{{ $longTermInventoryDays }}日以上未販売</a>
                 </div>
             </section>
 
@@ -45,13 +44,6 @@
                             @foreach ($categories as $category)
                                 <option value="{{ $category->id }}" @selected(($filters['category_id'] ?? '') == $category->id)>{{ $category->name }}</option>
                             @endforeach
-                        </select>
-                    </div>
-                    <div class="lg:col-span-2">
-                        <label for="supplier_id" class="block text-sm font-black text-slate-700">仕入先</label>
-                        <select id="supplier_id" name="supplier_id" class="mt-2 w-full rounded-xl border-slate-300 text-slate-900 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="">すべて</option>
-                            @foreach ($suppliers as $supplier)<option value="{{ $supplier->id }}" @selected(($filters['supplier_id'] ?? '') == $supplier->id)>{{ $supplier->name }}</option>@endforeach
                         </select>
                     </div>
                     <div class="lg:col-span-2">
@@ -80,15 +72,18 @@
                 </section>
             @endif
 
-            <p class="mb-4 text-sm font-black text-slate-700">該当商品 {{ number_format($products->total()) }}件</p>`r`n`r`n            @if ($products->count() > 0)
+            <p class="mb-4 text-sm font-black text-slate-700">該当商品 {{ number_format($products->total()) }}件</p>
+
+            @if ($products->count() > 0)
                 <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                     @foreach ($products as $product)
                         @php
                             $image = $product->images->first();
                             $statusClass = $product->inventory_status === 'in_stock' ? 'bg-emerald-600' : 'bg-slate-600';
-                            $salesTotal = (int) $product->validSales->sum('sold_price');
-                            $latestSale = $product->validSales->first();
-                            $profitTotal = (int) $product->validSales->sum('net_profit');
+                            $currentListings = $product->listings->whereIn('status', ['draft', 'ready', 'active']);
+                            $reportableSales = $product->sales->whereNotIn('status', ['cancelled', 'returned']);
+                            $salesTotal = (int) $reportableSales->sum('sold_price');
+                            $latestSale = $reportableSales->sortByDesc('sold_at')->first();
                         @endphp
                         <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow">
                             <a href="{{ route('products.edit', $product) }}" class="block">
@@ -110,20 +105,31 @@
                             <div class="p-5">
                                 <div class="flex items-center justify-between gap-3"><p class="text-xs font-black tracking-widest text-slate-700">{{ $product->internal_sku }}</p><p class="text-xs font-black text-slate-700">{{ \App\Models\Product::conditionLabel($product->condition) }}</p></div>
                                 <h3 class="mt-3 line-clamp-2 min-h-[3.5rem] text-lg font-black leading-7 text-slate-950">{{ $product->product_name }}</h3>
-                                <p class="mt-2 line-clamp-2 min-h-[3rem] text-sm font-semibold leading-6 text-slate-700">{{ $product->manufacturer_model_number ?: ($product->supplier?->name ?: '仕入先は未設定です。') }}</p>
+                                <p class="mt-2 line-clamp-2 min-h-[3rem] text-sm font-semibold leading-6 text-slate-700">{{ $product->manufacturer_model_number ?: '型番未登録' }}</p>
+                                <div class="mt-4 border-t border-slate-200 pt-3">
+                                    <p class="text-xs font-black text-slate-700">出品価格</p>
+                                    @if ($currentListings->isNotEmpty())
+                                        <ul class="mt-2 space-y-1">
+                                            @foreach ($currentListings as $listing)
+                                                <li class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
+                                                    <span class="font-semibold text-slate-700">{{ $listing->marketplace?->name ?? '販売先未設定' }}（{{ \App\Models\Listing::statusLabel($listing->status) }}）</span>
+                                                    <span class="font-black text-slate-950">{{ $listing->listing_price === null ? '価格未設定' : '¥'.number_format($listing->listing_price) }}</span>
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    @else
+                                        <p class="mt-2 text-sm font-semibold text-slate-600">出品情報未登録</p>
+                                    @endif
+                                </div>
                                 <div class="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
                                         <p class="font-black text-emerald-950">売上データ</p>
                                         <div class="mt-3 grid grid-cols-2 gap-3">
                                             <div><p class="text-xs font-black text-emerald-800">売上合計</p><p class="mt-1 font-black text-slate-950">¥{{ number_format($salesTotal) }}</p></div>
-                                            <div><p class="text-xs font-black text-emerald-800">利益合計</p><p class="mt-1 font-black text-slate-950">¥{{ number_format($profitTotal) }}</p></div>
                                             <div><p class="text-xs font-black text-emerald-800">最新の売却日</p><p class="mt-1 font-black text-slate-950">{{ $latestSale?->sold_at?->format('Y/m/d') ?? '未設定' }}</p></div>
                                             <div><p class="text-xs font-black text-emerald-800">販売先</p><p class="mt-1 truncate font-black text-slate-950">{{ $latestSale?->marketplace?->name ?? '未設定' }}</p></div>
                                         </div>
                                 </div>
-                                <div class="mt-5 grid grid-cols-2 gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
-                                    <div><p class="text-xs font-black text-slate-600">仕入原価</p><p class="mt-1 font-black text-slate-950">¥{{ number_format($product->purchase_unit_cost) }}</p></div>
-                                    <div><p class="text-xs font-black text-slate-600">仕入日</p><p class="mt-1 font-black text-slate-950">{{ $product->purchase_date?->format('Y/m/d') ?? '未設定' }}</p></div>
-                                    <div><p class="text-xs font-black text-slate-600">保管場所</p><p class="mt-1 truncate font-black text-slate-950">{{ $product->storage_location ?: '未設定' }}</p></div>
+                                <div class="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
                                     <div><p class="text-xs font-black text-slate-600">在庫経過</p><p class="mt-1 font-black text-slate-950">登録から{{ $product->inventoryAgeLabel() }}</p></div>
                                 </div>
                                 <div class="mt-5 grid gap-2 sm:grid-cols-2">
