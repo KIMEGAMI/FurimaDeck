@@ -141,7 +141,7 @@ jobs:
           const expectedHost = new URL(process.env.APP_URL).host;
           const scannedTarget = sites.some((site) => {
             try {
-              return new URL(site.name).host === expectedHost;
+              return new URL(site['@name'] ?? site.name).host === expectedHost;
             } catch {
               return false;
             }
@@ -156,11 +156,49 @@ jobs:
       - name: Report scan diagnostics
         if: always()
         run: |
-          report="$RUNNER_TEMP/zap/furimadeck-zap-report.html"
-          if [ -f "$report" ]; then
-            echo 'ZAP produced a report in runner-local temporary storage; it is not uploaded.'
+          json="$RUNNER_TEMP/zap/furimadeck-zap-report.json"
+          if [ -s "$json" ]; then
+            echo 'ZAP JSON report exists in runner-local temporary storage; it is not uploaded.'
+            ZAP_REPORT="$json" node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync(process.env.ZAP_REPORT, 'utf8'));
+          const sites = Array.isArray(report.site) ? report.site : [];
+          const redactPath = (uri) => {
+            try {
+              return new URL(uri).pathname
+                .split('/')
+                .map((segment) => {
+                  if (/^\\d+$/.test(segment)) return '{id}';
+                  if (/^[a-f0-9-]{24,}$/i.test(segment)) return '{token}';
+                  return segment;
+                })
+                .join('/');
+            } catch {
+              return '<invalid-path>';
+            }
+          };
+          for (const site of sites) {
+            for (const alert of Array.isArray(site.alerts) ? site.alerts : []) {
+              const instances = Array.isArray(alert.instances) ? alert.instances : [];
+              const samples = [...new Set(instances.slice(0, 3).map((instance) =>
+                `${instance.method || 'GET'} ${redactPath(instance.uri || '')}`
+              ))];
+              console.log([
+                alert.pluginid || alert.pluginId || 'unknown-rule',
+                alert.riskdesc || 'unknown-risk',
+                alert.confidencedesc || 'unknown-confidence',
+                alert.name || alert.alert || 'unnamed alert',
+                `instances=${instances.length}`,
+                samples.join('; '),
+              ].join(' | '));
+            }
+          }
+          NODE
           else
-            echo 'ZAP report was not generated; inspect the scan step and isolated server log.'
+            echo 'ZAP JSON report was not generated.'
+          fi
+          if [ ! -s "$RUNNER_TEMP/zap/furimadeck-zap-report.html" ]; then
+            echo 'ZAP HTML report was not generated; checking the isolated server log.'
             if [ -f "$RUNNER_TEMP/furimadeck-zap-server.log" ]; then
               tail -n 80 "$RUNNER_TEMP/furimadeck-zap-server.log"
             fi
