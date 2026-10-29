@@ -7,11 +7,12 @@
 - Chrome拡張（出品支援）は1.0の対象外とする。Chrome Web Storeへの登録状況にかかわらず、この候補では配布・サポート・リリース判定を行わない。
 - 商品編集画面の拡張向け案内は既定で非表示とし、回帰テストで表示されないことを確認する。拡張本体や外部フリマサイトでの入力動作は1.0の検証対象に含めない。
 
-## 2026-10-29 検証スナップショット（検証対象アプリコード HEAD `c35bfe2`）
+## 2026-10-29 検証スナップショット（検証対象アプリ・テストコード HEAD `6ead1db`）
 
-- 対象はPR #35（`https://github.com/KIMEGAMI/FurimaDeck/pull/35`）、ブランチ `codex/furimadeck-1-0-main-320758d` の検証対象アプリコードHEAD `c35bfe2119066230712adb0943cb832fa5febaa8`。記録採取時点でPRはopen・Draft・未merge・mergeableで、レビュー提出はなかった。
-- 同HEADのGitHub Actions CI run 154（40827062803）とSecurity run 142（40827062914）はいずれもsuccess。候補worktreeは記録採取時点でcleanだった。
-- 2026-10-29に許可を得て実施した開発R2商品画像フローは1 test・20 assertions・終了コード0。今回の再試験でwarningは出なかった。過去記録のwarningは再現せず、原因は未特定のまま。
+- 対象はPR #35（`https://github.com/KIMEGAMI/FurimaDeck/pull/35`）、ブランチ `codex/furimadeck-1-0-main-320758d` の検証対象アプリ・テストコードHEAD `6ead1dbff22a487314669427f1e4e4b22d820020`。検証時点でPRはopen・Draft・未merge・mergeableで、レビュー提出はなかった。
+- 同HEADのGitHub Actions CI run 156（40828062463）とSecurity run 144（40828062489）はいずれもsuccess。CIはMariaDB CSV gate、Browser E2E、PHP code style、PHP tests、Composer/npm auditを含む。
+- 1.0対象外のChrome拡張案内を商品編集画面に表示しないFeature testは1件・11 assertionsで成功。`git diff --check`も成功。
+- 開発R2商品画像フローは検証対象アプリコードHEAD `c35bfe2` で1 test・20 assertions・終了コード0。`6ead1db`ではR2関連コードとテストを変更していない。今回の再試験でwarningは出なかった。過去記録のwarningは再現せず、原因は未特定のまま。
 - CI・R2試験の成功は、本番VPSの設定・主要フロー・DB復元・メール/OAuth運用や税務上の正しさを証明しない。P0/P1および外部環境の未確認項目は、この文書の各ゲートを個別に完了するまでNO-GOとして扱う。
 
 ## 隔離1.0候補の検証履歴（各項目は記載日時点。現行状態は冒頭のスナップショットを参照）
