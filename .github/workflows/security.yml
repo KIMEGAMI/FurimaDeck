@@ -186,7 +186,7 @@ jobs:
               console.log([
                 alert.pluginid || alert.pluginId || 'unknown-rule',
                 alert.riskdesc || 'unknown-risk',
-                alert.confidencedesc || 'unknown-confidence',
+                alert.confidencedesc || alert.confidenceDesc || alert.riskdesc?.match(/\\(([^)]+)\\)$/)?.[1] || alert.confidence || 'unknown-confidence',
                 alert.name || alert.alert || 'unnamed alert',
                 `instances=${instances.length}`,
                 samples.join('; '),
