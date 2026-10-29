@@ -2,22 +2,20 @@
 
 本書をFurimaDeck 1.0の現行リリース判定基準とします。2026-10-20のリリース方針更新を適用し、従前の仕様記述と矛盾する場合は更新内容を優先します。
 
-## 2026-10-29 現行候補の追試記録
+## 2026-10-29 現行候補スナップショット
 
-- 候補worktree `<candidate-worktree>` で隔離PHPUnit全件を再実行。PHP 8.5.12、934件中928件成功・6件スキップ、6,198 assertions、終了コード0。ランナー既定のSQLiteインメモリを使用し、外部R2/MariaDBゲートはこの全体実行では無効。6件のスキップを全ゲート合格とは扱わない。
-- 同候補を公式 `php:8.4-cli-bookworm` ベースの隔離コンテナでも再実行。PHP 8.4.26、CI用GD/WebP・EXIFを有効化し、934件中928件成功・6件スキップ、6,198 assertions、終了コード0。SQLiteはインメモリ、候補ソースは読み取り専用、Storageは一時領域。6件のスキップはこの全体実行では実行していないMariaDB 4件とR2実接続2件で、個別ゲート記録と区別する。
-- 同候補で `git diff --check`、`composer validate --no-check-publish --no-interaction`、Pint `--test`、`npm run build`、`npm run test:e2e-runtime`（7/7）、`npm audit --audit-level=high`（脆弱性0）、`composer audit --locked --no-interaction`（アドバイザリ0）が成功。GitHub Actionsの実行結果ではない。
-- Playwright E2Eをループバック `18003`、専用SQLite/storageで実行し、18/18成功。成功後に専用DB/storageを削除し、18003番の待受が残っていないことを確認。
-- 承認済みの開発R2画像フローを1件実行し、20 assertions成功。開発バケット `furimadeck-dev-images` のみを使用し、インメモリSQLite、プロセス内の開発 `PRODUCT_IMAGES_*` のみを使用。所有者制御と削除後の不存在を確認。本番R2・永続DBは使用していない。
-- 候補HEAD `320758d082bc1552dfc6a8743dc831f74752b894` のGitHub combined statusは空で、候補ブランチもGitHub上に見つからない。2026-10-29の再確認時点で候補worktreeには287パスの未コミット差分（174 modified、113 untracked、stagedなし）があるため、GitHub CI/Securityは未実行。main checkoutの混在差分はこの検証で変更していない。
-- 上記はローカル候補の再検証であり、本番VPS・本番DB・Stripe・実取引・税務上の正しさの証明ではない。P0/P1および外部環境のリリースゲートは引き続き未完了として扱う。
+- 候補はPR #35（`https://github.com/KIMEGAMI/FurimaDeck/pull/35`）、ブランチ `codex/furimadeck-1-0-main-320758d`、HEAD `71c43d9106adbcf51f334ac4fb4c5fe760385af6`。PRはopen・Draft・未mergeで、GitHub上の現在状態と一致する。
+- 同HEADのGitHub Actions CI run 148（40823637465）とSecurity run 136（40823637481）はいずれもsuccess。PRレビューとレビューコメントは現時点で0件。候補worktreeはcleanで、`git diff --check`にも出力なし。
+- 2026-10-29に許可を得て実施した開発R2商品画像フローは1 test・20 assertions・終了コード0。warningは今回の実行では出なかった。前の実行で記録されたwarningは再現せず、発生原因は未特定のまま。
+- CI・R2試験の成功は、本番VPSの設定・主要フロー・DB復元・メール/OAuth運用や税務上の正しさを証明しない。P0/P1および外部環境の未確認項目は、この文書の各ゲートを個別に完了するまでNO-GOとして扱う。
 
-## 隔離1.0候補の最新検証（2026-10-29）
+## 隔離1.0候補の検証履歴（各項目は記載日時点。現行状態は冒頭のスナップショットを参照）
 
+- 2026-10-29 PHP 8.4.26隔離全件確認: 公式 `php:8.4-cli-bookworm` ベースの一時環境でPHP 8.4.26とCI用GD/WebP・EXIFを有効化し、934件中928件成功・6件スキップ、6,198 assertions、終了コード0。SQLiteはインメモリ、候補ソースは読み取り専用、Storageは一時領域。6件のスキップはこの全体実行では実行していないMariaDB 4件とR2実接続2件で、個別ゲート記録と区別する。
 - 2026-10-29 開発R2画像フロー再試験: 承認を受け、`tests/Feature/ProductImageAccessTest.php::test_live_development_r2_product_image_flow_when_explicitly_enabled` を候補worktreeで再実行。結果は1件成功・20 assertions・終了コード0（約3.5秒）。`furimadeck-dev-images`だけを使い、インメモリSQLiteで原本/サムネイルの保存・読取、所有者制御、削除後の不存在を確認した。開発用 `PRODUCT_IMAGES_*` のみをプロセス内へ設定し、本番用 `FURIMADECK_R2_*` と汎用 `AWS_*` は無効化。秘密値は出力せず、共有 `.env`、ソース、永続DB、本番R2は変更していない。GitHub Actionsの結果ではない。
 - 2026-10-29 最新追記（本番R2確認後）: `tests/Feature/ProductImageAccessTest.php` に本番専用の明示ゲート `FURIMADECK_R2_PRODUCTION_LIVE_TEST=1` を追加。正規PowerShellランナーは既定で開発・本番の両フラグを0にし、`-EnableDevelopmentR2LiveTest` または `-EnableProductionR2LiveTest` のどちらか一方を明示した場合だけ対象を有効化する。GitHub ActionsのPHPテスト工程も両方0に固定。開発R2実接続試験も同じ明示ゲート方式とした。本番実接続試験は本番バケット `furimadeck-prod-images` と開発バケット `furimadeck-dev-images`、両者の鍵分離を値を表示せず検査したうえで、インメモリSQLiteの仮ユーザー・仮商品を使って原本/サムネイル計2オブジェクトの登録、読取、所有者制御、削除を実施し、削除後の不存在まで24 assertions成功。終了コード0。共有 `.env` から必要な開発/本番R2設定だけをプロセス内へ渡し、値は出力していない。利用者画像、永続DB、Stripe、会計サービス、本番アプリには接続・変更していない。初回は私が開発バケット名の環境変数を渡し忘れ、R2クライアント生成前の検査で停止したため外部要求なし。設定を直した再試験で成功した。
 - 同テスト追加後の全体PHPUnit: `scripts/run-phpunit.ps1 --do-not-cache-result` は934件中928件成功、6件スキップ、6,198 assertions、終了コード0。実行時は親プロセス側の開発/本番R2フラグを両方`1`にしたが、正規ランナーが両方を`0`に上書きし、ライブテストをスキップした。別の2件フィルターでも2件スキップと元の環境値復元を確認。スキップはMariaDB専用4件と開発/本番の明示R2実接続2件。両R2実接続は別の承認済み実行で確認済み。PHP Pint `--test` 成功。全体テストはSQLiteメモリDBを使用した。CIのPHPテスト工程にも両フラグを`0`で設定したが、GitHub Actions自体は未実行。
-- この項目の作成時点ではPHP 8.4の後続全件確認が未完了だったが、上記「2026-10-29 現行候補の追試記録」に記載した934件のPHP 8.4.26再実行で更新済み。
+- この項目の作成時点ではPHP 8.4の後続全件確認が未完了だった。上記の「2026-10-29 PHP 8.4.26隔離全件確認」で更新済み。
 - 2026-10-29 会計APIの送信停止境界: 画面/HTTPルートを閉じる `test_provider_api_send_and_readback_routes_are_closed_when_release_gate_is_disabled` は1件・15 assertions成功。さらに既存キュー済みfreee/Money Forwardジョブを閉じる `test_previously_queued_provider_jobs_fail_closed_after_release_gate_is_disabled` は1件・16 assertions成功。ジョブは失敗状態として処理され、HTTP fakeは外部リクエストなしを確認した。両試験はローカルPHPUnitで、会計サービス・Stripe・永続業務DBには接続していない。GitHub Actions・本番の確認ではない。
 - 2026-10-29 開発R2商品画像フロー実試験: 承認された候補worktreeの `tests/Feature/ProductImageAccessTest.php::test_live_development_r2_product_image_flow_when_explicitly_enabled` を実行し、20 assertions完了・失敗0・終了コード0を確認。PHPUnitは警告1件を報告したが詳細を保存できておらず、警告なしのクリーン合格とは扱わない。開発バケット `furimadeck-dev-images` のみに接続し、生成した原本・サムネイルのPut/Get、画像寸法、所有者のサムネイル閲覧、他ユーザーの拒否、アプリ経由の削除、DB行と両オブジェクトの削除後不存在を検証した。試験用DBはインメモリSQLite。共有 `.env` から開発用 `PRODUCT_IMAGES_*` のみをプロセス内へ読み込み、値は表示せず、`FURIMADECK_R2_*` と汎用 `AWS_*` は空にした。ローカルアプリコード、共有 `.env`、永続DB、本番R2、既存商品には変更なし。これは候補worktreeの実R2統合テストであり、GitHub Actions・本番環境の証明ではない。
 - 先行実行記録（後続の最新結果は下記）: 2026-10-28にPHP 8.5.12で930件中925件成功、5件スキップ、6,175 assertions、終了コード0を確認。PHP 8.4.26公式コンテナでもGD/WebP対応を有効にし、memory_limit=256Mで930件中925件成功、5件スキップ、6,175 assertions、終了コード0を確認した。PHP 8.4.26のmemory_limit=128M全件実行は693件付近でプロセスのメモリ上限に達して停止した。一方、画像生成を別プロセスに分けた12MP境界JPEGの単発処理はmemory_limit=128MでWebP出力に成功し、ピーク使用量は100,081,664 bytesだった。2,400x1,200画像の個別テスト2件も128Mで成功した。初回コンテナ試験でGD WebPを有効化し忘れた失敗は試験環境の誤設定で、WebP対応を追加して再実行した。本番PHP-FPMのmemory_limitは未確認。テストDBはインメモリSQLiteで、本番・業務DB・会計サービスには接続していない。
