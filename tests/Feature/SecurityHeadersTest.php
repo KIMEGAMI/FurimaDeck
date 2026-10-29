@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\SecurityHeaders;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
 
 class SecurityHeadersTest extends TestCase
@@ -17,19 +20,19 @@ class SecurityHeadersTest extends TestCase
             ->assertHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
     }
 
-    public function test_https_responses_include_hsts_and_http_responses_do_not(): void
+    public function test_hsts_is_added_only_for_requests_that_are_actually_secure(): void
     {
-        $httpResponse = $this->get(route('login'));
-        $httpResponse->assertOk();
+        $middleware = new SecurityHeaders;
+        $next = static fn (Request $request): Response => new Response;
+
+        $httpResponse = $middleware->handle(Request::create('http://furimadeck.test/login'), $next);
         $this->assertNull($httpResponse->headers->get('Strict-Transport-Security'));
 
-        $httpsResponse = $this->withServerVariables([
-            'HTTPS' => 'on',
-            'SERVER_PORT' => '443',
-        ])->get(route('login'));
-
-        $httpsResponse->assertOk()
-            ->assertHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        $httpsResponse = $middleware->handle(Request::create('https://furimadeck.test/login'), $next);
+        $this->assertSame(
+            'max-age=31536000; includeSubDomains',
+            $httpsResponse->headers->get('Strict-Transport-Security')
+        );
     }
 
     public function test_session_cookie_has_http_only_and_configured_transport_attributes(): void
