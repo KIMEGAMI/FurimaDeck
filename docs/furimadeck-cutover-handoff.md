@@ -16,6 +16,7 @@
 - 旧 FURUPRO の DB・Stripe endpoint・OAuth redirect URI は、FurimaDeck の設定に流用しない。
 - FurimaDeck は専用の空 DB を使い、旧 FURUPRO の DB バックアップを復元・移行しない。旧バックアップは保全と旧環境の復旧専用として保持する。
 - 本番 `.env` のシークレットを開発環境やリポジトリへコピーしない。
+- この1.0候補ではChrome拡張をリリースゲートに含めない。候補コードはChrome拡張IDを参照していないため、`FURIMADECK_CHROME_EXTENSION_ID` は本切替の必須環境変数ではない。拡張機能も1.0で公開する判断になった場合は、別途仕様・連携実装・検証を行う。
 - 本番 migration、既存画像の移設、監査ログの過去テキスト削除は、DB バックアップを人間が確認した後だけ実施する。
 
 ## 切替手順
@@ -43,14 +44,13 @@ SESSION_SECURE_COOKIE=true
 DB_CONNECTION=furimadeck
 FURIMADECK_CUTOVER_ENABLED=true
 FURIMADECK_PRODUCT_MANAGEMENT_ENABLED=true
-FURIMADECK_CHROME_EXTENSION_ID=<公開済みChrome Web Storeの32文字の拡張機能ID>
 
 FURIMADECK_STRIPE_SECRET=<Stripe live secret>
 FURIMADECK_STRIPE_WEBHOOK_SECRET=<FurimaDeck endpoint signing secret>
 FURIMADECK_STRIPE_PRICE_ID=<active JPY monthly Price ID>
 ```
 
-**確認:** `APP_URL` は `https://` の FurimaDeck 固有 URL、DB は FurimaDeck 専用、Chrome拡張IDは公開済みストアのIDと一致、Stripe 値は同一 Live Mode の組合せであること。いずれか不明なら停止する。
+**確認:** `APP_URL` は `https://` の FurimaDeck 固有 URL、DB は FurimaDeck 専用、Stripe 値は同一 Live Mode の組合せであること。いずれか不明なら停止する。
 
 ### 3. 本番 VPS: DB schema とアプリ設定を確認
 
