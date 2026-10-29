@@ -168,7 +168,7 @@ jobs:
               return new URL(uri).pathname
                 .split('/')
                 .map((segment) => {
-                  if (/^\\d+$/.test(segment)) return '{id}';
+                  if (/^\d+$/.test(segment)) return '{id}';
                   if (/^[a-f0-9-]{24,}$/i.test(segment)) return '{token}';
                   return segment;
                 })
