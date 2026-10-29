@@ -2,10 +2,10 @@
 
 本書をFurimaDeck 1.0の現行リリース判定基準とします。2026-10-20のリリース方針更新を適用し、従前の仕様記述と矛盾する場合は更新内容を優先します。
 
-## 2026-10-29 現行候補スナップショット
+## 2026-10-29 検証スナップショット（HEAD `71c43d9` 時点）
 
-- 候補はPR #35（`https://github.com/KIMEGAMI/FurimaDeck/pull/35`）、ブランチ `codex/furimadeck-1-0-main-320758d`、HEAD `71c43d9106adbcf51f334ac4fb4c5fe760385af6`。PRはopen・Draft・未mergeで、GitHub上の現在状態と一致する。
-- 同HEADのGitHub Actions CI run 148（40823637465）とSecurity run 136（40823637481）はいずれもsuccess。PRレビューとレビューコメントは現時点で0件。候補worktreeはcleanで、`git diff --check`にも出力なし。
+- 対象はPR #35（`https://github.com/KIMEGAMI/FurimaDeck/pull/35`）、ブランチ `codex/furimadeck-1-0-main-320758d` のHEAD `71c43d9106adbcf51f334ac4fb4c5fe760385af6`。この記録の採取時点でPRはopen・Draft・未mergeだった。
+- 同HEADのGitHub Actions CI run 148（40823637465）とSecurity run 136（40823637481）はいずれもsuccess。記録採取時のPRレビューとレビューコメントは0件。候補worktreeはこのスナップショット採取時にcleanで、`git diff --check`にも出力なし。
 - 2026-10-29に許可を得て実施した開発R2商品画像フローは1 test・20 assertions・終了コード0。warningは今回の実行では出なかった。前の実行で記録されたwarningは再現せず、発生原因は未特定のまま。
 - CI・R2試験の成功は、本番VPSの設定・主要フロー・DB復元・メール/OAuth運用や税務上の正しさを証明しない。P0/P1および外部環境の未確認項目は、この文書の各ゲートを個別に完了するまでNO-GOとして扱う。
 
