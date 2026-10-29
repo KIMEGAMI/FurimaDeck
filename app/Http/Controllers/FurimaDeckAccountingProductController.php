@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AccountingEntry;
 use App\Models\AccountingEntrySync;
 use App\Models\Product;
+use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\FurimaDeckAccountingEntryService;
 use App\Services\FurimaDeckAccountingPurchaseReconciliationService;
@@ -112,10 +113,13 @@ class FurimaDeckAccountingProductController extends Controller
                     $lockedProduct->accountingEntries()
                         ->where('entry_type', AccountingEntry::TYPE_PURCHASE)
                         ->update(['source_status' => 'review', 'confirmed_at' => null]);
-                    app(FurimaDeckAccountingEntryService::class)->refreshNewPurchaseEntry($request->user(), $lockedProduct);
                 }
 
-                foreach ($lockedProduct->sales()->where('status', 'pending')->get() as $pendingSale) {
+                if (! $lockedProduct->purchase_accounting_enabled) {
+                    $this->refreshPendingSaleCalculations($request->user(), $lockedProduct, false);
+                }
+
+                foreach ($lockedProduct->listings()->whereNotIn('status', ['sold', 'ended', 'cancelled'])->get() as $listing) {
                     $amounts = collect($pendingSale->only([
                         'sold_price', 'cost_basis', 'sales_fee', 'shipping_fee', 'purchase_shipping_cost',
                         'packing_cost', 'repair_cost', 'cleaning_cost', 'other_expense',
@@ -324,13 +328,41 @@ class FurimaDeckAccountingProductController extends Controller
                     'purchase_invoice_issuer' => null,
                     'purchase_document_reviewed_at' => null,
                 ]);
-                app(FurimaDeckAccountingEntryService::class)->refreshNewPurchaseEntry($request->user(), $lockedProduct->refresh());
+                $refreshedProduct = $lockedProduct->refresh();
+                app(FurimaDeckAccountingEntryService::class)->refreshNewPurchaseEntry($request->user(), $refreshedProduct);
+                $this->refreshPendingSaleCalculations($request->user(), $refreshedProduct, true);
             });
         } catch (RuntimeException $exception) {
             return back()->withInput()->withErrors(['purchase_accounting' => $exception->getMessage()]);
         }
 
         return redirect()->route('furimadeck-accounting.products.purchase.edit', $product)->with('success', '仕入会計データを保存しました。会計サービスへはまだ送信されていません。');
+    }
+
+    private function refreshPendingSaleCalculations(User $user, Product $product, bool $purchaseAccountingEnabled): void
+    {
+        $entryService = app(FurimaDeckAccountingEntryService::class);
+        $profitCalculator = app(SaleProfitCalculator::class);
+
+        foreach ($product->sales()->where('status', 'pending')->get() as $pendingSale) {
+            $amounts = collect($pendingSale->only([
+                'sold_price', 'cost_basis', 'sales_fee', 'shipping_fee', 'purchase_shipping_cost',
+                'packing_cost', 'repair_cost', 'cleaning_cost', 'other_expense',
+            ]))->map(fn (mixed $value): int => (int) ($value ?? 0))->all();
+            $costBasis = $purchaseAccountingEnabled
+                ? $entryService->costBasisForNewSale($user, $product)
+                : (int) $product->purchase_unit_cost * (int) $pendingSale->quantity;
+            $amounts['cost_basis'] = $costBasis;
+
+            if ($purchaseAccountingEnabled) {
+                $amounts['purchase_shipping_cost'] = 0;
+            }
+
+            $pendingSale->update([
+                'cost_basis' => $costBasis,
+                'net_profit' => $profitCalculator->calculate($amounts),
+            ]);
+        }
     }
 
     /** @return array<string, array<string, string>> */
