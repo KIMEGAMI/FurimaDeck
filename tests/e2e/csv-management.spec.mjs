@@ -324,7 +324,10 @@ test('dashboard, products, and accounting stay within a mobile viewport', async 
       { width: 768, height: 1024 },
     ]) {
       await page.setViewportSize(viewport);
-      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await expect.poll(
+        () => page.evaluate(() => window.innerWidth - document.documentElement.scrollWidth),
+        { message: `Expected ${path} to fit within a ${viewport.width}px viewport` },
+      ).toBeGreaterThanOrEqual(0);
     }
     await page.setViewportSize({ width: 390, height: 844 });
     if (path === '/products') {
