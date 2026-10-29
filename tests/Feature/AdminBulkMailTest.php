@@ -24,7 +24,7 @@ class AdminBulkMailTest extends TestCase
         $response
             ->assertOk()
             ->assertSee('一斉メール送信', false)
-            ->assertSee('info@kimegami.jp', false);
+            ->assertSee(config('admin_mail.from_address'), false);
     }
 
     public function test_regular_user_cannot_view_bulk_mail_page(): void

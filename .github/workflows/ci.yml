@@ -122,6 +122,8 @@ jobs:
 
       - name: Run PHP tests
         env:
+          CACHE_STORE: array
+          SESSION_DRIVER: array
           FURIMADECK_R2_LIVE_TEST: '0'
           FURIMADECK_R2_PRODUCTION_LIVE_TEST: '0'
         run: composer test
