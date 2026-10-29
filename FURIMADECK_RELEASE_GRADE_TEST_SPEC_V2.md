@@ -7,14 +7,14 @@
 - Chrome拡張（出品支援）は1.0の対象外とする。Chrome Web Storeへの登録状況にかかわらず、この候補では配布・サポート・リリース判定を行わない。
 - 商品編集画面の拡張向け案内は既定で非表示とし、回帰テストで表示されないことを確認する。拡張本体や外部フリマサイトでの入力動作は1.0の検証対象に含めない。
 
-## 2026-10-29 検証スナップショット（検証対象アプリ・テストコード HEAD `6ead1db`）
+## 2026-10-29 検証スナップショット（検証済み候補 HEAD `18d328dd7e53a173708b794b49acdaad96ea473b`）
 
-- 対象はPR #35（`https://github.com/KIMEGAMI/FurimaDeck/pull/35`）、ブランチ `codex/furimadeck-1-0-main-320758d` の検証対象アプリ・テストコードHEAD `6ead1dbff22a487314669427f1e4e4b22d820020`。検証時点でPRはopen・Draft・未merge・mergeableで、レビュー提出はなかった。
-- 同HEADのGitHub Actions CI run 156（40828062463）とSecurity run 144（40828062489）はいずれもsuccess。CIはMariaDB CSV gate、Browser E2E、PHP code style、PHP tests、Composer/npm auditを含む。
-- 1.0対象外のChrome拡張案内を商品編集画面に表示しないFeature testは1件・11 assertionsで成功。`git diff --check`も成功。
-- 開発R2商品画像フローは検証対象アプリコードHEAD `c35bfe2` で1 test・20 assertions・終了コード0。`6ead1db`ではR2関連コードとテストを変更していない。今回の再試験でwarningは出なかった。過去記録のwarningは再現せず、原因は未特定のまま。
-- CI・R2試験の成功は、本番VPSの設定・主要フロー・DB復元・メール/OAuth運用や税務上の正しさを証明しない。P0/P1および外部環境の未確認項目は、この文書の各ゲートを個別に完了するまでNO-GOとして扱う。
-
+- GitHub上のPR #35はopen・Draft・未merge・mergeable。7 commits、287 changed files。2026-10-29時点で提出済みレビューはない。
+- 検証済み候補HEAD `18d328dd7e53a173708b794b49acdaad96ea473b` の GitHub Actions CI run 158（40828539390）とSecurity run 146（40828539400）はsuccess。CIのTest and build jobではComposer検証、E2E runtime安全性、Blade view compile、route検証、frontend build、browser E2E、PHP code style、PHP tests、Composer/npm auditが成功。MariaDB CSV gate jobも成功。
+- Chrome拡張（出品支援）は1.0対象外。商品編集画面に拡張案内を表示しないFeature testは、アプリ・テストコードHEAD `6ead1dbff22a487314669427f1e4e4b22d820020` で1件・11 assertions成功。後続 `18d328d` は検証記録の文書更新であり、拡張の表示コード・テストを変更していない。最新CIでも同テストを含むPHP tests jobが成功。
+- 開発R2商品画像フローは候補コードHEAD `c35bfe2` で1 test・20 assertions・終了コード0。後続の `6ead1db` と `18d328d` はR2のアプリコード・テストを変更していない。別途、候補仕様書の記録では本番R2の商品画像フローも24 assertions成功としている。どちらもVPS上のアプリや本番DBを確認した証明ではない。
+- 最新のGitHub Actions成功は `18d328d` に対するもの。このスナップショット自体を更新する文書コミット後のGitHub Actions結果は、更新後に別途確認する。
+- CI・R2試験の成功は、本番VPSの主要フロー、DB復元、メール/OAuth運用、税務上の正しさを証明しない。P0/P1および外部環境の未確認項目は、各ゲートを個別に完了するまでNO-GOとする。
 ## 隔離1.0候補の検証履歴（各項目は記載日時点。現行状態は冒頭のスナップショットを参照）
 
 - 2026-10-29 PHP 8.4.26隔離全件確認: 公式 `php:8.4-cli-bookworm` ベースの一時環境でPHP 8.4.26とCI用GD/WebP・EXIFを有効化し、934件中928件成功・6件スキップ、6,198 assertions、終了コード0。SQLiteはインメモリ、候補ソースは読み取り専用、Storageは一時領域。6件のスキップはこの全体実行では実行していないMariaDB 4件とR2実接続2件で、個別ゲート記録と区別する。
