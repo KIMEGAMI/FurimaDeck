@@ -7,8 +7,6 @@ on:
   push:
     branches:
       - main
-      - 'codex/**'
-      - 'codex-*'
   schedule:
     - cron: '17 6 * * 1'
   workflow_dispatch:
@@ -52,6 +50,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Verify immutable workflow dependencies
+        run: |
+          node scripts/check-github-actions-pinned.mjs
+          node --test scripts/check-github-actions-pinned.test.mjs
+
       - name: Scan PHP, Blade, and JavaScript
         env:
           SEMGREP_SEND_METRICS: off
@@ -86,7 +89,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   security-regression:
-    name: Security regression tests
+    name: Security regression tests (strict local suites)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -121,8 +124,10 @@ jobs:
           php artisan key:generate --force --ansi
           php artisan config:clear --ansi
 
-      - name: Run full test suite with strict issue handling
-        run: vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues
+      - name: Run all local suites with strict issue handling
+        run: |
+          vendor/bin/phpunit --list-groups
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues --exclude-group=live-r2 --exclude-group=mariadb-gate
 
   dependency-audit:
     name: Composer and npm vulnerability audit

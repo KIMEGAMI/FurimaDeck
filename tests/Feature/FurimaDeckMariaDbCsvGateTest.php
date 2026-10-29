@@ -14,8 +14,10 @@ use App\Services\SaleLifecycleService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
 
+#[Group('mariadb-gate')]
 class FurimaDeckMariaDbCsvGateTest extends TestCase
 {
     public function test_restore_csv_export_runs_against_mariadb_without_persisting_test_data(): void

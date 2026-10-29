@@ -7,8 +7,6 @@ on:
   push:
     branches:
       - main
-      - 'codex/**'
-      - 'codex-*'
   workflow_dispatch:
 
 permissions:
@@ -37,17 +35,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v4
+
+      - name: Verify immutable workflow dependencies
+        run: |
+          node scripts/check-github-actions-pinned.mjs
+          node --test scripts/check-github-actions-pinned.test.mjs
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: ${{ env.PHP_VERSION }}
           extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
           coverage: none
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -126,7 +129,10 @@ jobs:
           SESSION_DRIVER: array
           FURIMADECK_R2_LIVE_TEST: '0'
           FURIMADECK_R2_PRODUCTION_LIVE_TEST: '0'
-        run: composer test
+        run: |
+          php artisan config:clear --ansi
+          vendor/bin/phpunit --list-groups
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues --exclude-group=live-r2 --exclude-group=mariadb-gate
 
       - name: Audit PHP dependencies
         run: composer audit --locked --no-interaction
@@ -139,7 +145,7 @@ jobs:
     timeout-minutes: 10
     services:
       mariadb:
-        image: mariadb:11.4
+        image: mariadb@sha256:d1891ede5a559f1086f55053bb8cc1569b0298338c4d72d71725a7f74f6ba620
         env:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
           MARIADB_DATABASE: furimadeck_csv_gate
@@ -153,10 +159,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v4
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: ${{ env.PHP_VERSION }}
           extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip

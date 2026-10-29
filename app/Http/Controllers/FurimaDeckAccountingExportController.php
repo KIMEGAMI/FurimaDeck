@@ -11,6 +11,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -221,8 +222,20 @@ class FurimaDeckAccountingExportController extends Controller
 
     private function cleanupTemporaryCsv(string $path): void
     {
-        if (is_file($path)) {
-            @unlink($path);
+        $temporaryDirectory = realpath(sys_get_temp_dir());
+        $resolvedPath = realpath($path);
+
+        if (
+            $temporaryDirectory === false
+            || $resolvedPath === false
+            || is_link($path)
+            || ! is_file($resolvedPath)
+            || realpath(dirname($resolvedPath)) !== $temporaryDirectory
+            || ! str_starts_with(basename($resolvedPath), 'furimadeck-accounting-')
+        ) {
+            return;
         }
+
+        File::delete($resolvedPath);
     }
 }

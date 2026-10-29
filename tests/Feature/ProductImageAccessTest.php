@@ -10,6 +10,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
 
 class ProductImageAccessTest extends TestCase
@@ -190,6 +191,7 @@ class ProductImageAccessTest extends TestCase
         }
     }
 
+    #[Group('live-r2')]
     public function test_live_development_r2_product_image_flow_when_explicitly_enabled(): void
     {
         if (env('FURIMADECK_R2_LIVE_TEST') !== '1') {
@@ -256,6 +258,7 @@ class ProductImageAccessTest extends TestCase
         }
     }
 
+    #[Group('live-r2')]
     public function test_live_production_r2_product_image_flow_when_explicitly_enabled(): void
     {
         if (env('FURIMADECK_R2_PRODUCTION_LIVE_TEST') !== '1') {
