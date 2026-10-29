@@ -111,6 +111,7 @@ jobs:
           database_file="$GITHUB_WORKSPACE/storage/framework/testing/furimadeck-zap-${suffix}.sqlite"
           storage_root="$RUNNER_TEMP/furimadeck-zap-${suffix}"
           mkdir -p "$(dirname "$database_file")" "$storage_root/framework/views" "$storage_root/framework/cache/data" "$storage_root/framework/sessions" "$storage_root/logs" "$storage_root/app/private" "$storage_root/app/public" "$RUNNER_TEMP/zap"
+          sudo chown 1000:1000 "$RUNNER_TEMP/zap"
           touch "$database_file"
           export FURIMADECK_DB_DATABASE="$database_file"
           export LARAVEL_STORAGE_PATH="$storage_root"
