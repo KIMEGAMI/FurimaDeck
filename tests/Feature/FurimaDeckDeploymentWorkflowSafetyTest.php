@@ -55,6 +55,9 @@ class FurimaDeckDeploymentWorkflowSafetyTest extends TestCase
         $backupGatePosition = strpos($workflow, 'Require verified production backup reference');
         $deployPosition = strpos($workflow, '      - name: Deploy over SSH');
         $mergePosition = strpos($workflow, 'git merge --ff-only "$DEPLOY_SHA"');
+        $maintenanceDownPosition = strpos($workflow, 'artisan down');
+        $maintenanceUpPosition = strpos($workflow, 'artisan up');
+        $apacheActivePosition = strrpos($workflow, 'sudo systemctl is-active --quiet apache2');
         $migrationPosition = strpos($workflow, 'artisan migrate --database=furimadeck');
 
         $this->assertNotFalse($preflightPosition);
@@ -62,10 +65,15 @@ class FurimaDeckDeploymentWorkflowSafetyTest extends TestCase
         $this->assertNotFalse($backupGatePosition);
         $this->assertNotFalse($deployPosition);
         $this->assertNotFalse($mergePosition);
+        $this->assertNotFalse($maintenanceDownPosition);
+        $this->assertNotFalse($maintenanceUpPosition);
+        $this->assertNotFalse($apacheActivePosition);
         $this->assertNotFalse($migrationPosition);
         $this->assertLessThan($deployPosition, $backupGatePosition);
         $this->assertLessThan($mergePosition, $phpRuntimeCheckPosition);
         $this->assertLessThan($mergePosition, $preflightPosition);
+        $this->assertLessThan($mergePosition, $maintenanceDownPosition);
+        $this->assertLessThan($maintenanceUpPosition, $apacheActivePosition);
         $this->assertLessThan($migrationPosition, $preflightPosition);
 
         preg_match('/^on:\R(?<triggers>.*?)(?=^permissions:)/ms', $workflow, $matches);
