@@ -7,10 +7,10 @@
 - Chrome拡張（出品支援）は1.0の対象外とする。Chrome Web Storeへの登録状況にかかわらず、この候補では配布・サポート・リリース判定を行わない。
 - 商品編集画面の拡張向け案内は既定で非表示とし、回帰テストで表示されないことを確認する。拡張本体や外部フリマサイトでの入力動作は1.0の検証対象に含めない。
 
-## 現行候補スナップショット（2026-10-29、コード検証HEAD `c558807c6ba488c37a1dfb05af561fbacdc8e4aa`）
+## 現行候補スナップショット（2026-10-29、コード検証HEAD `19934d7815c1b96d6d52eaf1ec5a9df767c9f0a0`）
 
-- PR #35はopen・Draft・未merge。baseは`main`の`320758d082bc1552dfc6a8743dc831f74752b894`。このコード検証HEAD時点で26コミット、差分280ファイル。人手による差分全体のレビューは未完了。
-- 同HEADのGitHub CI #195とSecurity #183はsuccess。CIではMariaDB CSV gate、Browser E2E、PHP tests、Blade/route検証、ビルド、コードスタイル、Composer/npm監査が成功。
+- PR #35はopen・Draft・未merge。baseは`main`の`320758d082bc1552dfc6a8743dc831f74752b894`。このコード検証HEAD時点で27コミット、差分280ファイル。人手による差分全体のレビューは未完了。
+- 同HEADのGitHub CI #197とSecurity #185はsuccess。CIではMariaDB CSV gate、Browser E2E、PHP tests、Blade/route検証、ビルド、コードスタイル、Composer/npm監査が成功。
 - 1.0対象は販売・在庫管理と、対応範囲を限定したfreee/Money Forward会計CSV。会計API送信・API読戻しは対象外で、サーバールートと既存キューを閉じる回帰テストを含む。Chrome拡張も対象外で、この候補差分に拡張ファイルはない。
 - この候補ではStripeの課金コントローラー、Webhook、課金画面をmain基準の内容に戻し、Stripe専用価格照合サービスを含めて候補差分から除外した。残るStripe関連差分は、認証済みユーザーを使う管理者課金画面テストのfixture 1行のみ。Stripeへの接続・課金・設定変更は行っていない。
 - CSV対応範囲は確定済み販売データに限定。仕入CSV、未確認の税区分、入金元や費用の実取引表現を確認できないパターンは出力停止。返金・返品のCSVは仕訳取込用ではなく、会計ソフト側で原仕訳と照合して手動処理する参考データ。
