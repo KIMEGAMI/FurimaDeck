@@ -34,6 +34,11 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Verify immutable workflow dependencies
+        run: |
+          node scripts/check-github-actions-pinned.mjs
+          node --test scripts/check-github-actions-pinned.test.mjs
+
   dependency-review:
     name: Dependency review
     runs-on: ubuntu-latest
@@ -65,11 +70,6 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-
-      - name: Verify immutable workflow dependencies
-        run: |
-          node scripts/check-github-actions-pinned.mjs
-          node --test scripts/check-github-actions-pinned.test.mjs
 
       - name: Scan PHP, Blade, and JavaScript
         env:
