@@ -131,14 +131,25 @@ jobs:
           extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
           coverage: none
 
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --no-progress --ansi
+
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
 
       - name: Prepare isolated test application
         run: |
           cp .env.example .env
           php artisan key:generate --force --ansi
           php artisan config:clear --ansi
+
+      - name: Build frontend assets
+        run: npm run build
 
       - name: Run all local suites with strict issue handling
         run: |
