@@ -9,8 +9,8 @@
 
 ## 2026-10-29 検証スナップショット（実装・テスト対象HEAD `ccaa4bb0865a5e5a39e0029a8f315972eb094741`）
 
-- GitHub上のPR #35はopen・Draft・未merge。対象範囲は販売・在庫管理と対応条件を限定したfreee/Money Forward会計CSVで、Chrome拡張と仕訳API送信・読戻しは1.0対象外。
-- HEAD `ccaa4bb0865a5e5a39e0029a8f315972eb094741` のGitHub Actions CI #169/#170とSecurity #157/#158はすべてsuccess。CIにはComposer検証、E2E runtime安全性、Blade view compile、route検証、frontend build、Browser E2E、PHP code style、PHP tests、Composer/npm audit、MariaDB CSV gateが含まれる。
+- GitHub上のPR #35はopen・Draft・未merge。2026-10-29確認時の対象HEADは `a453332dcefa3c1dbc0c86f5c85dfbe2c0857a27`。対象範囲は販売・在庫管理と対応条件を限定したfreee/Money Forward会計CSVで、Chrome拡張と仕訳API送信・読戻しは1.0対象外。
+- 対象HEADのGitHub Actions CI #172とSecurity #160はsuccess。CIにはComposer検証、E2E runtime安全性、Blade view compile、route検証、frontend build、Browser E2E、PHP code style、PHP tests、Composer/npm audit、MariaDB CSV gateが含まれる。
 - 候補worktreeの隔離PHPUnit全件は935 tests中929 passed・6 skipped、6,207 assertions、終了コード0。商品画像Featureテストは28 tests・333 assertions成功。追加した「商品DB削除後にprivate image cleanupが失敗しても成功画面を返し、PIIなしの警告ログを残す」回帰ケースを含む。
 - 直前のHEAD `7a738fc` ではBrowser E2Eのモバイル横幅assertionが初回1回だけ失敗し、同じjobの再実行と別CI runでは成功した。初回ログは対象ページ・viewport幅・overflow量を記録しておらず、原因は確定できていない。診断値を出すテスト改善後の本HEADでは、対象ローカルE2Eと両CIのBrowser E2Eが成功した。画面問題が再現しなかったことは記録するが、初回の実測原因を解消したとは断定しない。
 - 開発R2商品画像フローの実接続記録とfreee/Money Forwardの試験CSV取込記録は、この文書の後続履歴およびPR本文に記載する。これらは本番VPS上のアプリ動作や利用者本人の税務上の区分を証明しない。
