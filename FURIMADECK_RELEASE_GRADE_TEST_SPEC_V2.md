@@ -7,10 +7,10 @@
 - Chrome拡張（出品支援）は1.0の対象外とする。Chrome Web Storeへの登録状況にかかわらず、この候補では配布・サポート・リリース判定を行わない。
 - 商品編集画面の拡張向け案内は既定で非表示とし、回帰テストで表示されないことを確認する。拡張本体や外部フリマサイトでの入力動作は1.0の検証対象に含めない。
 
-## 現行検証スナップショット（2026-10-29、コードHEAD `a309ca3170127cef873282f611706f4e0eb30b10`）
+## 現行検証スナップショット（2026-10-29、PR HEAD `ea6d847032d9477dd5763b1e9206c0c10ce6efe8`、コードHEAD `a309ca3170127cef873282f611706f4e0eb30b10`）
 
 - GitHub PR #35はopen・Draft・未merge。baseは`main`の`320758d082bc1552dfc6a8743dc831f74752b894`。候補差分は281ファイルで、全差分の人手レビューは未完了。
-- 同HEADのGitHub CI #207とSecurity #195はcompleted success。CIではPHP tests、Browser E2E、Blade/route検証、ビルド、コードスタイル、Composer/npm監査、MariaDB CSV gateが成功。
+- コードHEAD `a309ca3170127cef873282f611706f4e0eb30b10` のGitHub CI #207とSecurity #195はcompleted success。同じコードに仕様書更新のみを加えたPR HEAD `ea6d847032d9477dd5763b1e9206c0c10ce6efe8` のCI #209とSecurity #197もcompleted success。CIではPHP tests、Browser E2E、Blade/route検証、ビルド、コードスタイル、Composer/npm監査、MariaDB CSV gateが成功。
 - 1.0対象は販売・在庫管理と、対応範囲を限定したfreee/Money Forward会計CSV。会計API送信・読戻し、Chrome拡張は対象外。
 - 商品バックアップCSV復元で、未出品商品が出品中になり、既存出品状態もactiveに変わり得る不具合を修正。未出品とdraft/ready/active/ended/cancelledを区別し、旧`selling`値は互換性を保ってactiveへ復元する。対象回帰テストは7 tests・65 assertions成功し、同じコードHEADを含むGitHub CIも成功。
 - 会計CSVは確認済み販売データの限定パターンのみ。仕入CSV、未確認の税区分、費用処理を確定できない取引は出力停止。試験CSVの取込結果は利用者本人の税務区分や全取引の正しさを証明しない。
