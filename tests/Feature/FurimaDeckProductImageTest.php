@@ -621,10 +621,15 @@ class FurimaDeckProductImageTest extends TestCase
                 'purchase_unit_cost' => 1250,
                 'purchase_shipping_cost' => 180,
                 'other_purchase_expense' => 20,
-            ])->assertRedirect(route('furimadeck-accounting.products.purchase-info.edit', $product));
+            ])->assertRedirect(route('furimadeck-accounting.products.purchase-info.edit', $product))
+            ->assertSessionHasNoErrors();
 
+        $this->assertSame('2026-10-13', $product->fresh()->purchase_date->toDateString());
+        $this->assertSame(1250, (int) $product->fresh()->purchase_unit_cost);
         $this->assertSame('2026-10-12', $entry->fresh()->transaction_date->toDateString());
-        $this->assertSame(1200, $entry->fresh()->purchase_cost);
+        $this->assertSame(1200, (int) $entry->fresh()->purchase_cost);
+        $this->assertSame('review', $entry->fresh()->source_status);
+        $this->assertNull($entry->fresh()->confirmed_at);
 
         $this->actingAs($user)->post(route('furimadeck-accounting.products.purchase.update', $product), [
             'purchase_evidence' => [
@@ -632,7 +637,8 @@ class FurimaDeckProductImageTest extends TestCase
                 'purchase_shipping_cost' => $this->evidence('standard_10', 'qualified'),
                 'other_purchase_expense' => $this->evidence('out_of_scope', 'not_applicable', 'other'),
             ],
-        ])->assertRedirect(route('furimadeck-accounting.products.purchase.edit', $product));
+        ])->assertRedirect(route('furimadeck-accounting.products.purchase.edit', $product))
+            ->assertSessionHasNoErrors();
 
         $this->assertSame('2026-10-13', $entry->fresh()->transaction_date->toDateString());
         $this->assertSame(1250, $entry->fresh()->purchase_cost);
