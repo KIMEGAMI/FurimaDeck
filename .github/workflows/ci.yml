@@ -83,6 +83,7 @@ jobs:
       - name: Configure ephemeral E2E demo user
         run: |
           demo_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${demo_password}"
           {
             echo "APP_URL=http://127.0.0.1:8002"
             echo "SESSION_DRIVER=file"
