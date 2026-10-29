@@ -39,6 +39,112 @@ jobs:
           node scripts/check-github-actions-pinned.mjs
           node --test scripts/check-github-actions-pinned.test.mjs
 
+  dast-active:
+    name: OWASP ZAP active DAST (isolated CI app)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      APP_ENV: testing
+      APP_DEBUG: 'false'
+      APP_URL: http://127.0.0.1:8002
+      DB_CONNECTION: furimadeck
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      FURIMADECK_DB_DRIVER: sqlite
+      FURIMADECK_DB_URL: ''
+      SESSION_DRIVER: file
+      SESSION_SECURE_COOKIE: 'true'
+      SESSION_SAME_SITE: lax
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      LOG_CHANNEL: stderr
+      FURIMADECK_CUTOVER_ENABLED: 'true'
+      FURIMADECK_PRODUCT_MANAGEMENT_ENABLED: 'true'
+      FURIMADECK_DEMO_USER_ENABLED: 'false'
+      FURIMADECK_PRODUCT_IMAGE_DISK: local
+      FURIMADECK_R2_LIVE_TEST: '0'
+      FURIMADECK_R2_PRODUCTION_LIVE_TEST: '0'
+      AWS_ACCESS_KEY_ID: ''
+      AWS_SECRET_ACCESS_KEY: ''
+      FURIMADECK_FREEE_CLIENT_ID: ''
+      FURIMADECK_FREEE_CLIENT_SECRET: ''
+      FURIMADECK_MF_CLIENT_ID: ''
+      FURIMADECK_MF_CLIENT_SECRET: ''
+      FURIMADECK_STRIPE_SECRET: ''
+      FURIMADECK_STRIPE_WEBHOOK_SECRET: ''
+      GOOGLE_CLIENT_ID: ''
+      GOOGLE_CLIENT_SECRET: ''
+      RESEND_API_KEY: ''
+      MAIL_URL: ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --ansi
+
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build isolated application assets
+        run: npm run build
+
+      - name: Run active scan against disposable loopback app
+        run: |
+          set -Eeuo pipefail
+          suffix="zap-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          database_file="$GITHUB_WORKSPACE/storage/framework/testing/furimadeck-zap-${suffix}.sqlite"
+          storage_root="$RUNNER_TEMP/furimadeck-zap-${suffix}"
+          mkdir -p "$(dirname "$database_file")" "$storage_root/framework/views" "$storage_root/framework/cache/data" "$storage_root/framework/sessions" "$storage_root/logs" "$storage_root/app/private" "$storage_root/app/public" "$RUNNER_TEMP/zap"
+          touch "$database_file"
+          export FURIMADECK_DB_DATABASE="$database_file"
+          export LARAVEL_STORAGE_PATH="$storage_root"
+          cp .env.example .env
+          php artisan key:generate --force --ansi
+          php artisan config:clear --ansi
+          php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force --no-interaction
+          setsid php artisan serve --host=127.0.0.1 --port=8002 > "$RUNNER_TEMP/furimadeck-zap-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill -- -"$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --output /dev/null "$APP_URL/up"; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error --output /dev/null "$APP_URL/up"
+          docker run --rm --network host \
+            --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
+            docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
+            zap-full-scan.py -t "$APP_URL" -m 5 -T 10 -J furimadeck-zap-report.json -r furimadeck-zap-report.html
+
+      - name: Report scan diagnostics
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/zap/furimadeck-zap-report.html"
+          if [ -f "$report" ]; then
+            echo 'ZAP produced a report in runner-local temporary storage; it is not uploaded.'
+          else
+            echo 'ZAP report was not generated; inspect the scan step and isolated server log.'
+            if [ -f "$RUNNER_TEMP/furimadeck-zap-server.log" ]; then
+              tail -n 80 "$RUNNER_TEMP/furimadeck-zap-server.log"
+            fi
+          fi
   dependency-review:
     name: Dependency review
     runs-on: ubuntu-latest
