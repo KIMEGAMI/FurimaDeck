@@ -46,25 +46,24 @@ function cookieNames(alert, instances) {
   if (!['10010', '90027'].includes(String(alert.pluginid ?? ''))) return [];
 
   const names = new Set();
-  const addCandidate = (value) => {
-    if (typeof value !== 'string') return;
-    const trimmed = value.trim();
-    if (/^[A-Za-z0-9_-]{1,64}$/.test(trimmed)) names.add(trimmed);
-    for (const match of trimmed.matchAll(/(?:set-cookie|cookie)\s*:\s*([A-Za-z0-9_-]{1,64})\s*=/gi)) {
-      names.add(match[1]);
-    }
-    for (const match of trimmed.matchAll(/(?:^|[;,\s])([A-Za-z0-9_-]{1,64})\s*=/g)) {
-      names.add(match[1]);
-    }
-  };
-
   for (const instance of instances) {
-    addCandidate(instance.param);
-    addCandidate(instance.evidence);
-    addCandidate(instance['response-header']);
+    const header = instance['response-header'];
+    if (typeof header !== 'string') continue;
+
+    for (const line of header.split(/\r?\n/)) {
+      const match = line.match(/^[\t ]*(set-cookie|cookie)[\t ]*:[\t ]*(.*)$/i);
+      if (!match) continue;
+
+      const field = match[1].toLowerCase();
+      const candidates = field === 'cookie' ? match[2].split(';') : [match[2]];
+      for (const candidate of candidates) {
+        const cookie = candidate.trim().match(/^([A-Za-z0-9_-]{1,64})[\t ]*=/);
+        if (cookie) names.add(cookie[1]);
+      }
+    }
   }
 
-  return [...names].filter((name) => !['cookie', 'set-cookie'].includes(name.toLowerCase())).slice(0, 5);
+  return [...names].slice(0, 5);
 }
 
 export function formatZapDiagnostics(report) {
