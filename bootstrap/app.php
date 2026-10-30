@@ -43,7 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->dontFlash(['purchase_special_case']);
-        $exceptions->respond(function (Response $response, \Throwable $exception, Request $request): Response {
+        $exceptions->respond(function (Response $response, Throwable $exception, Request $request): Response {
             return app(SecurityHeaders::class)->apply($response, $request);
         });
     })->create();
