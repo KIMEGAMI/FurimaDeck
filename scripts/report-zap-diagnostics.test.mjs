@@ -16,7 +16,7 @@ test('summarizes traditional ZAP JSON without printing request evidence or respo
           attack: 'ATTACK_VALUE_DO_NOT_LOG',
           evidence: 'EVIDENCE_VALUE_DO_NOT_LOG',
           otherinfo: 'OTHER_INFO_DO_NOT_LOG',
-          'param': 'XSRF-TOKEN',
+          'param': 'PARAM_VALUE_DO_NOT_LOG',
           'response-header': 'Set-Cookie: XSRF-TOKEN=secret-cookie-value; HttpOnly',
           'response-body': 'BODY_VALUE_DO_NOT_LOG',
         }],
@@ -30,8 +30,35 @@ test('summarizes traditional ZAP JSON without printing request evidence or respo
   assert.match(output, /response-header-values=never-printed/);
   for (const secret of [
     'private@example.test', 'secret-query', 'ATTACK_VALUE_DO_NOT_LOG',
-    'EVIDENCE_VALUE_DO_NOT_LOG', 'OTHER_INFO_DO_NOT_LOG', 'secret-cookie-value',
+    'EVIDENCE_VALUE_DO_NOT_LOG', 'PARAM_VALUE_DO_NOT_LOG', 'OTHER_INFO_DO_NOT_LOG', 'secret-cookie-value',
     'BODY_VALUE_DO_NOT_LOG',
+  ]) {
+    assert.doesNotMatch(output, new RegExp(secret));
+  }
+});
+
+test('reports cookie names only from cookie headers and never reports cookie values', () => {
+  const output = formatZapDiagnostics({
+    site: [{
+      alerts: [{
+        pluginid: '90027',
+        riskdesc: 'Informational',
+        name: 'Cookie Slack Detector',
+        instances: [{
+          uri: 'http://127.0.0.1:8002/login',
+          method: 'GET',
+          param: 'FAKE_PARAM_DO_NOT_LOG',
+          evidence: 'FAKE_EVIDENCE_DO_NOT_LOG',
+          'response-header': 'HTTP/1.1 200 OK\r\nSet-Cookie: furimadeck_session=secret-session; Path=/\r\nCookie: XSRF-TOKEN=secret-xsrf; theme=secret-theme',
+        }],
+      }],
+    }],
+  });
+
+  assert.match(output, /cookie-names=furimadeck_session,XSRF-TOKEN,theme/);
+  for (const secret of [
+    'secret-session', 'secret-xsrf', 'secret-theme',
+    'FAKE_PARAM_DO_NOT_LOG', 'FAKE_EVIDENCE_DO_NOT_LOG',
   ]) {
     assert.doesNotMatch(output, new RegExp(secret));
   }
