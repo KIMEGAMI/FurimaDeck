@@ -147,8 +147,6 @@ jobs:
               DocumentRoot "$static_root"
               ProxyPreserveHost On
               ProxyVia Off
-              Header onsuccess unset Server
-              Header always unset Server
               RewriteEngine On
               RewriteCond %{REQUEST_URI} !^/$
               RewriteCond %{REQUEST_URI} !\.php$
@@ -167,8 +165,6 @@ jobs:
           <VirtualHost 127.0.0.1:8004>
               ServerName 127.0.0.1
               DocumentRoot "$static_root"
-              Header onsuccess unset Server
-              Header always unset Server
               <Directory "$static_root">
                   AllowOverride All
                   Require all granted
@@ -181,7 +177,11 @@ jobs:
           sudo a2dissite 000-default
           sudo a2ensite furimadeck-zap
           sudo apachectl configtest
-          sudo systemctl start apache2
+          if sudo systemctl is-active --quiet apache2; then
+            sudo systemctl reload apache2
+          else
+            sudo systemctl start apache2
+          fi
 
           for attempt in $(seq 1 60); do
             if curl --fail --silent --output /dev/null "$APP_URL/up"; then
@@ -218,6 +218,7 @@ jobs:
           check_header Cross-Origin-Embedder-Policy require-corp /
           check_header Cross-Origin-Opener-Policy same-origin /
           check_header Cross-Origin-Resource-Policy same-origin /
+          check_header Server Apache /
           if grep -qi '^X-Powered-By:' "$headers_file"; then
             echo 'X-Powered-By was exposed on the dynamic homepage.' >&2
             exit 1
@@ -252,6 +253,7 @@ jobs:
             check_header Cross-Origin-Embedder-Policy require-corp "$path"
             check_header Cross-Origin-Opener-Policy same-origin "$path"
             check_header Cross-Origin-Resource-Policy same-origin "$path"
+            check_header Server Apache "$path"
             if grep -qi '^X-Powered-By:' "$headers_file"; then
               echo "X-Powered-By was exposed on static asset $path." >&2
               exit 1
