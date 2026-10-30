@@ -12,6 +12,7 @@ export function summarizeAuthenticatedZapAccessLog(logText) {
   let requestsWithSessionCookie = 0;
   let logoutRequests = 0;
   let loginRequests = 0;
+  let successfulLoginPosts = 0;
 
   for (const line of logText.split(/\r?\n/)) {
     if (line === '') continue;
@@ -37,6 +38,7 @@ export function summarizeAuthenticatedZapAccessLog(logText) {
       loginRequests += 1;
       const key = `${method}:${status}`;
       loginStatusCounts.set(key, (loginStatusCounts.get(key) ?? 0) + 1);
+      if (method === 'POST' && status === '302') successfulLoginPosts += 1;
     }
     if (method !== 'GET' || !protectedDashboardPaths.has(path)) continue;
 
@@ -57,13 +59,16 @@ export function summarizeAuthenticatedZapAccessLog(logText) {
     .map(([status, count]) => `${status}:${count}`)
     .join(',') || 'none';
 
-  const summary = `Authenticated ZAP dashboard requests: total=${dashboardRequests}; session-cookie-present=${requestsWithSessionCookie}; HTTP statuses=${statuses}; /logout requests=${logoutRequests}; /logout method-status=${formatCounts(logoutStatusCounts)}; /login requests=${loginRequests}; /login method-status=${formatCounts(loginStatusCounts)}`;
+  const summary = `Authenticated ZAP dashboard requests: total=${dashboardRequests}; session-cookie-present=${requestsWithSessionCookie}; HTTP statuses=${statuses}; /logout requests=${logoutRequests}; /logout method-status=${formatCounts(logoutStatusCounts)}; /login requests=${loginRequests}; /login successful-posts=${successfulLoginPosts}; /login method-status=${formatCounts(loginStatusCounts)}`;
 
   if (requestsWithSessionCookie !== dashboardRequests) {
     throw new Error(`${summary}\nOne or more protected-dashboard requests did not include the isolated session cookie.`);
   }
   if (dashboardRequests !== (statusCounts.get('200') ?? 0)) {
     throw new Error(`${summary}\nOne or more authenticated requests to the protected dashboard did not return HTTP 200.`);
+  }
+  if (successfulLoginPosts === 0) {
+    throw new Error(`${summary}\nAuthenticated ZAP did not record a successful disposable-account login response.`);
   }
 
   return summary;

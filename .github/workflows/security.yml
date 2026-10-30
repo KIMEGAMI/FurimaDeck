@@ -41,6 +41,7 @@ jobs:
           node --test scripts/report-zap-diagnostics.test.mjs
           node --test scripts/prepare-authenticated-zap-session.test.mjs
           node --test scripts/check-authenticated-zap-access-log.test.mjs
+          node --test scripts/check-security-workflow-policy.test.mjs
 
   dast-active:
     name: OWASP ZAP active DAST (isolated CI app)
@@ -114,7 +115,7 @@ jobs:
           suffix="zap-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           database_file="$GITHUB_WORKSPACE/storage/framework/testing/furimadeck-zap-${suffix}.sqlite"
           storage_root="$RUNNER_TEMP/furimadeck-zap-${suffix}"
-          auth_cookie_file="$RUNNER_TEMP/furimadeck-zap-auth-cookie-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
+          auth_credentials_file=""
           static_root="/var/www/furimadeck-zap-static-${suffix}"
           storage_public_root="/var/www/furimadeck-zap-storage-${suffix}"
           mkdir -p "$(dirname "$database_file")" "$storage_root/framework/views" "$storage_root/framework/cache/data" "$storage_root/framework/sessions" "$storage_root/logs" "$storage_root/app/private" "$storage_root/app/public" "$RUNNER_TEMP/zap"
@@ -135,7 +136,7 @@ jobs:
           php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force --no-interaction
           setsid php artisan serve --host=127.0.0.1 --port=8003 > "$RUNNER_TEMP/furimadeck-zap-app.log" 2>&1 &
           app_pid=$!
-          trap 'sudo systemctl stop apache2 2>/dev/null || true; kill -- -"$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; rm -f "$auth_cookie_file"' EXIT
+          trap 'sudo systemctl stop apache2 2>/dev/null || true; kill -- -"$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; if [ -n "$auth_credentials_file" ]; then rm -f -- "$auth_credentials_file"; fi; rm -f -- "$RUNNER_TEMP/zap/furimadeck-zap-auth-context.xml"' EXIT
           for attempt in $(seq 1 60); do
             if curl --fail --silent --output /dev/null http://127.0.0.1:8003/up; then
               break
@@ -389,7 +390,7 @@ jobs:
             --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
             --entrypoint /bin/sh \
             docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
-            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py -t "$1" -m 5 -T 10 -J furimadeck-zap-report.json -r furimadeck-zap-report.html' \
+            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py -t "$1" -m 5 -T 10 -z "-config api.addrs.addr.name=^(localhost|127[.]0[.]0[.]1|::1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$ -config api.addrs.addr.regex=true" -J furimadeck-zap-report.json -r furimadeck-zap-report.html' \
             sh "$APP_URL"
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-report.json"
           ZAP_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-report.json" node <<'NODE'
@@ -422,45 +423,36 @@ jobs:
             ZAP_TEST_EMAIL="$zap_auth_email" \
             ZAP_TEST_PASSWORD="$zap_auth_password" \
             ZAP_TEST_SESSION_COOKIE_NAME="$zap_session_cookie_name" \
-            ZAP_AUTH_COOKIE_FILE="$auth_cookie_file" \
             node scripts/prepare-authenticated-zap-session.mjs
-          unset zap_auth_email zap_auth_password
 
           auth_log="/var/log/apache2/furimadeck-zap-https-access.log"
           auth_log_offset="$(wc -c < "$auth_log")"
-          auth_cookie_header="$(cat "$auth_cookie_file")"
-          if [ -z "$auth_cookie_header" ]; then
-            echo 'Authenticated DAST session was empty.' >&2
+          umask 077
+          auth_credentials_file="$(mktemp "$RUNNER_TEMP/furimadeck-zap-auth-credentials-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.XXXXXX")"
+          printf '%s\n' "$zap_auth_email" "$zap_auth_password" > "$auth_credentials_file"
+          chmod 600 "$auth_credentials_file"
+          if [ -L "$auth_credentials_file" ] || [ "$(stat -c '%a' -- "$auth_credentials_file")" != 600 ]; then
+            echo 'Disposable ZAP credentials file permissions are unsafe.' >&2
             exit 1
           fi
+          unset zap_auth_email zap_auth_password
           hook_file="$RUNNER_TEMP/zap-authenticated-scan-hook.py"
           cp scripts/zap-authenticated-scan-hook.py "$hook_file"
           test -r "$hook_file"
           docker run --rm --network host \
             --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
             --volume "$hook_file:/tmp/zap-authenticated-scan-hook.py:ro" \
+            --volume "$auth_credentials_file:/tmp/zap-auth-credentials:ro" \
             --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
-            --env ZAP_AUTH_HEADER=Cookie \
-            --env ZAP_AUTH_HEADER_SITE=127.0.0.1 \
-            --env "ZAP_AUTH_HEADER_VALUE=$auth_cookie_header" \
+            --env ZAP_AUTH_CONTEXT_FILE=/zap/wrk/furimadeck-zap-auth-context.xml \
+            --env ZAP_AUTH_CREDENTIALS_FILE=/tmp/zap-auth-credentials \
+            --env "APP_URL=$APP_URL" \
             --entrypoint /bin/sh \
             docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
-            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-auth-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-auth-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py --hook=/tmp/zap-authenticated-scan-hook.py -t "$1" -m 5 -T 10 -J furimadeck-zap-authenticated-report.json -r furimadeck-zap-authenticated-report.html' \
+            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-auth-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-auth-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py --hook=/tmp/zap-authenticated-scan-hook.py -n /zap/wrk/furimadeck-zap-auth-context.xml -U "FurimaDeck CI scanner" -t "$1" -m 5 -T 10 -z "-config api.addrs.addr.name=^(localhost|127[.]0[.]0[.]1|::1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$ -config api.addrs.addr.regex=true" -J furimadeck-zap-authenticated-report.json -r furimadeck-zap-authenticated-report.html' \
             sh "$APP_URL/furimadeck-dashboard"
-          unset auth_cookie_header
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"
           node scripts/check-authenticated-zap-access-log.mjs "$auth_log" "$auth_log_offset"
-          post_scan_cookie_header="$(cat "$auth_cookie_file")"
-          post_scan_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --header "Cookie: $post_scan_cookie_header" "$APP_URL/furimadeck-dashboard")" || {
-            unset post_scan_cookie_header
-            echo 'Authenticated post-scan dashboard control request failed.' >&2
-            exit 1
-          }
-          unset post_scan_cookie_header
-          if [ "$post_scan_status" != 200 ]; then
-            echo "The isolated authenticated session did not reach the dashboard after ZAP (HTTP $post_scan_status)." >&2
-            exit 1
-          fi
           ZAP_AUTH_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json" node <<'NODE'
           const fs = require('node:fs');
           const report = JSON.parse(fs.readFileSync(process.env.ZAP_AUTH_REPORT, 'utf8'));
@@ -603,7 +595,7 @@ jobs:
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
 
-      - name: Verify authenticated ZAP logout avoidance fails closed
+      - name: Verify authenticated ZAP context and authentication fail closed
         run: python3 scripts/test_zap_authenticated_scan_hook.py
 
       - name: Prepare isolated test application
