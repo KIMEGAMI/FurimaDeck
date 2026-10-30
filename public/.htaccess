@@ -5,6 +5,9 @@
 
     RewriteEngine On
 
+    # Product images must be served through the authenticated owner-checked route.
+    RewriteRule ^storage/products(?:/|$) - [F,L,NC]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

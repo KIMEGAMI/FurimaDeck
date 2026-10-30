@@ -117,6 +117,10 @@ jobs:
           sudo mkdir -p "$static_root"
           sudo cp -a public/. "$static_root/"
           sudo chmod -R a+rX "$static_root"
+          mkdir -p "$storage_root/app/public/products/2147483647"
+          printf 'PUBLIC_STORAGE_CONTROL_SENTINEL\n' > "$storage_root/app/public/security-static-control.txt"
+          printf 'PRIVATE_PRODUCT_IMAGE_SENTINEL\n' > "$storage_root/app/public/products/2147483647/ci-private-image-sentinel.txt"
+          sudo ln -s "$storage_root/app/public" "$static_root/storage"
           sudo chown 1000:1000 "$RUNNER_TEMP/zap"
           touch "$database_file"
           export FURIMADECK_DB_DATABASE="$database_file"
@@ -216,6 +220,7 @@ jobs:
               ServerName 127.0.0.1
               DocumentRoot "$static_root"
               <Directory "$static_root">
+                  Options FollowSymLinks
                   AllowOverride All
                   Require all granted
               </Directory>
@@ -342,6 +347,24 @@ jobs:
               exit 1
             fi
           done
+          status="$(curl --silent --show-error --output "$body_file" --write-out '%{http_code}' 'http://127.0.0.1:8004/storage/security-static-control.txt')" || {
+            echo 'Public storage control-access probe failed.' >&2
+            exit 1
+          }
+          if [ "$status" != 200 ] || ! grep -q 'PUBLIC_STORAGE_CONTROL_SENTINEL' "$body_file"; then
+            echo "Static storage control path was not served as expected (HTTP $status)." >&2
+            exit 1
+          fi
+
+          status="$(curl --silent --show-error --output "$body_file" --write-out '%{http_code}' 'http://127.0.0.1:8004/storage/products/2147483647/ci-private-image-sentinel.txt')" || {
+            echo 'Private product image static-access probe failed.' >&2
+            exit 1
+          }
+          if [ "$status" != 403 ] || grep -q 'PRIVATE_PRODUCT_IMAGE_SENTINEL' "$body_file"; then
+            echo "Private product image was not denied by the public Apache document root (HTTP $status)." >&2
+            exit 1
+          fi
+
           curl --fail --silent --show-error --dump-header "$headers_file" --output /dev/null "$APP_URL/login"
           if ! awk 'tolower($0) ~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/ && line ~ /;[[:space:]]*secure([;[:space:]]|$)/ && line ~ /;[[:space:]]*samesite=lax([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
             echo 'The XSRF token cookie is missing HttpOnly, Secure, or SameSite=Lax.' >&2
