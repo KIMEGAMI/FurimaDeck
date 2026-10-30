@@ -25,13 +25,28 @@ function collectCookies(response, cookies) {
     if (expiresImmediately) {
       cookies.delete(name);
     } else {
-      cookies.set(name, value);
+      cookies.set(name, {
+        value,
+        httpOnly: attributes.some((attribute) => /^\s*httponly\s*$/i.test(attribute)),
+        secure: attributes.some((attribute) => /^\s*secure\s*$/i.test(attribute)),
+      });
     }
   }
 }
 
 function serializeCookies(cookies) {
-  return [...cookies].map(([name, value]) => `${name}=${value}`).join('; ');
+  return [...cookies].map(([name, cookie]) => `${name}=${cookie.value}`).join('; ');
+}
+
+function findSessionCookieName(cookies) {
+  const secureHttpOnlyCookies = [...cookies]
+    .filter(([, cookie]) => cookie.httpOnly && cookie.secure)
+    .map(([name]) => name);
+  if (secureHttpOnlyCookies.length !== 1) {
+    throw new Error('The isolated login response did not identify exactly one secure session cookie.');
+  }
+
+  return secureHttpOnlyCookies[0];
 }
 
 function requireLoopbackHttps(appUrl) {
@@ -81,6 +96,7 @@ export async function prepareAuthenticatedZapSession({
     .find((tag) => readAttribute(tag, 'name') === '_token');
   const csrfToken = tokenInput ? readAttribute(tokenInput, 'value') : null;
   if (!csrfToken) throw new Error('The isolated login page did not expose its CSRF form token.');
+  const sessionCookieName = findSessionCookieName(cookies);
 
   const loginResponse = await request(new URL('/login', app.origin), {
     method: 'POST',
@@ -104,12 +120,12 @@ export async function prepareAuthenticatedZapSession({
     throw new Error('The authenticated test account could not reach the protected dashboard.');
   }
 
-  const serialized = cookieHeader();
-  if (!serialized || !cookies.has('laravel_session')) {
+  const sessionCookie = cookies.get(sessionCookieName);
+  if (!sessionCookie) {
     throw new Error('The isolated authenticated session cookie was not established.');
   }
 
-  await writeFile(cookieFile, serialized, { encoding: 'utf8', mode: 0o600 });
+  await writeFile(cookieFile, `${sessionCookieName}=${sessionCookie.value}`, { encoding: 'utf8', mode: 0o600 });
   await chmod(cookieFile, 0o600);
 
   return { loginStatus: loginResponse.status, protectedStatus: protectedPage.status };

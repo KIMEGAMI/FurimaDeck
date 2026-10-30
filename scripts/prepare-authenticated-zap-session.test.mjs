@@ -14,11 +14,14 @@ test('authenticates a disposable CI account, verifies a protected route, and wri
     if (calls.length === 1) {
       return new Response('<form><input type="hidden" name="_token" value="csrf-token"></form>', {
         status: 200,
-        headers: { 'set-cookie': 'laravel_session=anonymous; Path=/; Secure; HttpOnly' },
+        headers: [
+          ['set-cookie', 'app_session=anonymous; Path=/; Secure; HttpOnly'],
+          ['set-cookie', 'XSRF-TOKEN=csrf-cookie; Path=/; Secure; SameSite=Lax'],
+        ],
       });
     }
     if (calls.length === 2) {
-      assert.equal(calls[1].options.headers.cookie, 'laravel_session=anonymous');
+      assert.equal(calls[1].options.headers.cookie, 'app_session=anonymous; XSRF-TOKEN=csrf-cookie');
       assert.equal(new URLSearchParams(calls[1].options.body).get('_token'), 'csrf-token');
       assert.equal(new URLSearchParams(calls[1].options.body).get('email'), 'zap-ci@example.invalid');
       assert.equal(new URLSearchParams(calls[1].options.body).get('password'), 'disposable-password');
@@ -26,12 +29,12 @@ test('authenticates a disposable CI account, verifies a protected route, and wri
         status: 302,
         headers: {
           location: '/furimadeck-dashboard',
-          'set-cookie': 'laravel_session=authenticated; Path=/; Secure; HttpOnly',
+          'set-cookie': 'app_session=authenticated; Path=/; Secure; HttpOnly',
         },
       });
     }
     assert.equal(calls[2].url, 'https://127.0.0.1:8443/furimadeck-dashboard');
-    assert.equal(calls[2].options.headers.cookie, 'laravel_session=authenticated');
+    assert.equal(calls[2].options.headers.cookie, 'app_session=authenticated; XSRF-TOKEN=csrf-cookie');
     return new Response('<main>private dashboard</main>', { status: 200 });
   };
 
@@ -45,7 +48,7 @@ test('authenticates a disposable CI account, verifies a protected route, and wri
     });
 
     assert.deepEqual(result, { loginStatus: 302, protectedStatus: 200 });
-    assert.equal(await readFile(cookieFile, 'utf8'), 'laravel_session=authenticated');
+    assert.equal(await readFile(cookieFile, 'utf8'), 'app_session=authenticated');
     assert.equal(calls.length, 3);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -102,7 +105,7 @@ test('does not persist a session when authentication cannot reach the protected 
     if (requestCount === 1) {
       return new Response('<form><input name="_token" value="csrf-token"></form>', {
         status: 200,
-        headers: { 'set-cookie': 'laravel_session=anonymous; Path=/; Secure; HttpOnly' },
+        headers: { 'set-cookie': 'app_session=anonymous; Path=/; Secure; HttpOnly' },
       });
     }
     if (requestCount === 2) {
