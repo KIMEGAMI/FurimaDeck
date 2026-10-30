@@ -14,6 +14,26 @@ abstract class TestCase extends BaseTestCase
 
     protected function setUp(): void
     {
+        $isMariaDbGateTest = $this instanceof Feature\\FurimaDeckMariaDbCsvGateTest
+            && getenv('FURIMADECK_MARIADB_GATE') === '1';
+
+        if (! $isMariaDbGateTest) {
+            $testDatabaseEnvironment = [
+                'DB_CONNECTION' => 'sqlite',
+                'DB_DATABASE' => ':memory:',
+                'DB_URL' => '',
+                'FURIMADECK_DB_DRIVER' => 'sqlite',
+                'FURIMADECK_DB_DATABASE' => ':memory:',
+                'FURIMADECK_DB_URL' => '',
+            ];
+
+            foreach ($testDatabaseEnvironment as $name => $value) {
+                putenv($name.'='.$value);
+                $_ENV[$name] = $value;
+                $_SERVER[$name] = $value;
+            }
+        }
+
         parent::setUp();
 
         Http::preventStrayRequests();

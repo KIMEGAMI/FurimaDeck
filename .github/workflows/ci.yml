@@ -22,6 +22,7 @@ env:
   APP_ENV: testing
   DB_CONNECTION: sqlite
   DB_DATABASE: ':memory:'
+  FURIMADECK_DB_URL: ''
   CACHE_STORE: array
   SESSION_DRIVER: array
   QUEUE_CONNECTION: sync

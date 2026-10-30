@@ -41,6 +41,7 @@ $testEnvironment = @{
     DB_DATABASE = ':memory:'
     DB_URL = ''
     FURIMADECK_DB_DRIVER = 'sqlite'
+    FURIMADECK_DB_URL = ''
     FURIMADECK_DB_DATABASE = ':memory:'
     FURIMADECK_PRODUCT_IMAGE_DISK = 'local'
     FURIMADECK_R2_LIVE_TEST = $developmentR2LiveTest
