@@ -144,7 +144,7 @@ jobs:
               RewriteCond %{REQUEST_URI} !^/$
               RewriteCond %{REQUEST_URI} !\.php$
               RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} -f
-              RewriteRule ^ - [END]
+              RewriteRule ^ - [L]
               RewriteRule ^/(.*)$ http://127.0.0.1:8003/\$1 [P,L]
               <Directory "$GITHUB_WORKSPACE/public">
                   AllowOverride All
@@ -175,9 +175,15 @@ jobs:
             local name="$1"
             local expected="$2"
             local actual
+            local count
+            count="$(grep -Eic "^${name}:" "$headers_file" || true)"
+            if [ "$count" -ne 1 ]; then
+              echo "Expected exactly one $name header on $3; found $count." >&2
+              exit 1
+            fi
             actual="$(awk -F: -v wanted="$name" 'tolower($1) == tolower(wanted) { sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); value = $0 } END { print value }' "$headers_file")"
             if [ "$actual" != "$expected" ]; then
-              echo "Incorrect security header on $3: $name" >&2
+              echo "Incorrect security header value on $3: $name" >&2
               exit 1
             fi
           }
@@ -200,7 +206,7 @@ jobs:
             fi
           done
           curl --fail --silent --show-error --dump-header "$headers_file" --output /dev/null "$APP_URL/login"
-          if ! grep -Eqi '^Set-Cookie: XSRF-TOKEN=.*;[[:space:]]*HttpOnly([;[:space:]]|$)' "$headers_file"; then
+          if ! awk 'tolower($0) ~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
             echo 'The XSRF token cookie is not HttpOnly.' >&2
             exit 1
           fi
