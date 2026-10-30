@@ -38,17 +38,6 @@ function serializeCookies(cookies) {
   return [...cookies].map(([name, cookie]) => `${name}=${cookie.value}`).join('; ');
 }
 
-function findSessionCookieName(cookies) {
-  const secureHttpOnlyCookies = [...cookies]
-    .filter(([, cookie]) => cookie.httpOnly && cookie.secure)
-    .map(([name]) => name);
-  if (secureHttpOnlyCookies.length !== 1) {
-    throw new Error('The isolated login response did not identify exactly one secure session cookie.');
-  }
-
-  return secureHttpOnlyCookies[0];
-}
-
 function requireLoopbackHttps(appUrl) {
   const url = new URL(appUrl);
   if (url.protocol !== 'https:' || !['127.0.0.1', 'localhost'].includes(url.hostname) || url.username || url.password) {
@@ -62,6 +51,7 @@ export async function prepareAuthenticatedZapSession({
   appUrl,
   email,
   password,
+  sessionCookieName,
   cookieFile,
   fetchImpl = fetch,
 }) {
@@ -70,6 +60,9 @@ export async function prepareAuthenticatedZapSession({
   }
   if (typeof cookieFile !== 'string' || cookieFile.length === 0) {
     throw new Error('A temporary cookie output path is required.');
+  }
+  if (typeof sessionCookieName !== 'string' || !/^[A-Za-z0-9_-]+$/.test(sessionCookieName)) {
+    throw new Error('The configured session cookie name is invalid.');
   }
 
   const app = requireLoopbackHttps(appUrl);
@@ -96,7 +89,10 @@ export async function prepareAuthenticatedZapSession({
     .find((tag) => readAttribute(tag, 'name') === '_token');
   const csrfToken = tokenInput ? readAttribute(tokenInput, 'value') : null;
   if (!csrfToken) throw new Error('The isolated login page did not expose its CSRF form token.');
-  const sessionCookieName = findSessionCookieName(cookies);
+  const initialSessionCookie = cookies.get(sessionCookieName);
+  if (!initialSessionCookie?.httpOnly || !initialSessionCookie.secure) {
+    throw new Error('The configured session cookie was missing HttpOnly or Secure.');
+  }
 
   const loginResponse = await request(new URL('/login', app.origin), {
     method: 'POST',
@@ -136,6 +132,7 @@ async function main() {
     appUrl: process.env.ZAP_TEST_APP_URL,
     email: process.env.ZAP_TEST_EMAIL,
     password: process.env.ZAP_TEST_PASSWORD,
+    sessionCookieName: process.env.ZAP_TEST_SESSION_COOKIE_NAME,
     cookieFile: process.env.ZAP_AUTH_COOKIE_FILE,
   });
   process.stdout.write('Disposable CI account reached the protected dashboard (HTTP 200); session data was not printed.\n');

@@ -414,6 +414,7 @@ jobs:
             ZAP_TEST_APP_URL="$APP_URL" \
             ZAP_TEST_EMAIL="$zap_auth_email" \
             ZAP_TEST_PASSWORD="$zap_auth_password" \
+            ZAP_TEST_SESSION_COOKIE_NAME="$(php scripts/read-session-cookie-name.php)" \
             ZAP_AUTH_COOKIE_FILE="$auth_cookie_file" \
             node scripts/prepare-authenticated-zap-session.mjs
           unset zap_auth_email zap_auth_password

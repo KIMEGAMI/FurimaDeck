@@ -43,6 +43,7 @@ test('authenticates a disposable CI account, verifies a protected route, and wri
       appUrl: 'https://127.0.0.1:8443',
       email: 'zap-ci@example.invalid',
       password: 'disposable-password',
+      sessionCookieName: 'app_session',
       cookieFile,
       fetchImpl,
     });
@@ -62,6 +63,7 @@ test('rejects a non-loopback target before sending credentials', async () => {
       appUrl: 'https://example.com',
       email: 'zap-ci@example.invalid',
       password: 'disposable-password',
+      sessionCookieName: 'app_session',
       cookieFile: join(tmpdir(), 'unused-zap-cookie.txt'),
       fetchImpl: async () => {
         requestCount += 1;
@@ -73,6 +75,28 @@ test('rejects a non-loopback target before sending credentials', async () => {
   assert.equal(requestCount, 0);
 });
 
+test('rejects a session cookie without HttpOnly and Secure before submitting credentials', async () => {
+  let requestCount = 0;
+  await assert.rejects(
+    prepareAuthenticatedZapSession({
+      appUrl: 'https://127.0.0.1:8443',
+      email: 'zap-ci@example.invalid',
+      password: 'disposable-password',
+      sessionCookieName: 'app_session',
+      cookieFile: join(tmpdir(), 'unused-zap-cookie.txt'),
+      fetchImpl: async () => {
+        requestCount += 1;
+        return new Response('<form><input name="_token" value="csrf-token"></form>', {
+          status: 200,
+          headers: { 'set-cookie': 'app_session=anonymous; Path=/' },
+        });
+      },
+    }),
+    /missing HttpOnly or Secure/,
+  );
+  assert.equal(requestCount, 1);
+});
+
 test('fails closed when the login page does not include a CSRF token', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'furimadeck-zap-no-csrf-'));
   let requestCount = 0;
@@ -82,6 +106,7 @@ test('fails closed when the login page does not include a CSRF token', async () 
         appUrl: 'https://127.0.0.1:8443',
         email: 'zap-ci@example.invalid',
         password: 'disposable-password',
+        sessionCookieName: 'app_session',
         cookieFile: join(directory, 'session-cookie.txt'),
         fetchImpl: async () => {
           requestCount += 1;
@@ -120,6 +145,7 @@ test('does not persist a session when authentication cannot reach the protected 
         appUrl: 'https://127.0.0.1:8443',
         email: 'zap-ci@example.invalid',
         password: 'disposable-password',
+        sessionCookieName: 'app_session',
         cookieFile,
         fetchImpl,
       }),
