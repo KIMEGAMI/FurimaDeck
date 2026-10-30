@@ -9,14 +9,15 @@
 
 ## 現行リリース判定（2026-10-30）
 
-- PR #35のHEAD・Draft/merge状態・Checksを正本とする。確認時点のHEADは `7c93c4dd5663b66c086ba6d54aa3b7fe41b2144f`、open・Draft・未merge、289ファイル変更。[PR #35](https://github.com/KIMEGAMI/FurimaDeck/pull/35)
-- 同HEADの [CI](https://github.com/KIMEGAMI/FurimaDeck/actions/runs/40915535723) と [Security](https://github.com/KIMEGAMI/FurimaDeck/actions/runs/40915535733) は全ゲート成功。厳格PHPUnit 927 tests / 6,222 assertions、Playwright Chromium E2E 18件、MariaDB CSV gate 4 tests / 42 assertions。
-- セキュリティ検査はSemgrep 173 rules / 468 filesで0 findings、Gitleaksでleaksなし、Composer/npm監査で脆弱性0、Dependency ReviewでModerate以上0、WorkflowアクションSHA固定検査成功。これらは自動検査の結果であり、脆弱性ゼロの保証や第三者による侵入テストの代替ではない。
-- 最新CIでは生成したE2E専用パスワードがログ上でマスクされることを確認した。マスク導入前の過去ログには隔離E2E用の使い捨て値が表示されていた。過去ログは残るが、テスト実行は終了済みで、その値を本番や外部サービスの認証には使用していない。
-- CIログにはsetup-nodeのnpmキャッシュ処理中にNodeの `punycode` / `url.parse()` 非推奨警告が残る。依存監査では脆弱性検出なしだが、警告の正確な推移依存元は未特定。
+- GitHub上の現行候補はPR #37。HEADは `63768a9308ce072e5b6e88ee04f3a4ff338a9014`、baseは `main` の `320758d082bc1552dfc6a8743dc831f74752b894`。PRはopen・Draft・未mergeで、317ファイル（+39,651 / -2,705行）、105コミットを含む。旧PR #35の記録は過去スナップショットであり、現行状態の正本ではない。[PR #37](https://github.com/KIMEGAMI/FurimaDeck/pull/37)
+- 同じHEADで [CI run 287](https://github.com/KIMEGAMI/FurimaDeck/actions/runs/41028123983) と [Security run 275](https://github.com/KIMEGAMI/FurimaDeck/actions/runs/41028123956) は全ジョブ成功。PHPUnitは951 tests / 22,045 assertions、Chromium E2Eは22件、MariaDB CSV gateは4 tests / 42 assertions。
+- Securityの厳格PHPUnitゲートは、認証・パスワード再設定19/79と13/61、所有者分離3/11、private image 5/36、CSP 21/15,785が成功し、全体951/22,045も成功した。実R2用の `live-r2` と MariaDB専用 `mariadb-gate` は全体PHPUnitから除外し、MariaDBは独立ゲートで実行。実R2はこのCIで実行していない。
+- 第三者製の自動検査は、Semgrep 173 rules / 470 filesで0 findings（semgrepignore対象114ファイルを除外）、Gitleaks、Dependency Review、Composer/npm監査、workflow依存SHA固定検査が成功。OWASP ZAPの隔離CIアプリへのアクティブ検査は114 PASS、0 FAIL、0 WARN。依存監査は0 vulnerabilities。これらは自動検査結果であり、脆弱性ゼロの保証や専門機関による手動侵入テストの代替ではない。
+- ZAPの対象は隔離CIアプリであり、workflowではデモログインを無効にしている。ログイン後の経路、本番VPS/Apache、実R2、外部会計サービスはDAST対象外。ユーザー間認可は別途PHPUnitで検査したが、本番環境での認可動作までは証明していない。
+- 最新CIログにはNode.jsの `DEP0169`（`url.parse()`）非推奨警告が残る。Composer/npm監査は成功したが、警告を発生させる推移依存元は未特定。
 - 1.0対象は販売・在庫管理と、対応範囲を限定したfreee/Money Forward会計CSV。会計仕訳API送信・API読戻し、Chrome拡張は対象外。会計CSVは確認済み販売データの限定パターンのみ。仕入CSV、未確認の税区分、費用処理を確定できない取引は出力停止する。
-- 開発・本番R2実接続の記録とfreee/Money Forward試験CSV取込記録は後続履歴を参照。最新GitHub CIは `live-r2` を実行しない。CIの合格だけではVPS運用、本番メール・Google OAuth、本番DBバックアップからの隔離復元、利用者本人の税務区分や未検証取引の会計上の正しさを証明しない。
-- 判定は **NO-GO**。P0/P1の本番相当利用者フロー・所有者分離、本番メール送信、Google OAuth、DB復元、対応CSV範囲の最終照合、289ファイルの人手レビュー、R2実接続の最新候補との照合が完了していない。Stripeはユーザーの本番確認申告を尊重し、この候補では再操作しない。マージ・本番デプロイは未実施。
+- 既存の開発/本番R2実接続とfreee/Money Forward試験CSV取込記録は後続履歴の別実行証拠であり、このCI runの結果ではない。現行HEADに対する本番相当利用者フロー、本番メール送信、Google OAuth、本番DBバックアップからの隔離復元、利用者本人の税務区分や未検証取引の会計上の正しさは未証明。
+- 判定は **NO-GO**。P0/P1の本番相当利用者フロー、本番メール送信、Google OAuth、本番DBバックアップから隔離環境への復元、対応CSV範囲の最終確認、317ファイルの人手レビュー、最新候補と既存R2実接続記録の一致確認が未完了。freee/Money Forwardの過去の架空取引取込確認は、現行候補の全取引種類や利用者本人の税務上の正しさを証明しない。Stripeはユーザーの本番確認申告を尊重し、この候補では再操作しない。マージ・本番デプロイは未実施。
 
 ## 履歴: 2026-10-29 旧検証スナップショット（実装・テスト基準HEAD `a453332dcefa3c1dbc0c86f5c85dfbe2c0857a27`）
 
