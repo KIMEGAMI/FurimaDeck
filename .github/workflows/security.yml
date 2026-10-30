@@ -47,7 +47,7 @@ jobs:
     env:
       APP_ENV: testing
       APP_DEBUG: 'false'
-      APP_URL: http://127.0.0.1:8002
+      APP_URL: https://127.0.0.1:8443
       DB_CONNECTION: furimadeck
       DB_DATABASE: ':memory:'
       DB_URL: ''
@@ -137,9 +137,32 @@ jobs:
 
           sudo apt-get update
           sudo apt-get install --yes apache2
-          sudo a2enmod headers proxy proxy_http rewrite
+          tls_root="$RUNNER_TEMP/furimadeck-zap-tls"
+          mkdir -p "$tls_root"
+          openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 \
+            -keyout "$tls_root/ca.key" -out "$tls_root/ca.pem" \
+            -subj '/CN=FurimaDeck CI Test CA' \
+            -addext 'basicConstraints=critical,CA:TRUE' \
+            -addext 'keyUsage=critical,keyCertSign,cRLSign'
+          openssl req -newkey rsa:2048 -nodes -sha256 \
+            -keyout "$tls_root/server.key" -out "$tls_root/server.csr" \
+            -subj '/CN=127.0.0.1'
+          printf '%s\n' \
+            'basicConstraints=critical,CA:FALSE' \
+            'keyUsage=critical,digitalSignature,keyEncipherment' \
+            'extendedKeyUsage=serverAuth' \
+            'subjectAltName=IP:127.0.0.1' > "$tls_root/server.ext"
+          openssl x509 -req -sha256 -days 1 \
+            -in "$tls_root/server.csr" \
+            -CA "$tls_root/ca.pem" -CAkey "$tls_root/ca.key" -CAcreateserial \
+            -extfile "$tls_root/server.ext" -out "$tls_root/server.pem"
+          openssl verify -CAfile "$tls_root/ca.pem" "$tls_root/server.pem"
+          openssl x509 -in "$tls_root/server.pem" -noout -checkip 127.0.0.1
+          chmod 600 "$tls_root/ca.key" "$tls_root/server.key"
+          export CURL_CA_BUNDLE="$tls_root/ca.pem"
+          sudo a2enmod headers proxy proxy_http rewrite ssl
           printf '%s\n' 'ServerTokens Prod' 'ServerSignature Off' | sudo tee -a /etc/apache2/apache2.conf >/dev/null
-          printf '\nListen 127.0.0.1:8002\nListen 127.0.0.1:8004\n' | sudo tee -a /etc/apache2/ports.conf >/dev/null
+          printf '\nListen 127.0.0.1:8002\nListen 127.0.0.1:8004\nListen 127.0.0.1:8443\n' | sudo tee -a /etc/apache2/ports.conf >/dev/null
           sudo tee /etc/apache2/sites-available/furimadeck-zap.conf >/dev/null <<APACHE
           <VirtualHost 127.0.0.1:8002>
               ServerName 127.0.0.1
@@ -159,6 +182,32 @@ jobs:
               LogFormat "%m %U %H %>s %b" furimadeck_zap_safe
               CustomLog /var/log/apache2/furimadeck-zap-access.log furimadeck_zap_safe
               ErrorLog /var/log/apache2/furimadeck-zap-error.log
+          </VirtualHost>
+
+          <VirtualHost 127.0.0.1:8443>
+              ServerName 127.0.0.1
+              DocumentRoot "$static_root"
+              SSLEngine on
+              SSLCertificateFile "$tls_root/server.pem"
+              SSLCertificateKeyFile "$tls_root/server.key"
+              ProxyPreserveHost On
+              ProxyVia Off
+              RequestHeader set X-Forwarded-Proto "https"
+              Header always unset X-Powered-By
+              Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+              RewriteEngine On
+              RewriteCond %{REQUEST_URI} !^/$
+              RewriteCond %{REQUEST_URI} !\.php$
+              RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} -f
+              RewriteRule ^ - [L]
+              RewriteRule ^/(.*)$ http://127.0.0.1:8003/\$1 [P,L]
+              <Directory "$static_root">
+                  AllowOverride All
+                  Require all granted
+              </Directory>
+              LogFormat "%m %U %H %>s %b" furimadeck_zap_https_safe
+              CustomLog /var/log/apache2/furimadeck-zap-https-access.log furimadeck_zap_https_safe
+              ErrorLog /var/log/apache2/furimadeck-zap-https-error.log
           </VirtualHost>
 
           <VirtualHost 127.0.0.1:8004>
@@ -219,6 +268,7 @@ jobs:
           check_header Cross-Origin-Opener-Policy same-origin /
           check_header Cross-Origin-Resource-Policy same-origin /
           check_header Server Apache /
+          check_header Strict-Transport-Security 'max-age=31536000; includeSubDomains' /
           if grep -qi '^X-Powered-By:' "$headers_file"; then
             echo 'X-Powered-By was exposed on the dynamic homepage.' >&2
             exit 1
@@ -291,14 +341,21 @@ jobs:
             fi
           done
           curl --fail --silent --show-error --dump-header "$headers_file" --output /dev/null "$APP_URL/login"
-          if ! awk 'tolower($0) ~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
-            echo 'The XSRF token cookie is not HttpOnly.' >&2
+          if ! awk 'tolower($0) ~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/ && line ~ /;[[:space:]]*secure([;[:space:]]|$)/ && line ~ /;[[:space:]]*samesite=lax([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
+            echo 'The XSRF token cookie is missing HttpOnly, Secure, or SameSite=Lax.' >&2
+            exit 1
+          fi
+          if ! awk 'tolower($0) ~ /^set-cookie:/ && tolower($0) !~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/ && line ~ /;[[:space:]]*secure([;[:space:]]|$)/ && line ~ /;[[:space:]]*samesite=lax([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
+            echo 'The session cookie is missing HttpOnly, Secure, or SameSite=Lax.' >&2
             exit 1
           fi
           docker run --rm --network host \
             --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
+            --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
+            --entrypoint /bin/sh \
             docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
-            zap-full-scan.py -t "$APP_URL" -m 5 -T 10 -J furimadeck-zap-report.json -r furimadeck-zap-report.html
+            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -cacerts -storepass changeit && exec zap-full-scan.py -t "$1" -m 5 -T 10 -J furimadeck-zap-report.json -r furimadeck-zap-report.html' \
+            sh "$APP_URL"
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-report.json"
           ZAP_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-report.json" node <<'NODE'
           const fs = require('node:fs');
