@@ -55,7 +55,7 @@
 </div>
 
 @once
-    <script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         window.furugiCategoryGroups = @json($categoryPayload);
 
         window.initFurugiCategorySelects = function(parentSelectId, categorySelectId) {
@@ -115,7 +115,7 @@
     </script>
 @endonce
 
-<script>
+<script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
     document.addEventListener('DOMContentLoaded', function() {
         window.initFurugiCategorySelects('{{ $parentSelectId }}', '{{ $categorySelectId }}');
     });

@@ -37,8 +37,35 @@ The deployment workflow is for an already provisioned application checkout; it i
 
 For the database queue worker, keep `DB_QUEUE_RETRY_AFTER` longer than the worker's `--timeout`. The shipped values are 120 and 90 seconds respectively; each job-level timeout must also be below the retry window. Do not set these values equal or reverse their order. After changing the production environment, rebuild Laravel's config cache and restart the worker.
 
-Each manual workflow dispatch requires `production_backup_reference`, a non-secret identifier for the backup the operator verified exists. This input records an operator attestation only; it does not inspect the backup or prove that a restore succeeded. Keep required reviewers enabled for the GitHub `production` environment.
+Each manual workflow dispatch requires `production_backup_reference`, a non-secret identifier for the verified backup. The workflow only checks that the reference is non-empty; it does not inspect the backup or prove that a restore succeeded. Keep required reviewers enabled for the GitHub `production` environment.
 
 The deployment workflow checks PHP 8.4.1 or newer, a clean checkout, and absence of `public/hot` before installing dependencies. It refuses the known legacy path `/var/www/furugi`; this path check is a guardrail, not proof that any other path is a correct FurimaDeck target.
 
 The deployment user must be allowed to run the required commands as `www-data`, change ownership of the existing `vendor`, `node_modules`, and `public/build` directories to `www-data`, and reload Apache. The workflow changes ownership only for those generated directories to prevent the Composer/npm/Vite permission errors previously seen on the VPS; it refuses symlinks and does not recursively change ownership outside those directories. Prefer restricted passwordless sudo rules for only those commands. Review the GitHub Actions run and environment approval before any production deployment.
+
+
+## Recovery after an interrupted production deployment
+
+The deployment workflow enters Laravel maintenance mode before changing the production checkout. It clears maintenance mode only after installation, migrations, cutover checks, caches, and service checks all succeed. If any command fails after `artisan down`, the site intentionally remains unavailable. This prevents an incomplete deployment from being exposed.
+
+Do not clear maintenance mode automatically, reset the checkout, restore a database backup, or rerun migrations without first identifying the failed step and current state.
+
+1. Record the failed GitHub Actions run URL, target commit SHA, and first failing step. Keep the site in maintenance mode while assessing failures after the workflow's `artisan down` step.
+2. Connect only to the configured FurimaDeck host and inspect state without changing it:
+   ```bash
+   cd /var/www/furimadeck
+   git status --short
+   git rev-parse HEAD
+   /usr/bin/php -v
+   sudo systemctl is-active furimadeck-queue.service furimadeck-scheduler.timer apache2
+   sudo -u www-data /usr/bin/php artisan migrate:status --database=furimadeck --path=database/migrations/furimadeck
+   ```
+3. Compare the checkout SHA and migration status with the failed run logs. Do not run `migrate:fresh`, `migrate:refresh`, `db:wipe`, manual `git pull`, or a backup restore as an improvised recovery.
+4. If the failed step is understood and the checkout/database are consistent, fix the cause through a reviewed commit and rerun the deployment workflow for the exact current `main` commit. The workflow itself performs the installation and forward migrations.
+5. Clear maintenance mode only after verifying the deployed commit, completed workflow steps, migration state, cutover check, cached Laravel configuration/routes/views, and required services. Then, from `/var/www/furimadeck`, an authorized operator may run:
+   ```bash
+   sudo -u www-data /usr/bin/php artisan up
+   ```
+   Immediately check the production health endpoint and user-facing page. If they fail, put the application back into maintenance mode and continue diagnosis; do not improvise a database rollback.
+
+If the migration state, backup recoverability, or deployed code is uncertain, leave the site unavailable and have the responsible operator review the run logs and database state before taking further action.

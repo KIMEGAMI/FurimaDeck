@@ -40,9 +40,72 @@ class PasswordResetTest extends TestCase
 
         $user = User::factory()->create();
 
-        $this->post('/forgot-password', ['email' => $user->email]);
+        $response = $this
+            ->from('/forgot-password')
+            ->post('/forgot-password', ['email' => $user->email]);
 
+        $response
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHas('status', '該当するアカウントがある場合は、パスワード再設定用メールを送信します。受信トレイをご確認ください。');
         Notification::assertSentTo($user, ResetPassword::class);
+    }
+
+    public function test_unknown_email_receives_generic_password_reset_feedback(): void
+    {
+        Notification::fake();
+
+        $response = $this->from('/forgot-password')
+            ->post('/forgot-password', ['email' => 'unknown@example.com']);
+
+        $response
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHas('status', '該当するアカウントがある場合は、パスワード再設定用メールを送信します。受信トレイをご確認ください。')
+            ->assertSessionHasNoErrors();
+        Notification::assertNothingSent();
+    }
+
+    public function test_password_reset_throttle_feedback_does_not_reveal_account_existence(): void
+    {
+        Password::shouldReceive('sendResetLink')
+            ->once()
+            ->andReturn(Password::RESET_THROTTLED);
+
+        $this->from('/forgot-password')
+            ->post('/forgot-password', ['email' => 'known@example.com'])
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHas('status', '該当するアカウントがある場合は、パスワード再設定用メールを送信します。受信トレイをご確認ください。')
+            ->assertSessionHasNoErrors();
+    }
+
+    public function test_password_reset_route_throttles_by_ip_before_sending_another_notification(): void
+    {
+        Notification::fake();
+        config(['furimadeck.public_rate_limits.password_reset_per_minute' => 1]);
+
+        $firstUser = User::factory()->create(['email' => 'first-reset@example.com']);
+        $secondUser = User::factory()->create(['email' => 'second-reset@example.com']);
+
+        $this->from('/forgot-password')
+            ->withServerVariables(['REMOTE_ADDR' => '203.0.113.51'])
+            ->post('/forgot-password', ['email' => $firstUser->email])
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHasNoErrors();
+
+        Notification::assertSentTo($firstUser, ResetPassword::class);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.51'])
+            ->post('/forgot-password', ['email' => $secondUser->email])
+            ->assertTooManyRequests();
+
+        Notification::assertNotSentTo($secondUser, ResetPassword::class);
+
+        $this->from('/forgot-password')
+            ->withServerVariables(['REMOTE_ADDR' => '198.51.100.52'])
+            ->post('/forgot-password', ['email' => $secondUser->email])
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHasNoErrors();
+
+        Notification::assertSentTo($secondUser, ResetPassword::class);
     }
 
     public function test_reset_password_link_can_be_requested_with_uppercase_email_input(): void

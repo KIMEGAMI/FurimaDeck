@@ -1,5 +1,5 @@
 <section class="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
-    <div class="flex items-start gap-3"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-sm font-black text-white">1</span><div><h3 class="text-lg font-black text-slate-900">商品画像</h3><p class="mt-1 text-sm text-slate-700">最初に画像を追加すると、AIが入力候補を作れます。画像なしでも通常どおり登録できます。</p></div></div>
+    <div class="flex items-start gap-3"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-sm font-black text-white">1</span><div><h3 class="text-lg font-black text-slate-900">商品画像</h3><p class="mt-1 text-sm text-slate-700">画像なしでも通常どおり登録できます。</p></div></div>
     <div class="mt-4">
         <p class="text-sm font-bold text-slate-700">JPEG / PNG / WEBP、合計最大{{ config('furimadeck.product_images.max_count') }}枚、追加は{{ $remainingImageSlots }}枚まで、各{{ config('furimadeck.product_images.max_size_kilobytes') / 1024 }}MB</p>
         <input id="product-images" type="file" name="images[]" multiple accept="image/jpeg,image/png,image/webp" class="sr-only">

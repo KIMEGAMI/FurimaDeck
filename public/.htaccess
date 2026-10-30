@@ -5,6 +5,9 @@
 
     RewriteEngine On
 
+    # Product images must be served through the authenticated owner-checked route.
+    RewriteRule ^storage/products(?:/|$) - [F,L,NC]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
@@ -22,4 +25,23 @@
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header onsuccess unset X-Content-Type-Options
+    Header always set X-Content-Type-Options "nosniff"
+    Header onsuccess unset X-Frame-Options
+    Header always set X-Frame-Options "DENY"
+    Header onsuccess unset Referrer-Policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header onsuccess unset Permissions-Policy
+    Header always set Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+    Header onsuccess unset Cross-Origin-Embedder-Policy
+    Header always set Cross-Origin-Embedder-Policy "require-corp"
+    Header onsuccess unset Cross-Origin-Opener-Policy
+    Header always set Cross-Origin-Opener-Policy "same-origin"
+    Header onsuccess unset Cross-Origin-Resource-Policy
+    Header always set Cross-Origin-Resource-Policy "same-origin"
+    Header onsuccess unset X-Powered-By
+    Header always unset X-Powered-By
 </IfModule>

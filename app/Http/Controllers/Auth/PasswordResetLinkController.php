@@ -51,9 +51,11 @@ class PasswordResetLinkController extends Controller
                 ]);
         }
 
-        return $status === Password::RESET_LINK_SENT
-            ? back()->with('status', __($status))
-            : back()->withInput(['email' => $email])
-                ->withErrors(['email' => __($status)]);
+        if (in_array($status, [Password::RESET_LINK_SENT, Password::INVALID_USER, Password::RESET_THROTTLED], true)) {
+            return back()->with('status', '該当するアカウントがある場合は、パスワード再設定用メールを送信します。受信トレイをご確認ください。');
+        }
+
+        return back()->withInput(['email' => $email])
+            ->withErrors(['email' => __($status)]);
     }
 }

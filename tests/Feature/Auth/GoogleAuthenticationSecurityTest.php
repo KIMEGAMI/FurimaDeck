@@ -4,7 +4,11 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as SocialiteUser;
 use RuntimeException;
@@ -38,11 +42,15 @@ class GoogleAuthenticationSecurityTest extends TestCase
             'google_id' => null,
         ]);
 
+        $session = $this->app['session']->driver();
+        $session->start();
+        $initialSessionId = $session->getId();
         $this->fakeGoogleUser('google-user-id', 'owner@example.com', true);
 
         $response = $this->get(route('google.callback'));
 
         $response->assertRedirect(route('dashboard'));
+        $this->assertNotSame($initialSessionId, $this->app['session']->driver()->getId());
         $this->assertAuthenticatedAs($user->fresh());
         $this->assertSame('google-user-id', $user->fresh()->google_id);
         $this->assertNotNull($user->fresh()->email_verified_at);
@@ -88,6 +96,34 @@ class GoogleAuthenticationSecurityTest extends TestCase
             ->once()
             ->with('google')
             ->andThrow(new RuntimeException('Google is unavailable.'));
+
+        $response = $this->get(route('google.callback'));
+
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHasErrors('email');
+        $this->assertGuest();
+    }
+
+    public function test_google_http_failure_logs_only_safe_response_diagnostics(): void
+    {
+        $exception = new RequestException(
+            'Private response details must not be logged.',
+            new Request('POST', 'https://oauth2.googleapis.com/token'),
+            new Response(400, ['Content-Type' => 'application/json'], '{"error":"invalid_grant","error_description":"private response details"}')
+        );
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->with('Google login failed before user resolution.', [
+                'error_class' => RequestException::class,
+                'http_status' => 400,
+                'oauth_error' => 'invalid_grant',
+            ]);
+
+        Socialite::shouldReceive('driver')
+            ->once()
+            ->with('google')
+            ->andThrow($exception);
 
         $response = $this->get(route('google.callback'));
 

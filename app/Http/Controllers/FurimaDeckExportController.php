@@ -38,7 +38,7 @@ class FurimaDeckExportController extends Controller
 
     public function listings(Request $request): StreamedResponse
     {
-        return $this->stream('listings.csv', ['product_name', 'marketplace', 'title', 'price', 'status'], $request->user()->listings()->with(['product', 'marketplace'])->cursor(), fn ($listing) => [$listing->product->product_name, $listing->marketplace->name, $listing->listing_title, $listing->listing_price, $listing->status]);
+        return $this->stream('listings.csv', ['product_name', 'marketplace', 'title', 'price', 'status'], $request->user()->listings()->with(['product', 'marketplace'])->lazy(), fn ($listing) => [$listing->product->product_name, $listing->marketplace->name, $listing->listing_title, $listing->listing_price, $listing->status]);
     }
 
     public function sales(Request $request): StreamedResponse
@@ -54,7 +54,7 @@ class FurimaDeckExportController extends Controller
             ->where('status', 'completed')
             ->whereNotNull('sold_at')
             ->orderByDesc('sold_at')
-            ->cursor();
+            ->lazy();
 
         return $this->stream('furimadeck-sales.csv', $headers, $rows, function ($sale): array {
             $listing = $sale->listing;
@@ -85,7 +85,7 @@ class FurimaDeckExportController extends Controller
         $rows = $request->user()->products()
             ->with(['category.parent', 'images', 'listings.marketplace', 'sales.marketplace'])
             ->orderByDesc('updated_at')
-            ->cursor();
+            ->lazy();
 
         return $this->stream('furimadeck-backup.csv', $headers, $rows, function ($product): array {
             $listing = $product->listings->sortByDesc('updated_at')->first();
@@ -121,9 +121,9 @@ class FurimaDeckExportController extends Controller
     {
         $headers = ['management_id', 'title', 'comment', 'platform', 'parent_category', 'category', 'purchase_price', 'sold_price', 'sales_fee_rate', 'shipping_fee', 'status', 'sold_at'];
         $rows = $request->user()->products()
-            ->with(['category.parent', 'listings.marketplace', 'sales.marketplace'])
+            ->with(['category.parent', 'listings.marketplace', 'sales.marketplace', 'sales.listing'])
             ->orderBy('id')
-            ->cursor();
+            ->lazy();
 
         return $this->stream('furimadeck-restore.csv', $headers, $rows, function ($product): array {
             $sale = $product->sales->sortByDesc('sold_at')->first(fn ($sale) => $sale->status === 'completed');
@@ -142,7 +142,7 @@ class FurimaDeckExportController extends Controller
                 (int) ($sale?->sold_price ?? $listing?->listing_price ?? 0),
                 $this->formatRate($rate),
                 (int) ($sale?->shipping_fee ?? $listing?->shipping_fee ?? 0),
-                $sale !== null ? 'sold' : 'selling',
+                $sale !== null ? 'sold' : ($listing?->status ?? 'unlisted'),
                 $sale?->sold_at?->format('Y-m-d') ?? '',
             ];
         });
@@ -155,7 +155,7 @@ class FurimaDeckExportController extends Controller
             ->with(['product.category.parent', 'marketplace'])
             ->where('status', 'active')
             ->orderBy('id')
-            ->cursor();
+            ->lazy();
 
         return $this->stream('furimadeck-active-listings.csv', $headers, $rows, function ($listing): array {
             return [
@@ -212,17 +212,25 @@ class FurimaDeckExportController extends Controller
                 fputcsv($output, $this->sanitizeRow($map($row)));
             }
             fclose($output);
-        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /**
      * @param  array<int, mixed>  $row
-     * @return array<int, string>
+     * @return array<int, string|int>
      */
     private function sanitizeRow(array $row): array
     {
-        return array_map(function (mixed $value): string {
-            $value = (string) $value;
+        return array_map(function (mixed $value): string|int {
+            if (is_int($value)) {
+                return $value;
+            }
+
+            $value = (string) ($value ?? '');
 
             return preg_match(self::CSV_FORMULA_PREFIX_PATTERN, $value) === 1
                 ? "'".$value

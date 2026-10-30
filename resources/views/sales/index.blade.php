@@ -28,7 +28,7 @@
                         <h3 class="mt-2 text-2xl font-black">{{ $monthlyReport['title'] }}</h3>
                         <p class="mt-2 text-sm font-bold text-slate-600">印刷画面からPDF保存できます。月次報告、振り返り、仕入れ判断用の控えとして使えます。</p>
                     </div>
-                    <button type="button" onclick="window.print()" class="no-print inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow hover:bg-slate-800">
+                    <button type="button" data-action="print" class="no-print inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow hover:bg-slate-800">
                         PDF保存 / 印刷
                     </button>
                 </div>
@@ -156,7 +156,7 @@
         </div>
     </div>
 
-    <style>
+    <style nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         @media print {
             body {
                 background: #ffffff !important;
@@ -185,8 +185,8 @@
         }
     </style>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         const monthlyLabels = @json($monthlyChartLabels);
         const monthlySales = @json($monthlyChartSales);
         const monthlyProfit = @json($monthlyChartProfit);

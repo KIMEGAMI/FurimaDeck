@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Marketplace;
 use App\Models\ProductCategory;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -135,7 +136,7 @@ class FurimaDeckPremiumMiddlewareTest extends TestCase
         ], 'furimadeck');
     }
 
-    public function test_product_registration_keeps_required_inputs_visible_and_groups_optional_inputs(): void
+    public function test_product_registration_keeps_product_inputs_and_moves_purchase_information_to_accounting(): void
     {
         $user = User::factory()->create(['email_verified_at' => now()]);
 
@@ -146,8 +147,111 @@ class FurimaDeckPremiumMiddlewareTest extends TestCase
             ->assertSee('商品ID')
             ->assertSee('商品名')
             ->assertSee('id="category-levels"', false)
-            ->assertSee('仕入・商品詳細（任意）')
+            ->assertDontSee('仕入情報')
+            ->assertDontSee('name="purchase_unit_cost"', false)
+            ->assertDontSee('name="purchase_date"', false)
+            ->assertDontSee('name="supplier_id"', false)
             ->assertSee('商品画像');
+    }
+
+    public function test_legacy_product_form_redirects_to_furimadeck_during_cutover(): void
+    {
+        $user = User::factory()->create(['email_verified_at' => now()]);
+
+        $this->actingAs($user)
+            ->get(route('auction-items.create'))
+            ->assertRedirect(route('products.create'));
+    }
+
+    public function test_legacy_product_post_is_blocked_during_cutover(): void
+    {
+        $user = User::factory()->create(['email_verified_at' => now()]);
+
+        $this->actingAs($user)
+            ->post(route('auction-items.store'), [
+                'management_id' => 'LEGACY-CUTOVER-POST',
+                'name' => '旧商品画面からの登録テスト',
+            ])
+            ->assertNotFound();
+    }
+
+    public function test_product_edit_and_sale_forms_keep_accounting_inputs_in_accounting_only(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        $product = $user->products()->create([
+            'internal_sku' => 'ACCOUNTING-FORM-001',
+            'product_name' => '会計入力分離テスト商品',
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 1,
+            'inventory_status' => 'in_stock',
+            'purchase_accounting_enabled' => false,
+        ]);
+        $marketplace = Marketplace::query()->create([
+            'code' => 'accounting-form-test',
+            'name' => '会計入力分離テスト販売先',
+            'base_url' => 'https://example.test',
+            'fee_type' => 'percentage',
+            'default_fee_rate' => 0,
+            'is_active' => true,
+        ]);
+        $sale = $user->sales()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $marketplace->id,
+            'internal_sku_snapshot' => $product->internal_sku,
+            'product_name_snapshot' => $product->product_name,
+            'quantity' => 1,
+            'sold_price' => 2000,
+            'sold_at' => now(),
+            'status' => 'completed',
+            'cost_basis' => 1000,
+            'net_profit' => 1000,
+        ]);
+
+        $accountingInputNames = [
+            'purchase_unit_cost',
+            'purchase_date',
+            'purchase_shipping_cost',
+            'other_purchase_expense',
+            'supplier_id',
+            'purchase_accounting_enabled',
+            'cost_basis',
+            'purchase_shipping_cost',
+            'packing_cost',
+            'repair_cost',
+            'cleaning_cost',
+            'other_expense',
+            'accounting_expense_details',
+        ];
+
+        $productEdit = $this->actingAs($user)->get(route('products.edit', $product));
+        $productEdit->assertOk();
+        foreach (array_slice($accountingInputNames, 0, 6) as $inputName) {
+            $productEdit->assertDontSee('name="'.$inputName.'"', false);
+        }
+
+        $saleCreate = $this->get(route('furimadeck-sales.create', ['product_id' => $product->id]));
+        $saleCreate->assertOk()
+            ->assertSee('name="sold_price"', false)
+            ->assertSee('name="marketplace_id"', false)
+            ->assertSee('name="shipping_fee"', false);
+        foreach (array_slice($accountingInputNames, 6) as $inputName) {
+            $saleCreate->assertDontSee('name="'.$inputName.'"', false);
+        }
+
+        $saleEdit = $this->get(route('furimadeck-sales.edit', $sale));
+        $saleEdit->assertOk()
+            ->assertSee('name="sold_price"', false)
+            ->assertSee('name="marketplace_id"', false)
+            ->assertSee('name="shipping_fee"', false);
+        foreach (array_slice($accountingInputNames, 6) as $inputName) {
+            $saleEdit->assertDontSee('name="'.$inputName.'"', false);
+        }
     }
 
     public function test_product_registration_renders_categories_at_any_depth_without_changing_the_submitted_field(): void

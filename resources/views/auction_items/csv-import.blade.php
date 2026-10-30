@@ -52,7 +52,7 @@
                                 売上分析用CSV、全商品バックアップCSV、CSV取り込みへ戻しやすい復元用CSVをここから出力できます。定期的にバックアップしておくと、端末変更や誤操作時の復旧に使えます。
                             </p>
                         </div>
-                        <button type="button" onclick="document.getElementById('csvExportHelp').showModal()" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700 hover:bg-emerald-100">
+                        <button type="button" data-dialog-action="open" data-dialog-target="csvExportHelp" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700 hover:bg-emerald-100">
                             CSV出力項目を確認
                         </button>
                     </div>
@@ -103,7 +103,7 @@
                                 FurimaDeck用に整えたCSVをそのまま取り込みます。1行目はヘッダー行として扱います。
                             </p>
                         </div>
-                        <button type="button" onclick="document.getElementById('csvImportHelp').showModal()" class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
+                        <button type="button" data-dialog-action="open" data-dialog-target="csvImportHelp" class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
                             CSV項目を確認
                         </button>
                     </div>
@@ -134,7 +134,7 @@
                                 ヤフオクの売上CSVをFurimaDeck形式に変換し、SOLD商品として登録します。
                             </p>
                         </div>
-                        <button type="button" onclick="document.getElementById('yahooCsvImportHelp').showModal()" class="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-black text-cyan-700 hover:bg-cyan-100">
+                        <button type="button" data-dialog-action="open" data-dialog-target="yahooCsvImportHelp" class="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-black text-cyan-700 hover:bg-cyan-100">
                             ヤフオクCSV項目を確認
                         </button>
                     </div>
@@ -165,7 +165,7 @@
                                 メルカリShopsの売上レポートCSVをFurimaDeck形式に変換し、SOLD商品として登録します。注文番号と明細番号を管理IDとして扱います。
                             </p>
                         </div>
-                        <button type="button" onclick="document.getElementById('mercariShopsCsvImportHelp').showModal()" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-black text-red-700 hover:bg-red-100">
+                        <button type="button" data-dialog-action="open" data-dialog-target="mercariShopsCsvImportHelp" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-black text-red-700 hover:bg-red-100">
                             メルカリShops CSV項目を確認
                         </button>
                     </div>
@@ -197,7 +197,7 @@
                                 売上CSVはSOLD商品の集計用、全商品バックアップCSVは確認用、復元用CSVは削除前や端末変更前に保存しておき、あとからCSV取り込みで商品を戻すための控えです。いずれもExcelで開きやすいUTF-8 BOM付きで出力します。
                             </p>
                         </div>
-                        <button type="button" onclick="document.getElementById('csvExportHelp').close()" class="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">閉じる</button>
+                        <button type="button" data-dialog-action="close" data-dialog-target="csvExportHelp" class="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">閉じる</button>
                     </div>
 
                     <div class="mt-5 overflow-x-auto">
@@ -245,7 +245,7 @@
                                 CSVの1行目はヘッダー行として扱います。必須は management_id と title です。外部サービスのCSVを直接取り込む形式ではありません。
                             </p>
                         </div>
-                        <button type="button" onclick="document.getElementById('csvImportHelp').close()" class="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">閉じる</button>
+                        <button type="button" data-dialog-action="close" data-dialog-target="csvImportHelp" class="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">閉じる</button>
                     </div>
 
                     <div class="mt-5 overflow-x-auto">
@@ -289,7 +289,7 @@
                                 1行目はヘッダー行として扱います。状態が「売上確定」で、商品IDが入っている行だけを取り込みます。チャージ行や商品IDが「-」の行はスキップします。
                             </p>
                         </div>
-                        <button type="button" onclick="document.getElementById('yahooCsvImportHelp').close()" class="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">閉じる</button>
+                        <button type="button" data-dialog-action="close" data-dialog-target="yahooCsvImportHelp" class="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">閉じる</button>
                     </div>
 
                     <div class="mt-5 overflow-x-auto">
@@ -324,7 +324,7 @@
                                 メルカリShopsの売上レポートCSVをSOLD商品として登録します。仕入れ値は0円で登録されるため、必要に応じて登録後に編集してください。
                             </p>
                         </div>
-                        <button type="button" onclick="document.getElementById('mercariShopsCsvImportHelp').close()" class="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">閉じる</button>
+                        <button type="button" data-dialog-action="close" data-dialog-target="mercariShopsCsvImportHelp" class="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">閉じる</button>
                     </div>
 
                     <div class="mt-5 overflow-x-auto">

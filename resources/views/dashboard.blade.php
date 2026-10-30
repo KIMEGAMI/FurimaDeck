@@ -14,7 +14,7 @@
         ];
     @endphp
 
-    <div class="min-h-screen bg-slate-950 bg-cover bg-center bg-fixed text-white" style="background-image: linear-gradient(rgba(2, 6, 23, 0.42), rgba(2, 6, 23, 0.68)), url('{{ asset('images/bg.png') }}');">
+    <div class="fd-bg-main min-h-screen bg-slate-950 bg-cover bg-center bg-fixed text-white">
         <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
             <div class="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-12">
                 <section class="rounded-2xl border border-amber-300 bg-black p-4 text-white shadow-2xl lg:col-span-4">
@@ -63,7 +63,7 @@
                             <span>{{ number_format($insights['monthly_target_progress'] ?? 0, 1) }}%</span>
                         </div>
                         <div class="h-2 overflow-hidden rounded-full bg-slate-800">
-                            <div class="h-full rounded-full bg-emerald-400" style="width: {{ min(100, max(0, $insights['monthly_target_progress'] ?? 0)) }}%"></div>
+                            <progress class="fd-progress h-2 w-full" max="100" value="{{ min(100, max(0, $insights['monthly_target_progress'] ?? 0)) }}" aria-label="月間目標の進捗"></progress>
                         </div>
                     </div>
 
@@ -248,8 +248,8 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         const monthlyChartLabels = @json($monthlyChartLabels);
         const monthlyChartSales = @json($monthlyChartSales);
         const monthlyChartProfit = @json($monthlyChartProfit);

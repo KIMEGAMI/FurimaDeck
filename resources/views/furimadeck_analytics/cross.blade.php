@@ -1,5 +1,5 @@
 <x-app-layout>
-    <div class="min-h-screen bg-slate-950/70 py-8 text-white" style="background-image: linear-gradient(rgba(2, 6, 23, 0.50), rgba(2, 6, 23, 0.84)), url('{{ asset('images/bg.png') }}'); background-attachment: fixed; background-position: center; background-size: cover;">
+    <div class="fd-bg-main min-h-screen bg-slate-950/70 py-8 text-white">
         <div class="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
             <section class="rounded-2xl border border-slate-700 bg-slate-950/85 p-5 shadow-2xl backdrop-blur-md sm:p-6">
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

@@ -7,8 +7,8 @@ on:
   push:
     branches:
       - main
-      - 'codex/**'
-      - 'codex-*'
+  schedule:
+    - cron: '17 6 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -19,31 +19,509 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  workflow-pinning:
+    name: Verify immutable workflow dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+
+      - name: Verify immutable workflow dependencies
+        run: |
+          node scripts/check-github-actions-pinned.mjs
+          node --test scripts/check-github-actions-pinned.test.mjs
+          node --test scripts/report-zap-diagnostics.test.mjs
+          node --test scripts/prepare-authenticated-zap-session.test.mjs
+          node --test scripts/check-authenticated-zap-access-log.test.mjs
+          node --test scripts/check-security-workflow-policy.test.mjs
+
+  dast-active:
+    name: OWASP ZAP active DAST (isolated CI app)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      APP_ENV: testing
+      APP_DEBUG: 'false'
+      APP_URL: https://127.0.0.1:8443
+      APP_FORCE_HTTPS: 'true'
+      DB_CONNECTION: furimadeck
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      FURIMADECK_DB_DRIVER: sqlite
+      FURIMADECK_DB_URL: ''
+      SESSION_DRIVER: file
+      SESSION_SECURE_COOKIE: 'true'
+      SESSION_SAME_SITE: lax
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      LOG_CHANNEL: stderr
+      FURIMADECK_CUTOVER_ENABLED: 'true'
+      FURIMADECK_PRODUCT_MANAGEMENT_ENABLED: 'true'
+      FURIMADECK_DEMO_USER_ENABLED: 'false'
+      FURIMADECK_PRODUCT_IMAGE_DISK: local
+      FURIMADECK_R2_LIVE_TEST: '0'
+      FURIMADECK_R2_PRODUCTION_LIVE_TEST: '0'
+      AWS_ACCESS_KEY_ID: ''
+      AWS_SECRET_ACCESS_KEY: ''
+      FURIMADECK_FREEE_CLIENT_ID: ''
+      FURIMADECK_FREEE_CLIENT_SECRET: ''
+      FURIMADECK_MF_CLIENT_ID: ''
+      FURIMADECK_MF_CLIENT_SECRET: ''
+      FURIMADECK_STRIPE_SECRET: ''
+      FURIMADECK_STRIPE_WEBHOOK_SECRET: ''
+      GOOGLE_CLIENT_ID: ''
+      GOOGLE_CLIENT_SECRET: ''
+      RESEND_API_KEY: ''
+      MAIL_URL: ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --ansi
+
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build isolated application assets
+        run: npm run build
+
+      - name: Run active scan through Apache and isolated application
+        run: |
+          set -Eeuo pipefail
+          suffix="zap-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          database_file="$GITHUB_WORKSPACE/storage/framework/testing/furimadeck-zap-${suffix}.sqlite"
+          storage_root="$RUNNER_TEMP/furimadeck-zap-${suffix}"
+          auth_credentials_file=""
+          static_root="/var/www/furimadeck-zap-static-${suffix}"
+          storage_public_root="/var/www/furimadeck-zap-storage-${suffix}"
+          mkdir -p "$(dirname "$database_file")" "$storage_root/framework/views" "$storage_root/framework/cache/data" "$storage_root/framework/sessions" "$storage_root/logs" "$storage_root/app/private" "$storage_root/app/public" "$RUNNER_TEMP/zap"
+          sudo mkdir -p "$static_root"
+          sudo cp -a public/. "$static_root/"
+          sudo chmod -R a+rX "$static_root"
+          sudo install -d -m 755 "$storage_public_root/products/2147483647"
+          printf 'PUBLIC_STORAGE_CONTROL_SENTINEL\n' | sudo tee "$storage_public_root/security-static-control.txt" >/dev/null
+          printf 'PRIVATE_PRODUCT_IMAGE_SENTINEL\n' | sudo tee "$storage_public_root/products/2147483647/ci-private-image-sentinel.txt" >/dev/null
+          sudo ln -s "$storage_public_root" "$static_root/storage"
+          sudo chown 1000:1000 "$RUNNER_TEMP/zap"
+          touch "$database_file"
+          export FURIMADECK_DB_DATABASE="$database_file"
+          export LARAVEL_STORAGE_PATH="$storage_root"
+          cp .env.example .env
+          php artisan key:generate --force --ansi
+          php artisan config:clear --ansi
+          php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force --no-interaction
+          setsid php artisan serve --host=127.0.0.1 --port=8003 > "$RUNNER_TEMP/furimadeck-zap-app.log" 2>&1 &
+          app_pid=$!
+          trap 'sudo systemctl stop apache2 2>/dev/null || true; kill -- -"$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; if [ -n "$auth_credentials_file" ]; then rm -f -- "$auth_credentials_file"; fi; rm -f -- "$RUNNER_TEMP/zap/furimadeck-zap-auth-context.xml"' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:8003/up; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error --output /dev/null http://127.0.0.1:8003/up
+          zap_session_cookie_name="$(php scripts/read-session-cookie-name.php)"
+          if ! [[ "$zap_session_cookie_name" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo 'The testing session cookie name is invalid.' >&2
+            exit 1
+          fi
+
+          sudo apt-get update
+          sudo apt-get install --yes apache2
+          tls_root="$RUNNER_TEMP/furimadeck-zap-tls"
+          mkdir -p "$tls_root"
+          openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 \
+            -keyout "$tls_root/ca.key" -out "$tls_root/ca.pem" \
+            -subj '/CN=FurimaDeck CI Test CA' \
+            -addext 'basicConstraints=critical,CA:TRUE' \
+            -addext 'keyUsage=critical,keyCertSign,cRLSign'
+          openssl req -newkey rsa:2048 -nodes -sha256 \
+            -keyout "$tls_root/server.key" -out "$tls_root/server.csr" \
+            -subj '/CN=127.0.0.1'
+          printf '%s\n' \
+            'basicConstraints=critical,CA:FALSE' \
+            'keyUsage=critical,digitalSignature,keyEncipherment' \
+            'extendedKeyUsage=serverAuth' \
+            'subjectAltName=IP:127.0.0.1' > "$tls_root/server.ext"
+          openssl x509 -req -sha256 -days 1 \
+            -in "$tls_root/server.csr" \
+            -CA "$tls_root/ca.pem" -CAkey "$tls_root/ca.key" -CAcreateserial \
+            -extfile "$tls_root/server.ext" -out "$tls_root/server.pem"
+          openssl verify -CAfile "$tls_root/ca.pem" "$tls_root/server.pem"
+          openssl x509 -in "$tls_root/server.pem" -noout -checkip 127.0.0.1
+          chmod 600 "$tls_root/ca.key" "$tls_root/server.key"
+          export CURL_CA_BUNDLE="$tls_root/ca.pem"
+          sudo a2enmod headers proxy proxy_http rewrite setenvif ssl
+          printf '%s\n' 'ServerTokens Prod' 'ServerSignature Off' | sudo tee -a /etc/apache2/apache2.conf >/dev/null
+          printf '\nListen 127.0.0.1:8002\nListen 127.0.0.1:8004\nListen 127.0.0.1:8443\n' | sudo tee -a /etc/apache2/ports.conf >/dev/null
+          sudo tee /etc/apache2/sites-available/furimadeck-zap.conf >/dev/null <<APACHE
+          <VirtualHost 127.0.0.1:8002>
+              ServerName 127.0.0.1
+              DocumentRoot "$static_root"
+              ProxyPreserveHost On
+              ProxyVia Off
+              RewriteEngine On
+              RewriteCond %{REQUEST_URI} !^/$
+              RewriteCond %{REQUEST_URI} !\.php$
+              RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} -f
+              RewriteRule ^ - [L]
+              RewriteRule ^/(.*)$ http://127.0.0.1:8003/\$1 [P,L]
+              <Directory "$static_root">
+                  AllowOverride All
+                  Require all granted
+              </Directory>
+              LogFormat "%m %U %H %>s %b" furimadeck_zap_safe
+              CustomLog /var/log/apache2/furimadeck-zap-access.log furimadeck_zap_safe
+              ErrorLog /var/log/apache2/furimadeck-zap-error.log
+          </VirtualHost>
+
+          <VirtualHost 127.0.0.1:8443>
+              ServerName 127.0.0.1
+              DocumentRoot "$static_root"
+              SSLEngine on
+              SSLCertificateFile "$tls_root/server.pem"
+              SSLCertificateKeyFile "$tls_root/server.key"
+              ProxyPreserveHost On
+              ProxyVia Off
+              RequestHeader set X-Forwarded-Proto "https"
+              Header onsuccess unset X-Powered-By
+              Header always unset X-Powered-By
+              Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+              RewriteEngine On
+              RewriteCond %{REQUEST_URI} !^/$
+              RewriteCond %{REQUEST_URI} !\.php$
+              RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} -f
+              RewriteRule ^ - [L]
+              RewriteRule ^/(.*)$ http://127.0.0.1:8003/\$1 [P,L]
+              <Directory "$static_root">
+                  AllowOverride All
+                  Require all granted
+              </Directory>
+              SetEnvIfNoCase Cookie "(^|;[[:space:]]*)${zap_session_cookie_name}=" zap_session_cookie_present=1
+              LogFormat "%m %U %>s %{zap_session_cookie_present}e" furimadeck_zap_https_safe
+              CustomLog /var/log/apache2/furimadeck-zap-https-access.log furimadeck_zap_https_safe
+              ErrorLog /var/log/apache2/furimadeck-zap-https-error.log
+          </VirtualHost>
+
+          <VirtualHost 127.0.0.1:8004>
+              ServerName 127.0.0.1
+              DocumentRoot "$static_root"
+              <Directory "$static_root">
+                  Options FollowSymLinks
+                  AllowOverride All
+                  Require all granted
+              </Directory>
+              LogFormat "%m %U %H %>s %b" furimadeck_static_zap_safe
+              CustomLog /var/log/apache2/furimadeck-static-zap-access.log furimadeck_static_zap_safe
+              ErrorLog /var/log/apache2/furimadeck-static-zap-error.log
+          </VirtualHost>
+          APACHE
+          sudo a2dissite 000-default
+          sudo a2ensite furimadeck-zap
+          sudo apachectl configtest
+          if sudo systemctl is-active --quiet apache2; then
+            sudo systemctl reload apache2
+          else
+            sudo systemctl start apache2
+          fi
+
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --output /dev/null "$APP_URL/up"; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error --output /dev/null "$APP_URL/up"
+
+          headers_file="$RUNNER_TEMP/furimadeck-zap-headers.txt"
+          body_file="$RUNNER_TEMP/furimadeck-zap-body.html"
+          asset_path="$(node -e "const manifest = require('./public/build/manifest.json'); const file = manifest['resources/js/app.js']?.file; if (!file) process.exit(1); process.stdout.write('/build/' + file);")"
+          check_header() {
+            local name="$1"
+            local expected="$2"
+            local actual
+            local count
+            count="$(grep -Eic "^${name}:" "$headers_file" || true)"
+            if [ "$count" -ne 1 ]; then
+              echo "Expected exactly one $name header on $3; found $count." >&2
+              exit 1
+            fi
+            actual="$(awk -F: -v wanted="$name" 'tolower($1) == tolower(wanted) { sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); value = $0 } END { print value }' "$headers_file")"
+            if [ "$actual" != "$expected" ]; then
+              echo "Incorrect security header value on $3: $name" >&2
+              echo "Received value: ${actual:-<empty>}" >&2
+              exit 1
+            fi
+          }
+          curl --fail --silent --show-error --dump-header "$headers_file" --output "$body_file" "$APP_URL/"
+          check_header X-Content-Type-Options nosniff /
+          check_header X-Frame-Options DENY /
+          check_header Referrer-Policy strict-origin-when-cross-origin /
+          check_header Permissions-Policy 'camera=(self), microphone=(), geolocation=()' /
+          check_header Cross-Origin-Embedder-Policy require-corp /
+          check_header Cross-Origin-Opener-Policy same-origin /
+          check_header Cross-Origin-Resource-Policy same-origin /
+          check_header Server Apache /
+          check_header Strict-Transport-Security 'max-age=31536000; includeSubDomains' /
+          if grep -qi '^X-Powered-By:' "$headers_file"; then
+            echo 'X-Powered-By was exposed on the dynamic homepage.' >&2
+            exit 1
+          fi
+          if grep -Eqi '^Server:[[:space:]].*([/][0-9]+([.][0-9]+)*|[0-9]+[.][0-9]+)' "$headers_file"; then
+            grep -i '^Server:' "$headers_file" >&2 || true
+            echo 'A server product version was exposed on the dynamic homepage.' >&2
+            exit 1
+          fi
+          if grep -Eqi '[?&]v=[0-9]{10,}([&#[:space:]]|$)' "$body_file"; then
+            echo 'A Unix timestamp remains in the rendered page asset URLs.' >&2
+            exit 1
+          fi
+
+          for path in /admin /auth /build/assets /build /email; do
+            status="$(curl --silent --show-error --dump-header "$headers_file" --output "$body_file" --write-out '%{http_code}' "$APP_URL$path")" || {
+              echo "Proxy-disclosure response probe failed: $path" >&2
+              exit 1
+            }
+            if [ "$status" != 404 ]; then
+              echo "Unexpected status for proxy-disclosure probe: $path (HTTP $status)" >&2
+              exit 1
+            fi
+            server_count="$(grep -Eic '^Server:' "$headers_file" || true)"
+            if [ "$server_count" -ne 1 ] || ! grep -Eiq "^Server:[[:space:]]*Apache[[:space:]]*$" "$headers_file"; then
+              echo "Unexpected or duplicate Server header on $path (value redacted)." >&2
+              exit 1
+            fi
+            for header in Via X-Backend-Server X-Powered-By; do
+              if grep -Eqi "^${header}:" "$headers_file"; then
+                echo "Proxy or runtime disclosure header $header was exposed on $path." >&2
+                exit 1
+              fi
+            done
+            if grep -Eiq '(nginx|Apache)/[0-9]+([.][0-9]+)*' "$headers_file" "$body_file"; then
+              echo "A web-server product version was exposed on $path (value redacted)." >&2
+              exit 1
+            fi
+          done
+
+          for path in /favicon.ico "$asset_path"; do
+            status="$(curl --silent --show-error --dump-header "$headers_file" --output "$body_file" --write-out '%{http_code}' "http://127.0.0.1:8004$path")" || {
+              echo "Static asset request transport failed: $path" >&2
+              sudo tail -n 60 /var/log/apache2/furimadeck-static-zap-error.log >&2 || true
+              sudo tail -n 20 /var/log/apache2/furimadeck-static-zap-access.log >&2 || true
+              exit 1
+            }
+            if [ "$status" != 200 ]; then
+              echo "Static asset request returned HTTP $status: $path" >&2
+              sudo tail -n 60 /var/log/apache2/furimadeck-static-zap-error.log >&2 || true
+              sudo tail -n 20 /var/log/apache2/furimadeck-static-zap-access.log >&2 || true
+              exit 1
+            fi
+            check_header X-Content-Type-Options nosniff "$path"
+            check_header X-Frame-Options DENY "$path"
+            check_header Referrer-Policy strict-origin-when-cross-origin "$path"
+            check_header Permissions-Policy 'camera=(self), microphone=(), geolocation=()' "$path"
+            check_header Cross-Origin-Embedder-Policy require-corp "$path"
+            check_header Cross-Origin-Opener-Policy same-origin "$path"
+            check_header Cross-Origin-Resource-Policy same-origin "$path"
+            check_header Server Apache "$path"
+            if grep -qi '^X-Powered-By:' "$headers_file"; then
+              echo "X-Powered-By was exposed on static asset $path." >&2
+              exit 1
+            fi
+            if grep -Eqi '^Server:[[:space:]].*([/][0-9]+([.][0-9]+)*|[0-9]+[.][0-9]+)' "$headers_file"; then
+            grep -i '^Server:' "$headers_file" >&2 || true
+              echo "A server product version was exposed on static asset $path." >&2
+              exit 1
+            fi
+          done
+          status="$(curl --silent --show-error --output "$body_file" --write-out '%{http_code}' 'http://127.0.0.1:8004/storage/security-static-control.txt')" || {
+            echo 'Public storage control-access probe failed.' >&2
+            exit 1
+          }
+          if [ "$status" != 200 ] || ! grep -q 'PUBLIC_STORAGE_CONTROL_SENTINEL' "$body_file"; then
+            echo "Static storage control path was not served as expected (HTTP $status)." >&2
+            exit 1
+          fi
+
+          status="$(curl --silent --show-error --output "$body_file" --write-out '%{http_code}' 'http://127.0.0.1:8004/storage/products/2147483647/ci-private-image-sentinel.txt')" || {
+            echo 'Private product image static-access probe failed.' >&2
+            exit 1
+          }
+          if [ "$status" != 403 ] || grep -q 'PRIVATE_PRODUCT_IMAGE_SENTINEL' "$body_file"; then
+            echo "Private product image was not denied by the public Apache document root (HTTP $status)." >&2
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --dump-header "$headers_file" --output /dev/null "$APP_URL/login"
+          if ! awk 'tolower($0) ~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/ && line ~ /;[[:space:]]*secure([;[:space:]]|$)/ && line ~ /;[[:space:]]*samesite=lax([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
+            echo 'The XSRF token cookie is missing HttpOnly, Secure, or SameSite=Lax.' >&2
+            exit 1
+          fi
+          if ! awk 'tolower($0) ~ /^set-cookie:/ && tolower($0) !~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/ && line ~ /;[[:space:]]*secure([;[:space:]]|$)/ && line ~ /;[[:space:]]*samesite=lax([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
+            echo 'The session cookie is missing HttpOnly, Secure, or SameSite=Lax.' >&2
+            exit 1
+          fi
+          docker run --rm --network host \
+            --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
+            --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
+            --entrypoint /bin/sh \
+            docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
+            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py -t "$1" -m 5 -T 10 -z "-config api.addrs.addr.name=^(localhost|127[.]0[.]0[.]1|::1|0:0:0:0:0:0:0:1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$ -config api.addrs.addr.regex=true" -J furimadeck-zap-report.json -r furimadeck-zap-report.html' \
+            sh "$APP_URL"
+          test -s "$RUNNER_TEMP/zap/furimadeck-zap-report.json"
+          ZAP_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-report.json" node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync(process.env.ZAP_REPORT, 'utf8'));
+          const sites = Array.isArray(report.site) ? report.site : [];
+          const expectedHost = new URL(process.env.APP_URL).host;
+          const scannedTarget = sites.some((site) => {
+            try {
+              return new URL(site['@name'] ?? site.name).host === expectedHost;
+            } catch {
+              return false;
+            }
+          });
+          if (!scannedTarget) {
+            throw new Error('ZAP report does not contain the configured Apache loopback target');
+          }
+          const alertCount = sites.reduce((count, site) => count + (Array.isArray(site.alerts) ? site.alerts.length : 0), 0);
+          console.log(`Validated ZAP JSON report for the configured Apache target; alert groups: ${alertCount}`);
+          NODE
+
+          zap_auth_email="furimadeck-zap-${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}@example.invalid"
+          zap_auth_password="$(openssl rand -hex 32)"
+          FURIMADECK_DEMO_USER_ENABLED=true \
+            FURIMADECK_DEMO_USER_EMAIL="$zap_auth_email" \
+            FURIMADECK_DEMO_USER_PASSWORD="$zap_auth_password" \
+            php artisan furimadeck:sync-demo-user --no-interaction --ansi
+          NODE_EXTRA_CA_CERTS="$tls_root/ca.pem" \
+            ZAP_TEST_APP_URL="$APP_URL" \
+            ZAP_TEST_EMAIL="$zap_auth_email" \
+            ZAP_TEST_PASSWORD="$zap_auth_password" \
+            ZAP_TEST_SESSION_COOKIE_NAME="$zap_session_cookie_name" \
+            node scripts/prepare-authenticated-zap-session.mjs
+
+          auth_log="/var/log/apache2/furimadeck-zap-https-access.log"
+          auth_log_offset="$(wc -c < "$auth_log")"
+          umask 077
+          auth_credentials_file="$(mktemp "$RUNNER_TEMP/furimadeck-zap-auth-credentials-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.XXXXXX")"
+          printf '%s\n' "$zap_auth_email" "$zap_auth_password" > "$auth_credentials_file"
+          chmod 600 "$auth_credentials_file"
+          if [ -L "$auth_credentials_file" ] || [ "$(stat -c '%a' -- "$auth_credentials_file")" != 600 ]; then
+            echo 'Disposable ZAP credentials file permissions are unsafe.' >&2
+            exit 1
+          fi
+          unset zap_auth_email zap_auth_password
+          hook_file="$RUNNER_TEMP/zap-authenticated-scan-hook.py"
+          cp scripts/zap-authenticated-scan-hook.py "$hook_file"
+          test -r "$hook_file"
+          docker run --rm --network host \
+            --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
+            --volume "$hook_file:/tmp/zap-authenticated-scan-hook.py:ro" \
+            --volume "$auth_credentials_file:/tmp/zap-auth-credentials:ro" \
+            --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
+            --env ZAP_AUTH_CONTEXT_FILE=/zap/wrk/furimadeck-zap-auth-context.xml \
+            --env ZAP_AUTH_CREDENTIALS_FILE=/tmp/zap-auth-credentials \
+            --env "APP_URL=$APP_URL" \
+            --entrypoint /bin/sh \
+            docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
+            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-auth-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-auth-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py --hook=/tmp/zap-authenticated-scan-hook.py -n /zap/wrk/furimadeck-zap-auth-context.xml -U "FurimaDeck CI scanner" -t "$1" -m 5 -T 10 -z "-config api.addrs.addr.name=^(localhost|127[.]0[.]0[.]1|::1|0:0:0:0:0:0:0:1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$ -config api.addrs.addr.regex=true" -J furimadeck-zap-authenticated-report.json -r furimadeck-zap-authenticated-report.html' \
+            sh "$APP_URL/furimadeck-dashboard"
+          test -s "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"
+          node scripts/check-authenticated-zap-access-log.mjs "$auth_log" "$auth_log_offset"
+          ZAP_AUTH_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json" node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync(process.env.ZAP_AUTH_REPORT, 'utf8'));
+          const sites = Array.isArray(report.site) ? report.site : [];
+          const expectedHost = new URL(process.env.APP_URL).host;
+          const scannedTarget = sites.some((site) => {
+            try {
+              return new URL(site['@name'] ?? site.name).host === expectedHost;
+            } catch {
+              return false;
+            }
+          });
+          if (!scannedTarget) {
+            throw new Error('Authenticated ZAP report does not contain the configured loopback target');
+          }
+          const alertCount = sites.reduce((count, site) => count + (Array.isArray(site.alerts) ? site.alerts.length : 0), 0);
+          console.log(`Validated authenticated ZAP JSON report for the configured Apache target; alert groups: ${alertCount}`);
+          NODE
+
+      - name: Report scan diagnostics
+        if: always()
+        run: |
+          for json in \
+            "$RUNNER_TEMP/zap/furimadeck-zap-report.json" \
+            "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"; do
+            if [ -s "$json" ]; then
+              echo 'ZAP JSON report exists in runner-local temporary storage; it is not uploaded.'
+              node scripts/report-zap-diagnostics.mjs "$json"
+            else
+              echo 'A ZAP JSON report was not generated.'
+            fi
+          done
+          if [ ! -s "$RUNNER_TEMP/zap/furimadeck-zap-report.html" ]; then
+            echo 'ZAP HTML report was not generated; checking the isolated server log.'
+            if [ -f "$RUNNER_TEMP/furimadeck-zap-server.log" ]; then
+              tail -n 80 "$RUNNER_TEMP/furimadeck-zap-server.log"
+            fi
+          fi
   dependency-review:
     name: Dependency review
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
       - name: Review dependency changes
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
-          fail-on-severity: high
+          fail-on-severity: low
 
   semgrep:
     name: Semgrep SAST
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    needs: workflow-pinning
+    timeout-minutes: 15
     container:
-      image: semgrep/semgrep:1.172.0
+      image: semgrep/semgrep@sha256:c8f333ab0ad103d2bcd3b55cbeabcfc556bfeaa7446ba18594a4320f3807ffc9
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
       - name: Scan PHP, Blade, and JavaScript
         env:
@@ -51,7 +529,7 @@ jobs:
         run: >
           semgrep scan
           --error
-          --severity ERROR
+          --severity WARNING
           --config p/default
           --config p/owasp-top-ten
           --config p/php
@@ -62,16 +540,134 @@ jobs:
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-regression:
+    name: Security regression tests (strict local suites)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      FURIMADECK_DB_URL: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      FURIMADECK_R2_LIVE_TEST: '0'
+      FURIMADECK_R2_PRODUCTION_LIVE_TEST: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --ansi
+
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify authenticated ZAP context and authentication fail closed
+        run: python3 scripts/test_zap_authenticated_scan_hook.py
+
+      - name: Prepare isolated test application
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force --ansi
+          php artisan config:clear --ansi
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Verify database isolation against hostile URLs
+        env:
+          DB_CONNECTION: mysql
+          DB_DATABASE: furimadeck_sentinel
+          DB_URL: mysql://127.0.0.1:1/furimadeck_sentinel
+          FURIMADECK_DB_DRIVER: mysql
+          FURIMADECK_DB_DATABASE: furimadeck_sentinel
+          FURIMADECK_DB_URL: mysql://127.0.0.1:1/furimadeck_sentinel
+        run: vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/TestDatabaseIsolationTest.php
+
+      - name: Run strict authentication abuse regression tests
+        run: |
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/Auth/AuthenticationTest.php
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/Auth/PasswordResetTest.php
+
+      - name: Run strict tenant and private-image authorization tests
+        run: |
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/FurimaDeckOwnershipTest.php
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues --exclude-group=live-r2 tests/Feature/ProductImageAccessTest.php
+
+      - name: Run strict CSP and third-party asset regression tests
+        run: vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/SecurityHeadersTest.php
+
+      - name: Run all local suites with strict issue handling
+        run: |
+          vendor/bin/phpunit --list-groups
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues --exclude-group=live-r2 --exclude-group=mariadb-gate
+
+  dependency-audit:
+    name: Composer and npm vulnerability audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --ansi
+
+      - name: Validate Composer metadata
+        run: composer validate --no-check-publish
+
+      - name: Install Node dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Audit PHP dependencies
+        run: composer audit --locked --no-interaction
+
+      - name: Audit Node dependencies
+        run: npm audit --audit-level=low

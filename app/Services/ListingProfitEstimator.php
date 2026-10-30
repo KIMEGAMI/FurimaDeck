@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use InvalidArgumentException;
+use RuntimeException;
 
 class ListingProfitEstimator
 {
@@ -12,14 +13,39 @@ class ListingProfitEstimator
      */
     public function estimate(Product $product, int $quantity, int $listingPrice, string $feeRate, int $shippingFee): array
     {
-        if ($quantity < 1 || $listingPrice < 0 || $shippingFee < 0) {
+        $maximumAmount = SaleProfitCalculator::MAX_UNSIGNED_AMOUNT;
+        if ($quantity < 1 || $listingPrice < 0 || $listingPrice > $maximumAmount
+            || $shippingFee < 0 || $shippingFee > $maximumAmount) {
             throw new InvalidArgumentException('Listing estimate values must be non-negative integers and quantity must be positive.');
         }
 
         $feeBasisPoints = $this->feeRateBasisPoints($feeRate);
-        $costBasis = $product->purchase_unit_cost * $quantity;
+        $unitCost = (int) $product->purchase_unit_cost;
+        if ($unitCost > intdiv($maximumAmount, $quantity)) {
+            throw new RuntimeException('見込み原価が会計データの保存可能範囲を超えています。商品情報を確認してください。');
+        }
+        $costBasis = $unitCost * $quantity;
+        if ($product->purchase_accounting_enabled) {
+            if ((int) $product->purchase_quantity !== 1 || $quantity !== 1) {
+                throw new InvalidArgumentException('仕入会計対象の商品は1点単位の原価確認が必要です。');
+            }
+            $additionalCosts = (int) $product->purchase_shipping_cost + (int) $product->other_purchase_expense;
+            if ($additionalCosts > $maximumAmount - $costBasis) {
+                throw new RuntimeException('見込み原価が会計データの保存可能範囲を超えています。商品情報を確認してください。');
+            }
+            $costBasis += $additionalCosts;
+        }
         $salesFee = intdiv($listingPrice * $feeBasisPoints, 10000);
-        $profit = $listingPrice - $costBasis - $salesFee - $shippingFee;
+        try {
+            $profit = app(SaleProfitCalculator::class)->calculate([
+                'sold_price' => $listingPrice,
+                'cost_basis' => $costBasis,
+                'sales_fee' => $salesFee,
+                'shipping_fee' => $shippingFee,
+            ]);
+        } catch (InvalidArgumentException) {
+            throw new RuntimeException('見込み利益がデータベースの保存可能範囲を超えています。価格・原価・手数料・送料を確認してください。');
+        }
 
         return [
             'expected_profit' => $profit,

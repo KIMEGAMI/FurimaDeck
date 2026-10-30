@@ -11,18 +11,12 @@ use Illuminate\Support\Facades\Auth;
 
 class VerifyEmailController extends Controller
 {
-    /**
-     * Mark the authenticated user's email address as verified.
-     */
+    /** Mark the account from a valid signed link as verified. */
     public function __invoke(Request $request, string $id, string $hash): RedirectResponse
     {
-        if (! Auth::check()) {
-            return redirect()->guest(route('login'));
-        }
-
         $user = User::findOrFail($id);
 
-        if (Auth::id() !== $user->getKey()) {
+        if (Auth::check() && Auth::id() !== $user->getKey()) {
             abort(403);
         }
 
@@ -32,6 +26,12 @@ class VerifyEmailController extends Controller
 
         if (! $user->hasVerifiedEmail() && $user->markEmailAsVerified()) {
             event(new Verified($user));
+        }
+
+        if (! Auth::check()) {
+            return redirect()
+                ->route('login')
+                ->with('status', 'email-verified-login');
         }
 
         $destination = (bool) config('furimadeck.cutover_enabled') ? 'furimadeck-dashboard' : 'dashboard';

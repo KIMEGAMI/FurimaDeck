@@ -68,6 +68,18 @@ class ProfileTest extends TestCase
         $this->assertNotNull($user->refresh()->email_verified_at);
     }
 
+    public function test_guest_cannot_delete_a_profile(): void
+    {
+        $user = User::factory()->create();
+
+        $this->delete('/profile', [
+            'password' => 'password',
+        ])->assertRedirect(route('login'));
+
+        $this->assertNotNull($user->fresh());
+        $this->assertGuest();
+    }
+
     public function test_user_can_delete_their_account(): void
     {
         $user = User::factory()->create();
@@ -303,7 +315,7 @@ class ProfileTest extends TestCase
 
     public function test_demo_user_cannot_see_delete_account_section(): void
     {
-        config(['demo.user_email' => 'demo@example.com']);
+        config(['demo.user_enabled' => true, 'demo.user_email' => 'demo@example.com']);
 
         $user = User::factory()->create([
             'email' => 'demo@example.com',
@@ -335,7 +347,7 @@ class ProfileTest extends TestCase
 
     public function test_demo_user_cannot_delete_their_account(): void
     {
-        config(['demo.user_email' => 'demo@example.com']);
+        config(['demo.user_enabled' => true, 'demo.user_email' => 'demo@example.com']);
 
         $user = User::factory()->create([
             'email' => 'demo@example.com',

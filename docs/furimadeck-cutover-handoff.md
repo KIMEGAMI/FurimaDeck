@@ -6,16 +6,17 @@
 | --- | --- | --- |
 | FurimaDeck 用の新規 DB | 実装済み・接続先の本番確認は未実施 | `config/furimadeck.php` と `docs/furimadeck-new-database.md` |
 | FurimaDeck 用 Stripe Webhook | 実装済み・Stripe 側 endpoint の登録は未確認 | `POST /furimadeck/stripe/webhook` |
-| FurimaDeck の本番公開 URL | DNS設定済み・HTTP/HTTPS到達不可 | `https://furimadeck.kimegami.jp` は `162.43.19.118` へ解決するが、2026-09-11時点で80/443番へ接続不可 |
+| FurimaDeck の本番公開 URL | 2026-10-17にCloudflare経由の読取応答を確認。HTTPは301でHTTPSへ転送、HTTPSはTLS検証付きHEAD 200。origin接続先とログイン後の機能は未確認 | `curl.exe --head` による公開URL確認。応答ヘッダーはCloudflare |
 | 旧 FURUPRO の廃止または併存 | 未確定 | 旧FURUPROのドメイン・設定をFurimaDeckへ流用しない |
 
-本番URLは `https://furimadeck.kimegami.jp` として扱う。DNSは `162.43.19.118` へ解決するが、2026-09-11時点でHTTP/HTTPSに接続できない。VPSのWebサーバー設定、ファイアウォール、TLS証明書を確認するまで公開しない。
+本番URLは `https://furimadeck.kimegami.jp` として扱う。2026-10-17時点でCloudflare経由のHTTP→HTTPS転送とHTTPSトップの応答は確認済み。ただし、この応答だけではoriginが新VPS `162.43.19.118` であること、アプリのログイン後機能、DB接続や外部連携の動作は証明できない。これらを確認するまでは本番公開完了と判定しない。
 
 ## 公開前の固定前提
 
 - 旧 FURUPRO の DB・Stripe endpoint・OAuth redirect URI は、FurimaDeck の設定に流用しない。
 - FurimaDeck は専用の空 DB を使い、旧 FURUPRO の DB バックアップを復元・移行しない。旧バックアップは保全と旧環境の復旧専用として保持する。
 - 本番 `.env` のシークレットを開発環境やリポジトリへコピーしない。
+- この1.0候補ではChrome拡張をリリースゲートに含めない。候補コードはChrome拡張IDを参照していないため、`FURIMADECK_CHROME_EXTENSION_ID` は本切替の必須環境変数ではない。拡張機能も1.0で公開する判断になった場合は、別途仕様・連携実装・検証を行う。
 - 本番 migration、既存画像の移設、監査ログの過去テキスト削除は、DB バックアップを人間が確認した後だけ実施する。
 
 ## 切替手順

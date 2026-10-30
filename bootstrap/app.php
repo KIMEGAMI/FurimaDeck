@@ -10,6 +10,8 @@ use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -19,11 +21,11 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(prepend: [
+            SecurityHeaders::class,
             MaintenanceMode::class,
         ]);
 
         $middleware->web(append: [
-            SecurityHeaders::class,
             RedirectLegacyDashboardDuringFurimaDeckCutover::class,
         ]);
 
@@ -40,5 +42,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->dontFlash(['purchase_special_case']);
+        $exceptions->respond(function (Response $response, Throwable $exception, Request $request): Response {
+            return app(SecurityHeaders::class)->apply($response, $request);
+        });
     })->create();

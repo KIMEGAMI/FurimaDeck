@@ -41,6 +41,8 @@ return [
 
     'resend' => [
         'key' => env('RESEND_API_KEY'),
+        'verified_sending_domain' => env('RESEND_VERIFIED_SENDING_DOMAIN'),
+        'sending_domain_verified' => env('RESEND_SENDING_DOMAIN_VERIFIED', false),
     ],
 
     'ses' => [

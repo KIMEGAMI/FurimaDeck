@@ -84,15 +84,20 @@ class FurimaDeckDashboardTest extends TestCase
             ->assertSee('FurimaDeckからのお知らせ')
             ->assertSee('経営インサイト')
             ->assertSee('利益サマリー')
+            ->assertSee(route('furimadeck-analytics.index'), false)
+            ->assertDontSee('売上詳細を見る')
             ->assertSee('データ保護とバックアップ')
             ->assertSee('の利益')
+            ->assertSee('プライバシーポリシー')
+            ->assertSee('特定商取引法に基づく表記')
+            ->assertSee('お問い合わせ')
             ->assertDontSee('DAILY SALES')
             ->assertSee('furimadeckMonthlySalesChart', false)
             ->assertSee('aria-label="前の月を表示"', false)
             ->assertSee('aria-label="次の月を表示"', false);
     }
 
-    public function test_desktop_navigation_dropdowns_open_by_click_and_close_when_pointer_leaves(): void
+    public function test_desktop_navigation_uses_native_details_and_mobile_menu_has_accessible_hooks(): void
     {
         $user = User::factory()->create(['email_verified_at' => now()]);
 
@@ -101,17 +106,25 @@ class FurimaDeckDashboardTest extends TestCase
             ->assertOk()
             ->assertSee('商品管理')
             ->assertSee('商品一覧')
+            ->assertSee(route('suppliers.index'), false)
+            ->assertSee('仕入先')
             ->assertSee('分析')
             ->assertSee('売上分析')
             ->assertSee('ジャンル別分析')
+            ->assertDontSee('出品先適性')
             ->assertSee('アカウント')
             ->assertSee('メニュー')
             ->assertSee('relative z-50 border-b', false)
             ->assertSee('text-cyan-200">商品管理</p>', false)
             ->assertSee('text-cyan-200">分析</p>', false)
             ->assertSee('text-cyan-200">アカウント</p>', false)
-            ->assertSee('@mouseleave="$el.open = false"', false)
-            ->assertSee('@keydown.escape="$el.open = false"', false)
+            ->assertSee('<nav data-responsive-nav', false)
+            ->assertSee('<details class="group relative">', false)
+            ->assertSee('data-nav-toggle', false)
+            ->assertSee('aria-controls="responsive-navigation-menu"', false)
+            ->assertSee('data-nav-menu', false)
+            ->assertDontSee('@mouseleave=', false)
+            ->assertDontSee('@keydown.escape=', false)
             ->assertDontSee('top-full z-50 mt-2', false)
             ->assertDontSee('class="group relative" open', false);
     }

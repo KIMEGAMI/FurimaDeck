@@ -46,6 +46,113 @@ class FurimaDeckBackupIsolationTest extends TestCase
         $this->assertStringNotContainsString('別ユーザーの商品', $csv);
     }
 
+    public function test_all_furimadeck_csv_exports_escape_formula_cells_and_stay_user_scoped(): void
+    {
+        $owner = $this->premiumUser();
+        $otherUser = $this->premiumUser();
+        $marketplace = Marketplace::query()->create([
+            'code' => 'csv-security-test',
+            'name' => '=SUM(1,1)',
+            'base_url' => 'https://example.test',
+            'default_fee_rate' => 10,
+        ]);
+        $product = $owner->products()->create([
+            ...$this->productValues('=1+1'),
+            'product_name' => '=HYPERLINK("https://example.test","title")',
+            'memo' => '+SUM(1,1)',
+        ]);
+        $otherUser->products()->create([
+            ...$this->productValues('OTHER-CSV-SECRET'),
+            'product_name' => '別ユーザーの商品',
+        ]);
+        $listing = $owner->listings()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $marketplace->id,
+            'listing_title' => "\t=1+1",
+            'listing_description' => '@SUM(1,1)',
+            'listing_price' => 5000,
+            'expected_fee_rate' => 10,
+            'shipping_fee' => 500,
+            'status' => 'active',
+        ]);
+        $owner->sales()->create([
+            'product_id' => $product->id,
+            'listing_id' => $listing->id,
+            'marketplace_id' => $marketplace->id,
+            'internal_sku_snapshot' => '-1+1',
+            'product_name_snapshot' => '=2+2',
+            'quantity' => 1,
+            'sold_price' => 5000,
+            'sold_at' => '2026-10-17 10:00:00',
+            'status' => 'completed',
+            'cost_basis' => 1000,
+            'sales_fee' => 500,
+        ]);
+
+        $expectedFormulaCellsByExport = [
+            'furimadeck-export.products' => chr(39).'=1+1',
+            'furimadeck-export.products-backup' => chr(39).'=HYPERLINK',
+            'furimadeck-export.listings' => chr(39).'=SUM(1,1)',
+            'furimadeck-export.sales' => chr(39).'-1+1',
+            'furimadeck-export.sales-spec' => chr(39).'=2+2',
+            'furimadeck-export.backup-spec' => chr(39).'+SUM(1,1)',
+            'furimadeck-export.restore-spec' => chr(39).'=HYPERLINK',
+            'furimadeck-export.active-listings' => chr(39).chr(9).'=1+1',
+        ];
+
+        foreach ($expectedFormulaCellsByExport as $routeName => $escapedCell) {
+            $csv = $this->actingAs($owner)->get(route($routeName))->assertOk()->streamedContent();
+
+            $this->assertStringContainsString($escapedCell, $csv, $routeName);
+            $this->assertStringNotContainsString('OTHER-CSV-SECRET', $csv, $routeName);
+            $this->assertStringNotContainsString('別ユーザーの商品', $csv, $routeName);
+        }
+    }
+
+    public function test_sales_exports_preserve_negative_profit_as_numeric_and_escape_formula_text(): void
+    {
+        $owner = $this->premiumUser();
+        $marketplace = Marketplace::query()->create([
+            'code' => 'sales-loss-csv-test',
+            'name' => '損失販売先',
+            'base_url' => 'https://example.test',
+            'default_fee_rate' => 0,
+        ]);
+        $product = $owner->products()->create([
+            ...$this->productValues('LOSS-CSV-001'),
+            'product_name' => '=1+1',
+            'purchase_unit_cost' => 1000,
+        ]);
+        $owner->sales()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $marketplace->id,
+            'internal_sku_snapshot' => $product->internal_sku,
+            'product_name_snapshot' => '=1+1',
+            'quantity' => 1,
+            'sold_price' => 900,
+            'sold_at' => '2026-10-17 10:00:00',
+            'status' => 'completed',
+            'cost_basis' => 1000,
+            'sales_fee' => 0,
+            'shipping_fee' => 0,
+            'net_profit' => -100,
+        ]);
+
+        $exports = [
+            'furimadeck-export.sales' => ',900,-100,completed,',
+            'furimadeck-export.sales-spec' => ',900,0,0,0,-100,SOLD,',
+            'furimadeck-export.backup-spec' => ',1000,900,0,0,0,-100,2026-10-17',
+        ];
+
+        foreach ($exports as $routeName => $expectedProfit) {
+            $csv = $this->actingAs($owner)->get(route($routeName))->assertOk()->streamedContent();
+
+            $this->assertStringContainsString(",'=1+1,", $csv, $routeName);
+            $this->assertStringContainsString($expectedProfit, $csv, $routeName);
+            $this->assertStringNotContainsString(",'-100,", $csv, $routeName);
+        }
+    }
+
     public function test_restore_export_uses_the_formal_restore_headers_and_values(): void
     {
         $owner = $this->premiumUser();
@@ -94,6 +201,65 @@ class FurimaDeckBackupIsolationTest extends TestCase
 
         $this->assertStringContainsString('management_id,title,comment,platform,parent_category,category,purchase_price,sold_price,sales_fee_rate,shipping_fee,status,sold_at', $csv);
         $this->assertStringContainsString('RESTORE-EXPORT-001,復元出力商品,復元コメント,メルカリ,家電,カメラ,3000,5000,10,750,sold,2026-09-20', $csv);
+    }
+
+    public function test_restore_export_eager_loads_sales_per_chunk_instead_of_per_product(): void
+    {
+        $owner = $this->premiumUser();
+        $marketplace = Marketplace::query()->create([
+            'code' => 'mercari',
+            'name' => 'メルカリ',
+            'base_url' => 'https://jp.mercari.com',
+            'default_fee_rate' => 10,
+        ]);
+        foreach (range(1, 3) as $index) {
+            $product = $owner->products()->create($this->productValues(sprintf('RESTORE-QUERY-%03d', $index)));
+            $listing = $owner->listings()->create([
+                'user_id' => $owner->id,
+                'product_id' => $product->id,
+                'marketplace_id' => $marketplace->id,
+                'listing_title' => $product->product_name,
+                'listing_price' => 5000,
+                'expected_fee_rate' => 10,
+                'shipping_fee' => 750,
+                'status' => 'sold',
+            ]);
+            $owner->sales()->create([
+                'user_id' => $owner->id,
+                'product_id' => $product->id,
+                'listing_id' => $listing->id,
+                'marketplace_id' => $marketplace->id,
+                'internal_sku_snapshot' => $product->internal_sku,
+                'product_name_snapshot' => $product->product_name,
+                'quantity' => 1,
+                'sold_price' => 5000,
+                'sold_at' => '2026-09-20 10:00:00',
+                'status' => 'completed',
+                'cost_basis' => 1000,
+                'sales_fee' => 500,
+                'shipping_fee' => 750,
+            ]);
+        }
+
+        $connection = DB::connection('furimadeck');
+        $connection->flushQueryLog();
+        $connection->enableQueryLog();
+        try {
+            $this->actingAs($owner)->get(route('furimadeck-export.restore-spec'))->streamedContent();
+            $salesQueries = array_filter(
+                $connection->getQueryLog(),
+                fn (array $query): bool => preg_match('/\bfrom\s+[`"]?sales[`"]?/i', $query['query']) === 1,
+            );
+            $listingQueries = array_filter(
+                $connection->getQueryLog(),
+                fn (array $query): bool => preg_match('/\bfrom\s+[`"]?listings[`"]?/i', $query['query']) === 1,
+            );
+        } finally {
+            $connection->disableQueryLog();
+        }
+
+        $this->assertCount(1, $salesQueries);
+        $this->assertCount(2, $listingQueries);
     }
 
     public function test_other_user_cannot_view_or_commit_an_import_batch(): void

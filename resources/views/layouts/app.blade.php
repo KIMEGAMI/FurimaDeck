@@ -8,15 +8,15 @@
     <title>{{ config('app.name', 'FurimaDeck') }}</title>
 
     <x-pwa-head />
-    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
-    <link rel="shortcut icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
+    <link rel="shortcut icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
 
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
-    <style>
+    <style nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         .furimadeck-app-shell {
+            background-color: var(--color-slate-950);
             background-image:
                 linear-gradient(rgba(2, 6, 23, 0.28), rgba(2, 6, 23, 0.52)),
                 url('{{ asset('images/bg.png') }}');
