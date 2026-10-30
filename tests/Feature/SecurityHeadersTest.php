@@ -6,8 +6,8 @@ use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Session\TokenMismatchException;
+use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
 
@@ -23,7 +23,7 @@ class SecurityHeadersTest extends TestCase
             ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
             ->assertHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
             ->assertHeader('Cross-Origin-Embedder-Policy', 'require-corp')
-            ->assertHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+            ->assertHeader('Cross-Origin-Opener-Policy', 'same-origin')
             ->assertHeader('Cross-Origin-Resource-Policy', 'same-origin');
 
         $cacheDirectives = array_map('trim', explode(',', (string) $response->headers->get('Cache-Control')));
@@ -47,7 +47,7 @@ class SecurityHeadersTest extends TestCase
                 ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
                 ->assertHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
                 ->assertHeader('Cross-Origin-Embedder-Policy', 'require-corp')
-                ->assertHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+                ->assertHeader('Cross-Origin-Opener-Policy', 'same-origin')
                 ->assertHeader('Cross-Origin-Resource-Policy', 'same-origin');
 
             $this->assertNotEmpty(
@@ -131,7 +131,8 @@ class SecurityHeadersTest extends TestCase
     {
         $session = $this->app['session.store'];
         $session->start();
-        $middleware = new class($this->app, $this->app['encrypter']) extends PreventRequestForgery {
+        $middleware = new class($this->app, $this->app['encrypter']) extends PreventRequestForgery
+{
             protected function runningUnitTests()
             {
                 return false;
