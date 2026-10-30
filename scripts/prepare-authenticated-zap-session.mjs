@@ -3,10 +3,11 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 function readAttribute(tag, name) {
-  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = tag.match(new RegExp(`(?:^|\\s)${escapedName}\\s*=\\s*(["'])(.*?)\\1`, 'i'));
+  for (const match of tag.matchAll(/\s([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(["'])(.*?)\2/gi)) {
+    if (match[1].toLowerCase() === name.toLowerCase()) return match[3];
+  }
 
-  return match?.[2] ?? null;
+  return null;
 }
 
 function collectCookies(response, cookies) {
