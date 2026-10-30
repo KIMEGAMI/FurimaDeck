@@ -138,8 +138,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes apache2
           sudo a2enmod headers proxy proxy_http rewrite
-          printf 'ServerTokens Prod\nServerSignature Off\n' | sudo tee /etc/apache2/conf-available/furimadeck-zap-server-tokens.conf >/dev/null
-          sudo a2enconf furimadeck-zap-server-tokens
+          printf '%s\n' 'ServerTokens Prod' 'ServerSignature Off' | sudo tee -a /etc/apache2/apache2.conf >/dev/null
           printf '\nListen 127.0.0.1:8002\nListen 127.0.0.1:8004\n' | sudo tee -a /etc/apache2/ports.conf >/dev/null
           sudo tee /etc/apache2/sites-available/furimadeck-zap.conf >/dev/null <<APACHE
           <VirtualHost 127.0.0.1:8002>
@@ -207,6 +206,7 @@ jobs:
             actual="$(awk -F: -v wanted="$name" 'tolower($1) == tolower(wanted) { sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); value = $0 } END { print value }' "$headers_file")"
             if [ "$actual" != "$expected" ]; then
               echo "Incorrect security header value on $3: $name" >&2
+              echo "Received value: ${actual:-<empty>}" >&2
               exit 1
             fi
           }
