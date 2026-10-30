@@ -7,9 +7,11 @@ const protectedDashboardPaths = new Set(['/furimadeck-dashboard', '/furimadeck-d
 export function summarizeAuthenticatedZapAccessLog(logText) {
   const statusCounts = new Map();
   const logoutStatusCounts = new Map();
+  const loginStatusCounts = new Map();
   let dashboardRequests = 0;
   let requestsWithSessionCookie = 0;
   let logoutRequests = 0;
+  let loginRequests = 0;
 
   for (const line of logText.split(/\r?\n/)) {
     if (line === '') continue;
@@ -28,7 +30,13 @@ export function summarizeAuthenticatedZapAccessLog(logText) {
     const [method, path, status, sessionCookiePresent] = fields;
     if (path === '/logout') {
       logoutRequests += 1;
-      logoutStatusCounts.set(status, (logoutStatusCounts.get(status) ?? 0) + 1);
+      const key = `${method}:${status}`;
+      logoutStatusCounts.set(key, (logoutStatusCounts.get(key) ?? 0) + 1);
+    }
+    if (path === '/login') {
+      loginRequests += 1;
+      const key = `${method}:${status}`;
+      loginStatusCounts.set(key, (loginStatusCounts.get(key) ?? 0) + 1);
     }
     if (method !== 'GET' || !protectedDashboardPaths.has(path)) continue;
 
@@ -44,12 +52,12 @@ export function summarizeAuthenticatedZapAccessLog(logText) {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([status, count]) => `${status}:${count}`)
     .join(',');
-  const logoutStatuses = [...logoutStatusCounts]
+  const formatCounts = (counts) => [...counts]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([status, count]) => `${status}:${count}`)
     .join(',') || 'none';
 
-  const summary = `Authenticated ZAP dashboard requests: total=${dashboardRequests}; session-cookie-present=${requestsWithSessionCookie}; HTTP statuses=${statuses}; /logout requests=${logoutRequests}; /logout HTTP statuses=${logoutStatuses}`;
+  const summary = `Authenticated ZAP dashboard requests: total=${dashboardRequests}; session-cookie-present=${requestsWithSessionCookie}; HTTP statuses=${statuses}; /logout requests=${logoutRequests}; /logout method-status=${formatCounts(logoutStatusCounts)}; /login requests=${loginRequests}; /login method-status=${formatCounts(loginStatusCounts)}`;
 
   if (requestsWithSessionCookie !== dashboardRequests) {
     throw new Error(`${summary}\nOne or more protected-dashboard requests did not include the isolated session cookie.`);

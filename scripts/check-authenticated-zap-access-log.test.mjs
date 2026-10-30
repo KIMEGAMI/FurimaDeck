@@ -10,9 +10,8 @@ test('accepts authenticated dashboard scan requests and reports status counts on
     'GET /login 200 -',
   ].join('\n'));
 
-  assert.equal(summary, 'Authenticated ZAP dashboard requests: total=2; session-cookie-present=2; HTTP statuses=200:2; /logout requests=1; /logout HTTP statuses=419:1');
+  assert.equal(summary, 'Authenticated ZAP dashboard requests: total=2; session-cookie-present=2; HTTP statuses=200:2; /logout requests=1; /logout method-status=POST:419:1; /login requests=1; /login method-status=GET:200:1');
   assert.equal(summary.includes('cookie-value'), false);
-  assert.equal(summary.includes('/login'), false);
 });
 
 test('fails closed when any authenticated dashboard request redirects or otherwise fails', () => {
@@ -57,5 +56,5 @@ test('does not disclose unrecognized request paths in diagnostics', () => {
   ].join('\n'));
 
   assert.equal(summary.includes('private@example.invalid'), false);
-  assert.match(summary, /\/logout requests=1; \/logout HTTP statuses=302:1/);
+  assert.match(summary, /\/logout requests=1; \/logout method-status=POST:302/);
 });
