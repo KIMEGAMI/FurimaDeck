@@ -243,7 +243,24 @@ jobs:
               exit 1
             fi
             server_count="$(grep -Eic '^Server:' "$headers_file" || true)"
-            if [ "$server_count" -ne 1 ] || ! grep -Eiq '^Server:[[:space:]]*Apache[[:space:]]*            status="$(curl --silent --show-error --dump-header "$headers_file" --output "$body_file" --write-out '%{http_code}' "http://127.0.0.1:8004$path")" || {
+            if [ "$server_count" -ne 1 ] || ! grep -Eiq "^Server:[[:space:]]*Apache[[:space:]]*$" "$headers_file"; then
+              echo "Unexpected or duplicate Server header on $path (value redacted)." >&2
+              exit 1
+            fi
+            for header in Via X-Backend-Server X-Powered-By; do
+              if grep -Eqi "^${header}:" "$headers_file"; then
+                echo "Proxy or runtime disclosure header $header was exposed on $path." >&2
+                exit 1
+              fi
+            done
+            if grep -Eiq '(nginx|Apache)/[0-9]+([.][0-9]+)*' "$headers_file" "$body_file"; then
+              echo "A web-server product version was exposed on $path (value redacted)." >&2
+              exit 1
+            fi
+          done
+
+          for path in /favicon.ico "$asset_path"; do
+            status="$(curl --silent --show-error --dump-header "$headers_file" --output "$body_file" --write-out '%{http_code}' "http://127.0.0.1:8004$path")" || {
               echo "Static asset request transport failed: $path" >&2
               sudo tail -n 60 /var/log/apache2/furimadeck-static-zap-error.log >&2 || true
               sudo tail -n 20 /var/log/apache2/furimadeck-static-zap-access.log >&2 || true
