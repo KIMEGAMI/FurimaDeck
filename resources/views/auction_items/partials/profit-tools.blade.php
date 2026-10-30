@@ -43,7 +43,7 @@
 </section>
 
 @once
-    <script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         document.addEventListener('DOMContentLoaded', function () {
             document.querySelectorAll('[data-profit-tools]').forEach(function (tool) {
                 const form = tool.closest('form');

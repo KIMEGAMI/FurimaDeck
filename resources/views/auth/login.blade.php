@@ -11,7 +11,7 @@
 </head>
 
 <body class="min-h-screen bg-slate-100">
-    <main class="flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none" style="background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('{{ asset('images/furimadeck-hero.png') }}');">
+    <main class="fd-bg-auth flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none">
         <div class="grid min-h-[720px] w-full max-w-7xl grid-cols-1 overflow-hidden rounded-lg bg-white shadow-2xl lg:grid-cols-2">
             <section class="relative hidden bg-blue-900 lg:block">
                 <img
@@ -39,19 +39,13 @@
                         <div class="mx-auto mt-6 h-1 w-16 rounded-full bg-blue-600"></div>
                     </div>
 
-                    <button
-                        type="button"
-                        data-pwa-install
-                        hidden
-                        disabled
-                        class="mb-6 w-full rounded-md border border-cyan-300 bg-cyan-50 px-5 py-4 text-center text-sm font-black text-cyan-900 shadow-sm transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        FurimaDeckをアプリとして追加
-                    </button>
+                    <div class="mb-6">
+                        <x-pwa-install-options />
+                    </div>
 
                     @if (session('status'))
                         <div class="mb-6 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                            {{ session('status') }}
+                            {{ session('status') === 'email-verified-login' ? __('メールアドレスの認証が完了しました。ログインしてください。') : session('status') }}
                         </div>
                     @endif
 

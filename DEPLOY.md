@@ -1,8 +1,11 @@
 # Production Deployment
 
-> **Legacy FURUPRO deployment only.** This document retains the existing
-> FURUPRO production path, database, domain, and integration settings for
-> legacy-service maintenance. Do not use it to deploy FurimaDeck.
+> **Historical runbook; do not execute these commands for FurimaDeck.** This
+> file contains legacy FURUPRO values mixed with later FurimaDeck path edits.
+> Its examples are not a verified deployment configuration for either
+> production environment. For the current FurimaDeck workflow, use
+> `docs/ci-cd.md` and verify the actual server, database, backup, DNS, and
+> HTTPS settings before deployment.
 >
 > FurimaDeck must use a dedicated application path, database, public URL,
 > Stripe endpoint, and OAuth redirect URI. Follow
@@ -45,14 +48,14 @@ For the first deployment:
 ```bash
 cd /var/www
 sudo git clone https://github.com/KIMEGAMI/FurimaDeck.git furugi
-sudo chown -R www-data:www-data /var/www/furugi
-cd /var/www/furugi
+sudo chown -R www-data:www-data /var/www/furimadeck
+cd /var/www/furimadeck
 ```
 
 For later deployments:
 
 ```bash
-cd /var/www/furugi
+cd /var/www/furimadeck
 sudo -u www-data git pull origin main
 ```
 
@@ -82,6 +85,7 @@ DB_USERNAME=furugi_user
 DB_PASSWORD=your_secure_password
 
 SESSION_DRIVER=database
+SESSION_LIFETIME=120
 SESSION_SECURE_COOKIE=true
 QUEUE_CONNECTION=database
 MAIL_MAILER=log
@@ -165,9 +169,9 @@ Example:
 
 <VirtualHost *:443>
     ServerName furimadeck.kimegami.jp
-    DocumentRoot /var/www/furugi/public
+    DocumentRoot /var/www/furimadeck/public
 
-    <Directory /var/www/furugi/public>
+    <Directory /var/www/furimadeck/public>
         AllowOverride All
         Require all granted
     </Directory>
@@ -222,21 +226,27 @@ sudo -u www-data php artisan view:cache
 
 ## 9. Queue Worker
 
-This app uses the database queue connection by default. If queued jobs are used in production, run a worker with Supervisor or systemd.
+This app uses the database queue connection by default. Run the queue worker and Laravel scheduler in production. The scheduler is required for stale accounting-send recovery.
 
 Recommended systemd setup:
 
 ```bash
-cd /var/www/furugi
+cd /var/www/furimadeck
 sudo bash deploy/scripts/install-startup-services.sh
 ```
 
-This enables Apache2 at boot and installs `furugi-queue.service` for Laravel queue workers.
+This enables Apache2 at boot, installs `furimadeck-queue.service`, and enables `furimadeck-scheduler.timer`. The timer runs `php artisan schedule:run` every minute, including the stale accounting-send recovery command.
+
+### Accounting API send gate
+
+FurimaDeck 1.0 exports provider-specific accounting CSVs; direct journal API send and journal readback are out of scope. The application forces both journal API gates off in `config/furimadeck.php`; legacy `FURIMADECK_ACCOUNTING_PROVIDER_API_ENABLED` and `FURIMADECK_DIRECT_JOURNAL_SEND_ENABLED` values cannot reopen those routes or queued jobs. OAuth connection and provider-master retrieval remain available only to configure CSV account/tax mappings.
+
+Do not enable the API gate as part of the 1.0 release. Existing API code, queue history, and configuration are retained for a later release decision; the stale-send recovery command is a no-op while the effective gate is disabled. Confirm the CSV transaction types and tax/account mappings before releasing provider-specific exports.
 
 Simple manual start:
 
 ```bash
-sudo -u www-data php artisan queue:work --tries=3
+sudo -u www-data /usr/bin/php /var/www/furimadeck/artisan queue:work --tries=3
 ```
 
 After each deployment:
@@ -248,14 +258,14 @@ sudo -u www-data php artisan queue:restart
 Restart production services without rebooting the server:
 
 ```bash
-cd /var/www/furugi
+cd /var/www/furimadeck
 sudo bash deploy/scripts/restart-production-services.sh
 ```
 
 Restart services and then reboot the server:
 
 ```bash
-cd /var/www/furugi
+cd /var/www/furimadeck
 sudo bash deploy/scripts/restart-production-services.sh --reboot
 ```
 
@@ -266,7 +276,7 @@ Before applying production migrations, confirm that a MySQL backup exists and th
 Run these checks after CI and Security workflows pass.
 
 ```bash
-cd /var/www/furugi
+cd /var/www/furimadeck
 sudo -u www-data git status
 sudo -u www-data git log -1 --oneline
 sudo -u www-data php artisan stripe:check
@@ -282,7 +292,7 @@ Do not deploy if `stripe:check`, tests, build, CI, or Security workflow fails.
 For normal deployments after code is pushed to GitHub:
 
 ```bash
-cd /var/www/furugi
+cd /var/www/furimadeck
 sudo -u www-data git pull origin main
 sudo -u www-data composer install --no-dev --optimize-autoloader
 sudo -u www-data rm -f public/hot
@@ -320,4 +330,4 @@ GitHub Actions workflows are defined in `.github/workflows`.
 
 Configure the required GitHub Secrets and optional Variables described in `docs/ci-cd.md`.
 
-The deployment user must be able to run the standard update commands above in `/var/www/furugi` as `www-data`. If sudo requires a password, configure restricted passwordless sudo rules for only the required deployment commands or reload Apache outside the workflow.
+The deployment user must be able to run the standard update commands above in `/var/www/furimadeck` as `www-data`. If sudo requires a password, configure restricted passwordless sudo rules for only the required deployment commands or reload Apache outside the workflow.

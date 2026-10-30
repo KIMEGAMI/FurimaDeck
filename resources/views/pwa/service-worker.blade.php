@@ -3,10 +3,10 @@ const OFFLINE_TITLE = @json($offlineTitle);
 const OFFLINE_MESSAGE = @json($offlineMessage);
 const OFFLINE_RETRY_LABEL = @json($offlineRetryLabel);
 const CORE_ASSETS = [
-    '/favicon.ico',
+    '/favicon.ico?v=3',
     '/images/logo.png',
-    '/images/icons/icon-192.png',
-    '/images/icons/icon-512.png'
+    '/images/icons/icon-192.png?v=3',
+    '/images/icons/icon-512.png?v=3'
 ];
 
 self.addEventListener('install', (event) => {
@@ -39,10 +39,20 @@ self.addEventListener('fetch', (event) => {
 
     if (request.mode === 'navigate') {
         event.respondWith(
-            fetch(request).catch(() => new Response(
-                `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${OFFLINE_TITLE}</title></head><body style="font-family:sans-serif;padding:32px;background:#0f172a;color:#f8fafc"><h1>${OFFLINE_TITLE}</h1><p>${OFFLINE_MESSAGE}</p><button type="button" id="offline-retry">${OFFLINE_RETRY_LABEL}</button><script>const retry=document.getElementById('offline-retry');retry.addEventListener('click',()=>window.location.reload());window.addEventListener('online',()=>window.location.reload());</script></body></html>`,
-                { headers: { 'Content-Type': 'text/html; charset=UTF-8' } }
-            ))
+            fetch(request).catch(() => {
+                const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(18))));
+                const headers = new Headers({
+                    'Content-Type': 'text/html; charset=UTF-8',
+                    'Content-Security-Policy': `default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'nonce-${nonce}'; script-src-attr 'none'; style-src 'none'; style-src-attr 'none'; img-src 'none'; connect-src 'none'`,
+                    'X-Content-Type-Options': 'nosniff',
+                    'Referrer-Policy': 'no-referrer',
+                });
+
+                return new Response(
+                    `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${OFFLINE_TITLE}</title></head><body><h1>${OFFLINE_TITLE}</h1><p>${OFFLINE_MESSAGE}</p><button type="button" id="offline-retry">${OFFLINE_RETRY_LABEL}</button><script nonce="${nonce}">document.getElementById('offline-retry').addEventListener('click',()=>window.location.reload());window.addEventListener('online',()=>window.location.reload());</script></body></html>`,
+                    { headers }
+                );
+            })
         );
         return;
     }

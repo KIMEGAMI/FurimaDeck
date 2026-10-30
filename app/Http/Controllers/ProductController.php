@@ -13,15 +13,17 @@ use App\Services\AuditLogger;
 use App\Services\FurimaDeckEntitlements;
 use App\Services\MarketplaceFeeService;
 use App\Services\ProductImageProcessor;
+use App\Services\SaleProfitCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 class ProductController extends Controller
@@ -32,13 +34,12 @@ class ProductController extends Controller
             'keyword' => ['nullable', 'string', 'max:255'],
             'inventory_status' => ['nullable', Rule::in(Product::INVENTORY_STATUSES)],
             'category_id' => ['nullable', 'integer'],
-            'supplier_id' => ['nullable', 'integer'],
             'stale_days' => ['nullable', 'integer', 'min:1', 'max:'.(int) config('furimadeck.inventory.max_filter_days')],
         ]);
 
         $products = $request->user()
             ->products()
-            ->with(['category', 'supplier', 'images', 'listings.marketplace', 'validSales.marketplace'])
+            ->with(['category', 'images', 'listings.marketplace', 'sales.marketplace', 'validSales.marketplace'])
             ->withValidSaleFlag()
             ->when($filters['keyword'] ?? null, function ($query, string $keyword): void {
                 $query->where(function ($nestedQuery) use ($keyword): void {
@@ -50,7 +51,6 @@ class ProductController extends Controller
             })
             ->when($filters['inventory_status'] ?? null, fn ($query, string $status) => $query->where('inventory_status', $status))
             ->when($filters['category_id'] ?? null, fn ($query, int $categoryId) => $query->whereIn('category_id', $this->categoryIdsForFilter($categoryId)))
-            ->when($filters['supplier_id'] ?? null, fn ($query, int $supplierId) => $query->where('supplier_id', $supplierId))
             ->when($filters['stale_days'] ?? null, function ($query, int $days): void {
                 $threshold = now()->subDays($days)->toDateString();
                 $query
@@ -69,7 +69,6 @@ class ProductController extends Controller
             'products' => $products,
             'filters' => $filters,
             'categories' => $this->activeCategories(),
-            'suppliers' => $request->user()->suppliers()->orderBy('name')->get(),
             'marketplaces' => Marketplace::query()->where('is_active', true)->orderBy('name')->get(),
             'marketplaceFeeRates' => app(MarketplaceFeeService::class)->rates(Marketplace::query()->where('is_active', true)->orderBy('name')->get()),
             'longTermInventoryDays' => (int) config('furimadeck.inventory.long_term_days'),
@@ -96,7 +95,7 @@ class ProductController extends Controller
         ]);
     }
 
-    public function showImage(Request $request, Product $product, ProductImage $image, string $variant): BinaryFileResponse
+    public function showImage(Request $request, Product $product, ProductImage $image, string $variant): StreamedResponse
     {
         $this->ensureOwner($request, $product);
         abort_unless($image->product_id === $product->id, 404);
@@ -109,7 +108,7 @@ class ProductController extends Controller
         $disk = $image->storageDisk();
         abort_unless(Storage::disk($disk)->exists($path), 404);
 
-        $response = response()->file(Storage::disk($disk)->path($path), [
+        $response = Storage::disk($disk)->response($path, basename($path), [
             'Content-Type' => $image->mime_type,
             'X-Content-Type-Options' => 'nosniff',
         ]);
@@ -137,9 +136,30 @@ class ProductController extends Controller
     {
         $this->ensureOwner($request, $product);
         abort_unless($image->product_id === $product->id, 404);
-        $paths = array_filter([$image->original_path, $image->derived_path]);
-        $image->delete();
-        Storage::disk($image->storageDisk())->delete($paths);
+        $files = DB::transaction(function () use ($product, $image): array {
+            $lockedImage = ProductImage::query()
+                ->whereKey($image->id)
+                ->where('product_id', $product->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $disk = $lockedImage->storageDisk();
+            $paths = array_values(array_filter([$lockedImage->original_path, $lockedImage->derived_path]));
+            $lockedImage->delete();
+
+            return ['disk' => $disk, 'paths' => $paths];
+        });
+
+        try {
+            $deleted = Storage::disk($files['disk'])->delete($files['paths']);
+        } catch (Throwable) {
+            $deleted = false;
+        }
+        if (! $deleted) {
+            Log::warning('Product image cleanup failed after database deletion.', [
+                'disk' => $files['disk'],
+                'file_count' => count($files['paths']),
+            ]);
+        }
 
         return back()->with('success', '商品画像を削除しました。');
     }
@@ -147,23 +167,31 @@ class ProductController extends Controller
     public function store(Request $request, AuditLogger $auditLogger, ProductImageProcessor $imageProcessor, FurimaDeckEntitlements $entitlements): RedirectResponse
     {
         $validated = $this->validatedProduct($request);
+        $uploadedImagePathsByDisk = [];
 
-        $product = DB::transaction(function () use ($request, $validated, $imageProcessor, $entitlements): Product {
-            $user = $request->user()->newQuery()->lockForUpdate()->findOrFail($request->user()->id);
-            if (! $entitlements->canCreateProduct($user, $user->products()->count())) {
-                throw ValidationException::withMessages([
-                    'product_limit' => 'Freeプランの商品登録上限に達しています。Premiumにすると登録数の制限がなくなります。',
-                ]);
-            }
-            $product = $request->user()->products()->create($this->productValues($validated));
-            $this->storeAttributeValues($product, $validated['attributes'] ?? []);
-            $this->storeImages($product, $request, $imageProcessor);
+        try {
+            $product = DB::transaction(function () use ($request, $validated, $imageProcessor, $entitlements, &$uploadedImagePathsByDisk): Product {
+                $user = $request->user()->newQuery()->lockForUpdate()->findOrFail($request->user()->id);
+                if (! $entitlements->canCreateProduct($user, $user->products()->count())) {
+                    throw ValidationException::withMessages([
+                        'product_limit' => 'Freeプランの商品登録上限に達しています。Premiumにすると登録数の制限がなくなります。',
+                    ]);
+                }
+                $product = $request->user()->products()->create($this->productValues($validated));
+                $this->storeAttributeValues($product, $validated['attributes'] ?? []);
+                $this->storeImages($product, $request, $imageProcessor, $uploadedImagePathsByDisk);
+                $this->storeInitialListing($request, $product, $validated);
 
-            return $product;
-        });
+                return $product;
+            });
+        } catch (Throwable $exception) {
+            $this->deleteUploadedImageFiles($uploadedImagePathsByDisk);
+
+            throw $exception;
+        }
         $auditLogger->log($request->user(), Product::class, $product->id, 'product.created', null, $product->getAttributes(), $request->ip());
 
-        return redirect()->route('products.index')->with('success', '商品を登録しました。');
+        return redirect()->route('products.index')->with('success', '商品を登録しました。出品情報は商品編集から確認・登録できます。');
     }
 
     public function edit(Request $request, Product $product): View
@@ -171,7 +199,7 @@ class ProductController extends Controller
         $this->ensureOwner($request, $product);
 
         return view('products.edit', array_merge($this->formData($request, $product), [
-            'product' => $product->load(['images', 'attributeValues.categoryAttribute', 'validSales.marketplace']),
+            'product' => $product->load(['images', 'attributeValues.categoryAttribute', 'listings.marketplace']),
         ]));
     }
 
@@ -181,12 +209,18 @@ class ProductController extends Controller
         $validated = $this->validatedProduct($request, $product);
 
         $before = $product->getAttributes();
-        DB::transaction(function () use ($request, $product, $validated, $imageProcessor): void {
-            $product->update($this->productValues($validated));
-            $this->syncSaleFromProduct($product, $validated['sale'] ?? []);
-            $this->storeAttributeValues($product, $validated['attributes'] ?? []);
-            $this->storeImages($product, $request, $imageProcessor);
-        });
+        $uploadedImagePathsByDisk = [];
+        try {
+            DB::transaction(function () use ($request, $product, $validated, $imageProcessor, &$uploadedImagePathsByDisk): void {
+                $product->update($this->productValues($validated, $product));
+                $this->storeAttributeValues($product, $validated['attributes'] ?? []);
+                $this->storeImages($product, $request, $imageProcessor, $uploadedImagePathsByDisk);
+            });
+        } catch (Throwable $exception) {
+            $this->deleteUploadedImageFiles($uploadedImagePathsByDisk);
+
+            throw $exception;
+        }
         $auditLogger->log($request->user(), Product::class, $product->id, 'product.updated', $before, $product->fresh()->getAttributes(), $request->ip());
 
         return redirect()->route('products.index')->with('success', '商品を更新しました。');
@@ -196,8 +230,9 @@ class ProductController extends Controller
     {
         $this->ensureOwner($request, $product);
         $request->validate(['confirm_deletion' => ['accepted']]);
-        if ($product->listings()->exists() || $product->sales()->exists()) {
-            return back()->with('error', '出品または販売履歴がある商品は削除できません。履歴を保護するため、在庫状態を変更してください。');
+        if ($product->listings()->exists() || $product->sales()->exists() || $product->accountingEntries()->exists()
+            || $product->manualPurchaseReconciliations()->exists()) {
+            return back()->with('error', '出品・販売・会計履歴がある商品は削除できません。履歴を保護するため、在庫状態を変更してください。');
         }
 
         $before = $product->getAttributes();
@@ -213,12 +248,12 @@ class ProductController extends Controller
     private function formData(Request $request, ?Product $product = null): array
     {
         $categoryId = old('category_id', $product?->category_id);
+        $marketplaces = Marketplace::query()->where('is_active', true)->orderBy('name')->get();
 
         return [
             'categories' => $this->activeCategories(),
-            'suppliers' => $request->user()->suppliers()->orderBy('name')->get(),
-            'marketplaces' => Marketplace::query()->where('is_active', true)->orderBy('name')->get(),
-            'marketplaceFeeRates' => app(MarketplaceFeeService::class)->rates(Marketplace::query()->where('is_active', true)->orderBy('name')->get()),
+            'marketplaces' => $marketplaces,
+            'marketplaceFeeRates' => app(MarketplaceFeeService::class)->rates($marketplaces),
             'conditions' => Product::CONDITIONS,
             'inventoryStatuses' => Product::INVENTORY_STATUSES,
             'categoryAttributes' => $categoryId === null
@@ -237,7 +272,6 @@ class ProductController extends Controller
         $maxImages = (int) config('furimadeck.product_images.max_count');
         $maxImageSize = (int) config('furimadeck.product_images.max_size_kilobytes');
         $remainingImageSlots = max(0, $maxImages - ($product?->images()->count() ?? 0));
-
         $validated = $request->validate([
             'internal_sku' => [
                 'required', 'string', 'max:80',
@@ -247,25 +281,19 @@ class ProductController extends Controller
             'category_id' => ['nullable', Rule::exists('product_categories', 'id')->where('is_active', true)],
             'condition' => ['required', Rule::in(Product::CONDITIONS)],
             'description_base' => ['nullable', 'string', 'max:10000'],
-            'purchase_date' => ['nullable', 'date'],
-            'purchase_unit_cost' => ['required', 'integer', 'min:0'],
-            'purchase_shipping_cost' => ['nullable', 'integer', 'min:0'],
-            'other_purchase_expense' => ['nullable', 'integer', 'min:0'],
-            'supplier_id' => [
+            'initial_marketplace_id' => [
                 'nullable',
-                Rule::exists('suppliers', 'id')->where('user_id', $request->user()->id),
+                'integer',
+                Rule::exists('marketplaces', 'id')->where('is_active', true),
+                'required_with:initial_listing_price',
             ],
+            'initial_listing_price' => ['nullable', 'integer', 'min:0', 'max:'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT, 'required_with:initial_marketplace_id'],
             'jan_ean' => ['nullable', 'string', 'max:64'],
             'isbn' => ['nullable', 'string', 'max:64'],
             'manufacturer_model_number' => ['nullable', 'string', 'max:255'],
             'serial_number' => ['nullable', 'string', 'max:255'],
             'storage_location' => ['nullable', 'string', 'max:255'],
             'memo' => ['nullable', 'string', 'max:10000'],
-            'sale' => ['nullable', 'array'],
-            'sale.sold_price' => ['nullable', 'integer', 'min:0'],
-            'sale.marketplace_id' => ['nullable', 'integer', Rule::exists('marketplaces', 'id')->where('is_active', true), 'required_with:sale.sold_price'],
-            'sale.sales_fee_rate' => ['nullable', 'numeric', 'min:0', 'max:100', 'required_with:sale.sold_price'],
-            'sale.shipping_fee' => ['nullable', 'integer', 'min:0'],
             'attributes' => ['nullable', 'array'],
             'attributes.*.id' => ['required_with:attributes', 'integer'],
             'attributes.*.value_text' => ['nullable', 'string', 'max:1000'],
@@ -301,53 +329,39 @@ class ProductController extends Controller
     }
 
     /** @param array<string, mixed> $validated */
-    private function productValues(array $validated): array
+    private function productValues(array $validated, ?Product $product = null): array
     {
         return collect($validated)
-            ->except(['attributes', 'images', 'inventory_status', 'sale'])
-            ->map(fn (mixed $value, string $key): mixed => in_array($key, ['purchase_shipping_cost', 'other_purchase_expense'], true) && $value === null ? 0 : $value)
+            ->except(['attributes', 'images', 'inventory_status', 'initial_marketplace_id', 'initial_listing_price', 'purchase_document_reviewed'])
             ->put('inventory_status', Product::inventoryStatusForQuantity((int) $validated['quantity_available']))
+            ->put('purchase_info_confirmed', (bool) ($product?->purchase_info_confirmed ?? false))
             ->all();
     }
 
-    /** @param array<string, mixed> $values */
-    private function syncSaleFromProduct(Product $product, array $values): void
+    /** @param array<string, mixed> $validated */
+    private function storeInitialListing(Request $request, Product $product, array $validated): void
     {
-        if (! array_key_exists('sold_price', $values) || $values['sold_price'] === null || $values['sold_price'] === '') {
+        if (! isset($validated['initial_marketplace_id'], $validated['initial_listing_price'])) {
             return;
         }
 
-        $marketplace = Marketplace::query()->whereKey($values['marketplace_id'])->where('is_active', true)->firstOrFail();
-
-        $soldPrice = (int) $values['sold_price'];
-        $feeRate = (float) $values['sales_fee_rate'];
-        $shippingFee = (int) ($values['shipping_fee'] ?? 0);
-        $salesFee = (int) floor($soldPrice * $feeRate / 100);
-        $costBasis = (int) $product->purchase_unit_cost;
-        $profit = $soldPrice - $costBasis - $salesFee - $shippingFee;
-        $saleValues = [
+        $marketplace = Marketplace::query()
+            ->whereKey($validated['initial_marketplace_id'])
+            ->where('is_active', true)
+            ->firstOrFail();
+        $feeRate = app(MarketplaceFeeService::class)->rate($marketplace);
+        $request->user()->listings()->create([
+            'product_id' => $product->id,
             'marketplace_id' => $marketplace->id,
-            'internal_sku_snapshot' => $product->internal_sku,
-            'product_name_snapshot' => $product->product_name,
-            'quantity' => 1,
-            'sold_price' => $soldPrice,
-            'sold_at' => now(),
-            'status' => Sale::STATUSES[3],
-            'cost_basis' => $costBasis,
-            'sales_fee' => $salesFee,
-            'sales_fee_rate' => $feeRate,
-            'shipping_fee' => $shippingFee,
-            'net_profit' => $profit,
-        ];
-        $sale = $product->validSales()->first();
-        if ($sale === null) {
-            $product->sales()->create(['user_id' => $product->user_id, ...$saleValues]);
-        } else {
-            $sale->update($saleValues);
-        }
-
-        $product->update(['quantity_available' => 0]);
-        $product->listings()->whereIn('status', ['ready', 'active'])->update(['status' => 'sold', 'ended_at' => now()]);
+            'listing_title' => $product->product_name,
+            'listing_description' => $product->description_base,
+            'listing_price' => (int) $validated['initial_listing_price'],
+            'listing_quantity' => 1,
+            'expected_fee_rate' => $feeRate,
+            'expected_profit' => null,
+            'expected_margin' => null,
+            'status' => 'draft',
+        ]);
     }
 
     /** @param array<int, array{id: int, value_text?: string|null}> $attributes */
@@ -361,28 +375,45 @@ class ProductController extends Controller
         }
     }
 
-    private function storeImages(Product $product, Request $request, ProductImageProcessor $imageProcessor): void
+    /** @param array<string, array<int, string>> $uploadedPathsByDisk */
+    private function storeImages(Product $product, Request $request, ProductImageProcessor $imageProcessor, array &$uploadedPathsByDisk): void
     {
         $files = $request->file('images', []);
         $position = (int) $product->images()->max('position') + 1;
-        $createdPaths = [];
+        $storageDisk = ProductImage::privateStorageDisk();
 
-        try {
-            foreach ($files as $file) {
-                $image = $imageProcessor->process($file, (int) $product->user_id);
-                $createdPaths[] = $image['original_path'];
-                $createdPaths[] = $image['derived_path'];
+        foreach ($files as $file) {
+            $image = $imageProcessor->process($file, (int) $product->user_id);
+            $uploadedPathsByDisk[$storageDisk][] = $image['original_path'];
+            $uploadedPathsByDisk[$storageDisk][] = $image['derived_path'];
 
-                $product->images()->create([
-                    ...$image,
-                    'storage_disk' => ProductImage::PRIVATE_STORAGE_DISK,
-                    'position' => $position++,
+            $product->images()->create([
+                ...$image,
+                'storage_disk' => $storageDisk,
+                'position' => $position++,
+            ]);
+        }
+    }
+
+    /** @param array<string, array<int, string>> $pathsByDisk */
+    private function deleteUploadedImageFiles(array $pathsByDisk): void
+    {
+        foreach ($pathsByDisk as $disk => $paths) {
+            $files = array_values(array_unique(array_filter($paths)));
+            $deleted = false;
+
+            try {
+                $deleted = Storage::disk($disk)->delete($files);
+            } catch (Throwable) {
+                // Keep the original transaction failure as the reported error.
+            }
+
+            if (! $deleted) {
+                Log::warning('Product image cleanup failed after a database rollback.', [
+                    'disk' => $disk,
+                    'file_count' => count($files),
                 ]);
             }
-        } catch (Throwable $exception) {
-            Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->delete(array_filter($createdPaths));
-
-            throw $exception;
         }
     }
 
@@ -397,7 +428,25 @@ class ProductController extends Controller
         collect($images)
             ->groupBy(fn (ProductImage $image) => $image->storageDisk())
             ->each(function ($images, string $disk): void {
-                Storage::disk($disk)->delete($images->flatMap(fn (ProductImage $image) => [$image->original_path, $image->derived_path])->filter()->all());
+                $files = $images->flatMap(fn (ProductImage $image) => [$image->original_path, $image->derived_path])
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+                $deleted = false;
+
+                try {
+                    $deleted = Storage::disk($disk)->delete($files);
+                } catch (Throwable) {
+                    // Product deletion has already committed; leave cleanup visible in logs.
+                }
+
+                if (! $deleted) {
+                    Log::warning('Product image cleanup failed after product deletion.', [
+                        'disk' => $disk,
+                        'file_count' => count($files),
+                    ]);
+                }
             });
     }
 

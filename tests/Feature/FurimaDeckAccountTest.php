@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\AccountingPurchaseCapReview;
 use App\Models\Marketplace;
+use App\Models\Notice;
 use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Auth\Notifications\VerifyEmail;
@@ -99,6 +101,68 @@ class FurimaDeckAccountTest extends TestCase
         $user->suppliers()->create(['name' => '削除対象仕入先', 'type' => 'other']);
         app(AuditLogger::class)->log($user, 'product', $userProduct->id, 'product.created');
         app(AuditLogger::class)->log($otherUser, 'product', $otherProduct->id, 'product.created');
+        $userBatch = $user->accountingSyncBatches()->create([
+            'provider' => 'freee',
+            'period_from' => '2026-01-01',
+            'period_to' => '2026-12-31',
+            'status' => 'failed',
+            'total_count' => 1,
+        ]);
+        $userBatchItem = $userBatch->items()->create([
+            'accounting_entry_id' => 101,
+            'management_id' => 'PURGE-ACCOUNTING-001',
+            'title' => '削除対象の同期履歴',
+            'status' => 'failed',
+        ]);
+        $otherBatch = $otherUser->accountingSyncBatches()->create([
+            'provider' => 'freee',
+            'period_from' => '2026-01-01',
+            'period_to' => '2026-12-31',
+            'status' => 'failed',
+            'total_count' => 1,
+        ]);
+        $otherBatchItem = $otherBatch->items()->create([
+            'accounting_entry_id' => 202,
+            'management_id' => 'KEEP-ACCOUNTING-001',
+            'title' => '保持対象の同期履歴',
+            'status' => 'failed',
+        ]);
+        $purchaseCapReview = AccountingPurchaseCapReview::create([
+            'user_id' => $user->id,
+            'period_from' => '2026-01-01',
+            'period_to' => '2026-12-31',
+            'counterparty_fingerprint' => hash('sha256', 'delete-counterparty'),
+            'counterparty_name' => '削除対象取引先',
+            'external_qualifying_purchase_amount' => 1000,
+            'reviewed_through' => '2026-10-01',
+            'furimadeck_history_complete' => true,
+            'external_history_complete' => true,
+            'reviewed_at' => now(),
+        ]);
+        $otherPurchaseCapReview = AccountingPurchaseCapReview::create([
+            'user_id' => $otherUser->id,
+            'period_from' => '2026-01-01',
+            'period_to' => '2026-12-31',
+            'counterparty_fingerprint' => hash('sha256', 'keep-counterparty'),
+            'counterparty_name' => '保持対象取引先',
+            'external_qualifying_purchase_amount' => 2000,
+            'reviewed_through' => '2026-10-01',
+            'furimadeck_history_complete' => true,
+            'external_history_complete' => true,
+            'reviewed_at' => now(),
+        ]);
+        $notice = Notice::create([
+            'user_id' => $user->id,
+            'title' => '削除対象通知',
+            'body' => '削除対象の通知本文',
+            'published_at' => now(),
+        ]);
+        $otherNotice = Notice::create([
+            'user_id' => $otherUser->id,
+            'title' => '保持対象通知',
+            'body' => '保持対象の通知本文',
+            'published_at' => now(),
+        ]);
 
         $this->actingAs($user)
             ->get(route('furimadeck-account.data-delete.confirm'))
@@ -126,8 +190,35 @@ class FurimaDeckAccountTest extends TestCase
         $this->assertDatabaseMissing('products', ['id' => $userProduct->id], 'furimadeck');
         $this->assertDatabaseMissing('suppliers', ['user_id' => $user->id], 'furimadeck');
         $this->assertDatabaseMissing('audit_logs', ['user_id' => $user->id], 'furimadeck');
+        $this->assertDatabaseMissing('accounting_sync_batches', ['id' => $userBatch->id], 'furimadeck');
+        $this->assertDatabaseMissing('accounting_sync_batch_items', ['id' => $userBatchItem->id], 'furimadeck');
+        $this->assertDatabaseMissing('accounting_purchase_cap_reviews', ['id' => $purchaseCapReview->id], 'furimadeck');
+        $this->assertDatabaseMissing('notices', ['id' => $notice->id], 'furimadeck');
         $this->assertDatabaseHas('products', ['id' => $otherProduct->id], 'furimadeck');
         $this->assertDatabaseHas('audit_logs', ['user_id' => $otherUser->id], 'furimadeck');
+        $this->assertDatabaseHas('accounting_sync_batches', ['id' => $otherBatch->id], 'furimadeck');
+        $this->assertDatabaseHas('accounting_sync_batch_items', ['id' => $otherBatchItem->id], 'furimadeck');
+        $this->assertDatabaseHas('accounting_purchase_cap_reviews', ['id' => $otherPurchaseCapReview->id], 'furimadeck');
+        $this->assertDatabaseHas('notices', ['id' => $otherNotice->id], 'furimadeck');
+    }
+
+    public function test_audit_logger_does_not_persist_client_ip_addresses(): void
+    {
+        $user = User::factory()->create(['email_verified_at' => now()]);
+
+        $auditLog = app(AuditLogger::class)->log(
+            $user,
+            'product',
+            1,
+            'product.created',
+            ipAddress: '203.0.113.10',
+        );
+
+        $this->assertDatabaseHas('audit_logs', [
+            'id' => $auditLog->id,
+            'user_id' => $user->id,
+            'ip_address' => null,
+        ], 'furimadeck');
     }
 
     public function test_data_deletion_requires_the_current_password(): void

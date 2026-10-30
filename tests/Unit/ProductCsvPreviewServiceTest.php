@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\ProductCsvPreviewService;
+use App\Services\SaleProfitCalculator;
 use Illuminate\Http\UploadedFile;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
@@ -77,7 +78,10 @@ class ProductCsvPreviewServiceTest extends TestCase
         $preview = app(ProductCsvPreviewService::class)->preview($file);
 
         $this->assertContains('purchase_dateはYYYY-MM-DD形式にしてください。', $preview['rows'][0]['errors']);
-        $this->assertContains('purchase_shipping_costは0以上の整数にしてください。', $preview['rows'][0]['errors']);
+        $this->assertContains(
+            'purchase_shipping_costは0以上'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.'以下の整数にしてください。',
+            $preview['rows'][0]['errors'],
+        );
     }
 
     #[Test]

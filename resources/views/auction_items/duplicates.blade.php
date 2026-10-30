@@ -50,7 +50,7 @@
                         <form
                             method="POST"
                             action="{{ route('auction-items.duplicates.destroy') }}"
-                            onsubmit="return confirm('すべての重複候補について、各グループの最新商品だけを残し、それ以外を削除します。商品画像も削除されます。本当に実行しますか？')"
+                            data-confirm="すべての重複候補について、各グループの最新商品だけを残し、それ以外を削除します。商品画像も削除されます。本当に実行しますか？"
                             class="shrink-0"
                         >
                             @csrf
@@ -80,7 +80,7 @@
                                     <form
                                         method="POST"
                                         action="{{ route('auction-items.duplicates.destroy') }}"
-                                        onsubmit="return confirm('この重複候補で最新の商品だけを残し、残りをすべて削除します。商品画像も削除されます。本当に実行しますか？')"
+                                        data-confirm="この重複候補で最新の商品だけを残し、残りをすべて削除します。商品画像も削除されます。本当に実行しますか？"
                                     >
                                         @csrf
                                         @method('DELETE')
@@ -97,7 +97,7 @@
                                 method="POST"
                                 action="{{ route('auction-items.duplicates.destroy') }}"
                                 class="mt-5"
-                                onsubmit="return confirm('選択した商品だけを残し、この重複候補の他の商品を削除します。商品画像も削除されます。本当に実行しますか？')"
+                                data-confirm="選択した商品だけを残し、この重複候補の他の商品を削除します。商品画像も削除されます。本当に実行しますか？"
                             >
                                 @csrf
                                 @method('DELETE')

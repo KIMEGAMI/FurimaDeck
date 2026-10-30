@@ -1,3 +1,72 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../tailwind.config.js";
+@plugin "@tailwindcss/forms";
+
+@theme {
+    --default-ring-width: 3px;
+    --default-ring-color: var(--color-blue-500);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+@layer base {
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-gray-200, currentColor);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+        color: var(--color-gray-400);
+    }
+
+    button:not(:disabled),
+    [role="button"]:not(:disabled) {
+        cursor: pointer;
+    }
+
+}
+
+.fd-bg-main {
+    background-image: linear-gradient(rgba(2, 6, 23, 0.42), rgba(2, 6, 23, 0.76)), url('/images/bg.png');
+    background-attachment: fixed;
+    background-position: center;
+    background-size: cover;
+}
+
+.fd-bg-auth {
+    background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('/images/furimadeck-hero.png');
+    background-size: cover;
+    background-position: center;
+}
+
+.fd-bg-guest {
+    background-image: linear-gradient(rgba(2, 6, 23, 0.28), rgba(2, 6, 23, 0.52)), url('/images/bg.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+}
+
+.fd-progress {
+    appearance: none;
+    border: 0;
+    border-radius: 9999px;
+    background: #1e293b;
+}
+
+.fd-progress::-webkit-progress-bar {
+    border-radius: 9999px;
+    background: #1e293b;
+}
+
+.fd-progress::-webkit-progress-value {
+    border-radius: 9999px;
+    background: #34d399;
+}
+
+.fd-progress::-moz-progress-bar {
+    border-radius: 9999px;
+    background: #34d399;
+}

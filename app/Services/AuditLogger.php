@@ -20,7 +20,8 @@ class AuditLogger
             'action' => $action,
             'before_json' => $this->sanitize($before),
             'after_json' => $this->sanitize($after),
-            'ip_address' => $ipAddress,
+            // Keep the argument for caller compatibility, but do not retain client IPs.
+            'ip_address' => null,
         ]);
         $auditLog->user_id = $user?->id;
         $auditLog->save();

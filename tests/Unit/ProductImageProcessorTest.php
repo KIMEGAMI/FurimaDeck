@@ -63,4 +63,17 @@ class ProductImageProcessorTest extends TestCase
 
         app(ProductImageProcessor::class)->process($file, 123);
     }
+
+    public function test_it_writes_processed_images_to_the_configured_s3_compatible_disk(): void
+    {
+        Storage::fake('furimadeck_r2');
+        config()->set('furimadeck.product_images.disk', 'furimadeck_r2');
+
+        $image = app(ProductImageProcessor::class)->process(UploadedFile::fake()->image('source.png', 800, 600), 456);
+
+        $this->assertSame('furimadeck_r2', ProductImage::privateStorageDisk());
+        Storage::disk('furimadeck_r2')->assertExists($image['original_path']);
+        Storage::disk('furimadeck_r2')->assertExists($image['derived_path']);
+        $this->assertSame('image/webp', $image['mime_type']);
+    }
 }

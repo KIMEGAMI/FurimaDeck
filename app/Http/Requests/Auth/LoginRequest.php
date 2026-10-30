@@ -47,13 +47,21 @@ class LoginRequest extends FormRequest
             'password' => (string) $this->input('password'),
         ];
 
-        if (! Auth::attempt($credentials, $this->boolean('remember'))) {
-            RateLimiter::hit($this->throttleKey(), $this->decaySeconds());
-            RateLimiter::hit($this->ipThrottleKey(), $this->decaySeconds());
+        $guard = Auth::guard();
+        $credentialsAreValid = $guard->validate($credentials);
+        $user = $guard->getLastAttempted();
 
-            throw ValidationException::withMessages([
-                'email' => trans('auth.failed'),
-            ]);
+        if (! $credentialsAreValid || ! $user?->hasVerifiedEmail()) {
+            $this->rejectAuthentication();
+        }
+
+        if (! $guard->attempt($credentials, $this->boolean('remember'))) {
+            $this->rejectAuthentication();
+        }
+
+        if (! Auth::user()?->hasVerifiedEmail()) {
+            Auth::logout();
+            $this->rejectAuthentication();
         }
 
         RateLimiter::clear($this->throttleKey());
@@ -115,5 +123,15 @@ class LoginRequest extends FormRequest
     private function decaySeconds(): int
     {
         return max(1, (int) config('auth_security.login_decay_seconds', 60));
+    }
+
+    private function rejectAuthentication(): never
+    {
+        RateLimiter::hit($this->throttleKey(), $this->decaySeconds());
+        RateLimiter::hit($this->ipThrottleKey(), $this->decaySeconds());
+
+        throw ValidationException::withMessages([
+            'email' => trans('auth.failed'),
+        ]);
     }
 }

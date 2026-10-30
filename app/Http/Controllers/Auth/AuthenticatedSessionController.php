@@ -24,12 +24,16 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+        if (! $request->user()->hasVerifiedEmail()) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => trans('auth.failed'),
+            ]);
+        }
+
         $request->session()->regenerate();
         $this->loginSecurity->recordSuccessfulLogin($request->user(), $request, 'メールログイン');
-
-        if (! $request->user()->hasVerifiedEmail()) {
-            return redirect()->route('verification.notice');
-        }
 
         return redirect()->intended($this->authenticatedDestination());
     }
@@ -51,18 +55,33 @@ class AuthenticatedSessionController extends Controller
             ]);
         }
 
-        if (! Auth::attempt(['email' => $email, 'password' => $password])) {
+        $guard = Auth::guard();
+        $credentials = ['email' => $email, 'password' => $password];
+        $credentialsAreValid = $guard->validate($credentials);
+        $user = $guard->getLastAttempted();
+
+        if (! $credentialsAreValid || ! $user?->hasVerifiedEmail()) {
             throw ValidationException::withMessages([
                 'email' => 'デモユーザーにログインできませんでした。管理者にお問い合わせください。',
             ]);
         }
 
+        if (! Auth::attempt($credentials)) {
+            throw ValidationException::withMessages([
+                'email' => 'デモユーザーにログインできませんでした。管理者にお問い合わせください。',
+            ]);
+        }
+
+        if (! $request->user()?->hasVerifiedEmail()) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => trans('auth.failed'),
+            ]);
+        }
+
         $request->session()->regenerate();
         $this->loginSecurity->recordSuccessfulLogin($request->user(), $request, 'デモログイン');
-
-        if (! $request->user()->hasVerifiedEmail()) {
-            return redirect()->route('verification.notice');
-        }
 
         return redirect()->intended($this->authenticatedDestination());
     }

@@ -9,6 +9,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use RuntimeException;
 
 class FurimaDeckExternalSalesImportService
@@ -84,6 +85,10 @@ class FurimaDeckExternalSalesImportService
                 $rows[] = ['row_number' => $line, 'values' => $parsed, 'errors' => []];
             }
 
+            if ($dataRows === 0) {
+                throw new RuntimeException('CSVに売上明細がありません。明細行を含むレポートを再ダウンロードしてください。');
+            }
+
             return ['rows' => $rows, 'skipped' => $skipped];
         } finally {
             fclose($handle);
@@ -111,10 +116,18 @@ class FurimaDeckExternalSalesImportService
                 return 'skipped';
             }
 
-            $product = $listing?->product;
-            $matched = $product !== null;
+            $product = $listing === null ? null : Product::query()
+                ->whereKey($listing->product_id)->where('user_id', $user->id)->lockForUpdate()->first();
             if ($product === null) {
                 $product = Product::query()->where('user_id', $user->id)->where('internal_sku', $parsed['management_id'])->lockForUpdate()->first();
+            }
+            $matched = $product !== null && $product->purchase_info_confirmed;
+            if ($product !== null && $user->sales()->where('product_id', $product->id)
+                ->where('marketplace_id', $marketplace->id)->where('sold_at', $soldAt)->exists()) {
+                return 'skipped';
+            }
+            if ($matched && (int) $parsed['quantity'] > (int) $product->quantity_available) {
+                throw new RuntimeException('取込対象の在庫が不足しています。商品と既存の売上を確認してください。');
             }
             if ($product === null) {
                 $product = $user->products()->create([
@@ -122,17 +135,23 @@ class FurimaDeckExternalSalesImportService
                     'product_name' => $parsed['title'],
                     'condition' => 'used',
                     'purchase_unit_cost' => 0,
+                    'purchase_info_confirmed' => false,
                     'purchase_quantity' => 1,
                     'quantity_available' => 0,
                     'inventory_status' => 'out_of_stock',
                     'memo' => '外部売上CSV未照合。仕入れ値と出品情報を確認してください。',
                 ]);
             }
-            $costBasis = $matched ? (int) $product->purchase_unit_cost : 0;
-            $netProfit = $matched
-                ? (int) $parsed['sold_price'] - $costBasis - (int) $parsed['sales_fee'] - (int) $parsed['shipping_fee']
-                : 0;
-            $user->sales()->create([
+            $costBasis = $matched ? (int) $product->purchase_unit_cost * (int) $parsed['quantity'] : 0;
+            try {
+                $netProfit = $matched ? app(SaleProfitCalculator::class)->calculate([
+                    'sold_price' => (int) $parsed['sold_price'], 'cost_basis' => $costBasis,
+                    'sales_fee' => (int) $parsed['sales_fee'], 'shipping_fee' => (int) $parsed['shipping_fee'],
+                ]) : 0;
+            } catch (InvalidArgumentException $exception) {
+                throw new RuntimeException('取込金額が保存可能な範囲を超えています。明細を確認してください。', previous: $exception);
+            }
+            $sale = $user->sales()->create([
                 'product_id' => $product->id,
                 'listing_id' => $listing?->id,
                 'marketplace_id' => $marketplace->id,
@@ -148,6 +167,15 @@ class FurimaDeckExternalSalesImportService
                 'net_profit' => $netProfit,
                 'completed_at' => $matched ? $soldAt : null,
             ]);
+
+            if ($matched) {
+                $product->decrement('quantity_available', (int) $parsed['quantity']);
+                $product->refresh()->syncInventoryStatus()->save();
+                if ($listing !== null) {
+                    $listing->update(['status' => 'sold', 'ended_at' => now()]);
+                }
+                app(FurimaDeckAccountingEntryService::class)->recordSale($user, $sale);
+            }
 
             return $matched ? 'imported' : 'provisional';
         });
@@ -189,6 +217,7 @@ class FurimaDeckExternalSalesImportService
 
             $result = ['imported' => 0, 'skipped' => 0, 'errors' => []];
             $line = 1;
+            $dataRows = 0;
             while (($row = fgetcsv($handle)) !== false) {
                 $line++;
                 if ($line > (int) config('furimadeck.csv_import.max_rows', self::MAX_ROWS) + 1) {
@@ -197,6 +226,7 @@ class FurimaDeckExternalSalesImportService
                 if (count(array_filter($row, fn (mixed $value): bool => trim((string) $value) !== '')) === 0) {
                     continue;
                 }
+                $dataRows++;
                 // Keep compatibility with exports that contain extra trailing columns.
                 $row = array_slice(array_pad($row, count($headers), ''), 0, count($headers));
                 $values = array_combine($headers, array_map(fn (mixed $value): string => $this->cell($value), array_pad($row, count($headers), '')));
@@ -223,6 +253,7 @@ class FurimaDeckExternalSalesImportService
                             'product_name' => $parsed['title'],
                             'condition' => 'used',
                             'purchase_unit_cost' => 0,
+                            'purchase_info_confirmed' => false,
                             'purchase_quantity' => 1,
                             'quantity_available' => 0,
                             'inventory_status' => 'out_of_stock',
@@ -258,6 +289,10 @@ class FurimaDeckExternalSalesImportService
                 } catch (RuntimeException $exception) {
                     $result['errors'][] = '行'.$line.': '.$exception->getMessage();
                 }
+            }
+
+            if ($dataRows === 0) {
+                throw new RuntimeException('CSVに売上明細がありません。明細行を含むレポートを再ダウンロードしてください。');
             }
 
             return $result;

@@ -57,7 +57,7 @@ class PlanFeatureAccessTest extends TestCase
 
     public function test_demo_user_can_open_premium_only_pages_without_stripe_subscription(): void
     {
-        config(['demo.user_email' => 'demo@example.com']);
+        config(['demo.user_enabled' => true, 'demo.user_email' => 'demo@example.com']);
 
         $user = User::factory()->create([
             'email' => 'demo@example.com',

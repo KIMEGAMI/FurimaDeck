@@ -22,6 +22,8 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/xml; charset=UTF-8');
+        $this->assertStringStartsWith('<?xml version="1.0" encoding="UTF-8"?>', $response->getContent());
+        $this->assertStringNotContainsString('{!!', $response->getContent());
         $response->assertSee('<urlset', false);
         $response->assertSee('/features', false);
         $response->assertSee('/use-cases', false);
@@ -107,7 +109,7 @@ class ExampleTest extends TestCase
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/javascript; charset=UTF-8');
         $response->assertSee('self.addEventListener', false);
-        $response->assertSee('furimadeck-pwa-v2', false);
+        $response->assertSee('furimadeck-pwa-v3', false);
         $encodedRetryLabel = json_encode('再接続する');
         $this->assertIsString($encodedRetryLabel);
         $response->assertSee('const OFFLINE_RETRY_LABEL = '.$encodedRetryLabel.';', false);
@@ -123,6 +125,8 @@ class ExampleTest extends TestCase
         $response->assertSee('rel="manifest"', false);
         $response->assertSee('data-pwa-install', false);
         $response->assertSee('FurimaDeckをアプリとして追加', false);
+        $response->assertSee('data-pwa-ios-install-help', false);
+        $response->assertSee('ホーム画面に追加', false);
     }
 
     public function test_marketing_pages_are_available(): void

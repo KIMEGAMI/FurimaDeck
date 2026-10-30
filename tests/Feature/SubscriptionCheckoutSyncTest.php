@@ -329,6 +329,7 @@ class SubscriptionCheckoutSyncTest extends TestCase
     public function test_demo_user_cannot_start_stripe_checkout(): void
     {
         config([
+            'demo.user_enabled' => true,
             'demo.user_email' => 'demo@example.com',
             'services.stripe.secret' => 'sk_test_example',
             'services.stripe.subscription_price_id' => 'price_test',
@@ -384,6 +385,7 @@ class SubscriptionCheckoutSyncTest extends TestCase
     public function test_billing_page_hides_checkout_buttons_for_demo_user(): void
     {
         config([
+            'demo.user_enabled' => true,
             'demo.user_email' => 'demo@example.com',
             'services.stripe.secret' => 'sk_test_example',
         ]);

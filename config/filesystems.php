@@ -1,5 +1,7 @@
 <?php
 
+use App\Services\FurimaDeckR2UploadCommandOptions;
+
 return [
 
     /*
@@ -57,6 +59,40 @@ return [
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'throw' => false,
+            'report' => false,
+        ],
+
+        'furimadeck_r2_dev' => [
+            'driver' => 's3',
+            'key' => env('PRODUCT_IMAGES_ACCESS_KEY_ID'),
+            'secret' => env('PRODUCT_IMAGES_SECRET_ACCESS_KEY'),
+            'region' => env('PRODUCT_IMAGES_REGION', 'auto'),
+            'bucket' => env('PRODUCT_IMAGES_BUCKET'),
+            'endpoint' => env('PRODUCT_IMAGES_ENDPOINT'),
+            'use_path_style_endpoint' => true,
+            'visibility' => 'private',
+            'options' => [
+                'before_upload' => [FurimaDeckR2UploadCommandOptions::class, 'removeUnsupportedAcl'],
+                'mup_threshold' => PHP_INT_MAX,
+            ],
+            'throw' => true,
+            'report' => false,
+        ],
+
+        'furimadeck_r2' => [
+            'driver' => 's3',
+            'key' => env('FURIMADECK_R2_ACCESS_KEY_ID'),
+            'secret' => env('FURIMADECK_R2_SECRET_ACCESS_KEY'),
+            'region' => env('FURIMADECK_R2_REGION', 'auto'),
+            'bucket' => env('FURIMADECK_R2_BUCKET'),
+            'endpoint' => env('FURIMADECK_R2_ENDPOINT'),
+            'use_path_style_endpoint' => true,
+            'visibility' => 'private',
+            'options' => [
+                'before_upload' => [FurimaDeckR2UploadCommandOptions::class, 'removeUnsupportedAcl'],
+                'mup_threshold' => PHP_INT_MAX,
+            ],
+            'throw' => true,
             'report' => false,
         ],
 

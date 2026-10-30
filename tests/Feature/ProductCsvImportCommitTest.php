@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Models\AccountingEntry;
 use App\Models\ImportBatch;
 use App\Models\Marketplace;
 use App\Models\User;
+use App\Services\SaleProfitCalculator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ProductCsvImportCommitTest extends TestCase
@@ -36,6 +39,26 @@ class ProductCsvImportCommitTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_product_csv_legacy_accounting_fields_direct_users_to_accounting(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('products.imports.create'))
+            ->assertOk()
+            ->assertSee('旧CSVとの互換性について')
+            ->assertSee('既存の商品CSVに含まれる仕入・売上経費の列は、これまでのCSVを読み込めるよう引き続き受け付けます。')
+            ->assertSee(route('furimadeck-accounting.index', ['section' => 'purchase-info']), false)
+            ->assertSee(route('furimadeck-accounting.index', ['section' => 'review']), false)
+            ->assertSee('商品登録・編集画面では会計情報を入力しません。')
+            ->assertSee('取込後の仕入情報は')
+            ->assertSee('販売経費は');
+    }
+
     public function test_valid_preview_can_be_explicitly_committed_as_products(): void
     {
         $user = User::factory()->create([
@@ -63,7 +86,207 @@ class ProductCsvImportCommitTest extends TestCase
             'product_name' => 'CSV商品',
             'quantity_available' => 2,
         ], 'furimadeck');
+        $this->assertTrue($user->products()->where('internal_sku', 'CSV-001')->firstOrFail()->purchase_info_confirmed);
         $this->assertSame('completed', $batch->fresh()->status);
+    }
+
+    public function test_minimal_product_csv_does_not_confirm_default_zero_purchase_cost(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('minimal-products.csv', implode("\n", [
+            'internal_sku,product_name',
+            'CSV-NO-COST,原価未入力商品',
+        ]));
+
+        $this->actingAs($user)->post(route('products.imports.preview'), ['csv_file' => $file])->assertRedirect();
+        $batch = ImportBatch::query()->firstOrFail();
+        $this->assertSame(0, $batch->failed_rows);
+
+        $this->actingAs($user)->post(route('products.imports.commit', $batch))->assertRedirect(route('products.index'));
+        $product = $user->products()->where('internal_sku', 'CSV-NO-COST')->firstOrFail();
+
+        $this->assertSame(0, $product->purchase_unit_cost);
+        $this->assertFalse($product->purchase_info_confirmed);
+    }
+
+    public function test_sold_csv_requires_an_explicit_purchase_unit_cost(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('sold-without-cost.csv', implode("\n", [
+            'internal_sku,product_name,condition,purchase_quantity,quantity_available,inventory_status,marketplace_code,listed_at,listing_price,sale_state,sale_quantity,sold_price,sold_at',
+            'CSV-SOLD-NO-COST,原価不明売却商品,used,1,0,out_of_stock,mercari,2026-09-10,4000,sold,1,3500,2026-09-20',
+        ]));
+
+        $this->actingAs($user)->post(route('products.imports.preview'), ['csv_file' => $file])->assertRedirect();
+        $batch = ImportBatch::query()->firstOrFail();
+
+        $this->assertSame(1, $batch->failed_rows);
+        $this->assertSame(0, $batch->success_rows);
+        $this->assertDatabaseMissing('products', ['user_id' => $user->id, 'internal_sku' => 'CSV-SOLD-NO-COST'], 'furimadeck');
+        $this->assertStringContainsString(
+            '原価不明の売却履歴は利益を正しく計算できないため登録できません。',
+            implode(' ', $batch->rowResults()->firstOrFail()->errors_json),
+        );
+    }
+
+    public function test_legacy_sold_csv_preview_without_explicit_cost_cannot_be_committed(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        $batch = new ImportBatch([
+            'batch_uuid' => (string) Str::uuid(),
+            'filename' => 'old-sold-preview.csv',
+            'format' => 'furimadeck_product_csv',
+            'total_rows' => 1,
+            'success_rows' => 1,
+            'failed_rows' => 0,
+            'status' => 'preview',
+            'started_at' => now(),
+        ]);
+        $batch->user_id = $user->id;
+        $batch->save();
+        $batch->rowResults()->create([
+            'row_number' => 2,
+            'is_valid' => true,
+            'row_json' => [
+                'internal_sku' => 'CSV-LEGACY-SOLD-NO-COST',
+                'product_name' => '原価未確認の旧プレビュー',
+                'condition' => 'used',
+                'purchase_unit_cost' => '0',
+                'purchase_quantity' => '1',
+                'quantity_available' => '0',
+                'inventory_status' => 'out_of_stock',
+                'marketplace_code' => 'mercari',
+                'listed_at' => '2026-09-10',
+                'listing_price' => '4000',
+                'sale_state' => 'sold',
+                'sale_quantity' => '1',
+                'sold_price' => '3500',
+                'sold_at' => '2026-09-20',
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('products.imports.show', $batch))
+            ->post(route('products.imports.commit', $batch))
+            ->assertRedirect(route('products.imports.show', $batch))
+            ->assertSessionHasErrors('csv_file');
+
+        $this->assertDatabaseMissing('products', ['user_id' => $user->id, 'internal_sku' => 'CSV-LEGACY-SOLD-NO-COST'], 'furimadeck');
+        $this->assertSame(0, $user->sales()->count());
+    }
+
+    public function test_restore_csv_preview_and_commit_restore_sold_product_and_sale(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        Marketplace::query()->create([
+            'code' => 'mercari', 'name' => 'メルカリ', 'base_url' => 'https://example.test',
+            'fee_type' => 'percentage', 'default_fee_rate' => 10, 'is_active' => true,
+        ]);
+        $file = UploadedFile::fake()->createWithContent('furimadeck-restore.csv', implode("\n", [
+            'management_id,title,comment,platform,parent_category,category,purchase_price,sold_price,sales_fee_rate,shipping_fee,status,sold_at',
+            'RESTORE-SOLD-001,復元売却商品,復元コメント,メルカリ,,,1000,5000,10,750,sold,2026-09-20',
+        ]));
+
+        $this->actingAs($user)->post(route('products.imports.restore-preview'), ['csv_file' => $file])->assertRedirect();
+        $batch = ImportBatch::query()->firstOrFail();
+        $this->assertSame(0, $batch->failed_rows);
+
+        $this->actingAs($user)->post(route('products.imports.commit', $batch))
+            ->assertRedirect(route('products.index'));
+
+        $product = $user->products()->where('internal_sku', 'RESTORE-SOLD-001')->firstOrFail();
+        $this->assertSame(0, $product->quantity_available);
+        $this->assertDatabaseHas('listings', [
+            'product_id' => $product->id,
+            'marketplace_id' => Marketplace::query()->where('code', 'mercari')->value('id'),
+            'status' => 'sold',
+            'listing_price' => 5000,
+        ], 'furimadeck');
+        $this->assertDatabaseHas('sales', [
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'sold_price' => 5000,
+            'sales_fee' => 500,
+            'shipping_fee' => 750,
+            'net_profit' => 2750,
+            'status' => 'completed',
+        ], 'furimadeck');
+        $sale = $user->sales()->where('product_id', $product->id)->firstOrFail();
+        $entry = $user->accountingEntries()->where('sale_id', $sale->id)->firstOrFail();
+        $this->assertSame(AccountingEntry::TYPE_SALE, $entry->entry_type);
+        $this->assertSame('ready', $entry->source_status);
+        $this->assertSame('not_synced', $entry->sync_status);
+        $this->assertSame(5000, $entry->sale_amount);
+        $this->assertSame(1000, $entry->purchase_cost);
+        $this->assertSame('completed', $batch->fresh()->status);
+    }
+
+    public function test_restore_csv_rejects_sales_fee_rate_above_one_hundred_percent(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        Marketplace::query()->create([
+            'code' => 'mercari', 'name' => 'メルカリ', 'base_url' => 'https://example.test',
+            'fee_type' => 'percentage', 'default_fee_rate' => 10, 'is_active' => true,
+        ]);
+        $file = UploadedFile::fake()->createWithContent('furimadeck-restore-invalid.csv', implode("\n", [
+            'management_id,title,comment,platform,parent_category,category,purchase_price,sold_price,sales_fee_rate,shipping_fee,status,sold_at',
+            'RESTORE-BAD-RATE,不正料率商品,テスト,メルカリ,,,1000,5000,150,0,sold,2026-09-20',
+        ]));
+
+        $this->actingAs($user)->post(route('products.imports.restore-preview'), ['csv_file' => $file])->assertRedirect();
+        $batch = ImportBatch::query()->firstOrFail();
+
+        $this->assertSame(1, $batch->failed_rows);
+        $this->assertDatabaseMissing('products', ['user_id' => $user->id, 'internal_sku' => 'RESTORE-BAD-RATE'], 'furimadeck');
+    }
+
+    public function test_restore_csv_rejects_truncated_fields_database_overflow_and_profit_overflow(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        Marketplace::query()->create([
+            'code' => 'mercari', 'name' => 'メルカリ', 'base_url' => 'https://example.test',
+            'fee_type' => 'percentage', 'default_fee_rate' => 10, 'is_active' => true,
+        ]);
+        $headers = 'management_id,title,comment,platform,parent_category,category,purchase_price,sold_price,sales_fee_rate,shipping_fee,status,sold_at';
+        $rows = [
+            'RESTORE-LONG-CELL,長文コメント商品,'.str_repeat('C', 1001).',メルカリ,,,1000,5000,10,0,sold,2026-09-20',
+            str_repeat('S', 81).','.str_repeat('T', 256).',長い識別情報,メルカリ,,,1000,5000,10,0,sold,2026-09-20',
+            'RESTORE-BIG-MONEY,金額上限商品,テスト,メルカリ,,,4294967296,5000,10,0,sold,2026-09-20',
+            'RESTORE-BIG-PROFIT,利益上限商品,テスト,メルカリ,,,4000000000,4000000000,100,0,sold,2026-09-20',
+        ];
+        $file = UploadedFile::fake()->createWithContent('furimadeck-restore-boundaries.csv', implode("\n", [$headers, ...$rows]));
+
+        $this->actingAs($user)->post(route('products.imports.restore-preview'), ['csv_file' => $file])->assertRedirect();
+        $batch = ImportBatch::query()->firstOrFail();
+
+        $this->assertSame(4, $batch->total_rows);
+        $this->assertSame(4, $batch->failed_rows);
+        $this->assertSame(0, $batch->success_rows);
+        $this->assertSame(0, $user->products()->count());
     }
 
     public function test_sold_csv_creates_sale_and_shows_sold_only_for_valid_completed_sale(): void
@@ -90,8 +313,67 @@ class ProductCsvImportCommitTest extends TestCase
         $this->assertSame('completed', $sale->status);
         $this->assertNotNull($sale->listing_id);
         $this->assertSame(1400, $sale->net_profit);
+        $entry = $user->accountingEntries()->where('sale_id', $sale->id)->firstOrFail();
+        $this->assertSame('ready', $entry->source_status);
+        $this->assertSame('not_synced', $entry->sync_status);
+        $this->assertSame(3500, $entry->sale_amount);
+        $this->assertSame(1000, $entry->purchase_cost);
 
         $this->actingAs($user)->get(route('products.index'))->assertOk()->assertSee('SOLD');
+    }
+
+    public function test_sold_csv_accepts_sales_fee_rate_when_sales_fee_amount_is_blank(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        Marketplace::query()->create([
+            'code' => 'mercari', 'name' => 'メルカリ', 'base_url' => 'https://example.test',
+            'fee_type' => 'percentage', 'default_fee_rate' => 95, 'is_active' => true,
+        ]);
+        $file = UploadedFile::fake()->createWithContent('sold-fee-rate.csv', implode("\n", [
+            'internal_sku,product_name,condition,purchase_unit_cost,purchase_quantity,quantity_available,inventory_status,marketplace_code,listed_at,listing_price,sale_state,sale_quantity,sold_price,sold_at,sales_fee,sales_fee_rate,shipping_fee,sale_purchase_shipping_cost,packing_cost,repair_cost,cleaning_cost,sale_other_expense',
+            'SOLD-RATE-001,料率指定商品,used,1000,1,0,out_of_stock,mercari,2026-09-10,4000,sold,1,3505,2026-09-20,,10.1,0,0,0,0,0,0',
+        ]));
+
+        $this->actingAs($user)->post(route('products.imports.preview'), ['csv_file' => $file]);
+        $batch = ImportBatch::query()->firstOrFail();
+        $this->assertSame(0, $batch->failed_rows);
+
+        $this->actingAs($user)->post(route('products.imports.commit', $batch))->assertRedirect(route('products.index'));
+        $sale = $user->sales()->whereHas('product', fn ($query) => $query->where('internal_sku', 'SOLD-RATE-001'))->firstOrFail();
+
+        $this->assertSame(354, $sale->sales_fee);
+        $this->assertSame(2151, $sale->net_profit);
+    }
+
+    public function test_sold_csv_rejects_sales_fee_rate_with_more_precision_than_saved_rate(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        Marketplace::query()->create([
+            'code' => 'mercari', 'name' => 'メルカリ', 'base_url' => 'https://example.test',
+            'fee_type' => 'percentage', 'default_fee_rate' => 0, 'is_active' => true,
+        ]);
+        $headers = 'internal_sku,product_name,condition,purchase_unit_cost,purchase_quantity,quantity_available,inventory_status,marketplace_code,listed_at,listing_price,sale_state,sale_quantity,sold_price,sold_at,sales_fee,sales_fee_rate,shipping_fee,sale_purchase_shipping_cost,packing_cost,repair_cost,cleaning_cost,sale_other_expense';
+        $file = UploadedFile::fake()->createWithContent('sold-fee-rate-precision.csv', implode("\n", [
+            $headers,
+            'SOLD-RATE-PRECISION,料率精度確認商品,used,1000,1,0,out_of_stock,mercari,2026-09-10,110000,sold,1,100000,2026-09-20,,10.105,0,0,0,0,0,0',
+        ]));
+
+        $this->actingAs($user)->post(route('products.imports.preview'), ['csv_file' => $file]);
+        $batch = ImportBatch::query()->firstOrFail();
+
+        $this->assertSame(1, $batch->failed_rows);
+        $this->assertContains('sales_fee_rateは0以上100以下、小数点以下2桁までの数値にしてください。', $batch->rowResults()->firstOrFail()->errors_json);
+        $this->actingAs($user)->post(route('products.imports.commit', $batch))->assertStatus(422);
+        $this->assertSame(0, $user->products()->count());
+        $this->assertSame(0, $user->sales()->count());
     }
 
     public function test_stock_csv_with_listing_creates_an_active_listing_without_a_sale(): void
@@ -133,6 +415,35 @@ class ProductCsvImportCommitTest extends TestCase
         $batch = ImportBatch::query()->firstOrFail();
         $this->assertSame(2, $batch->failed_rows);
         $this->assertSame(0, $user->products()->count());
+    }
+
+    public function test_unified_csv_rejects_database_amount_overflow_and_unstorable_profit_in_preview(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        Marketplace::query()->create([
+            'code' => 'mercari', 'name' => 'メルカリ', 'base_url' => 'https://example.test',
+            'fee_type' => 'percentage', 'default_fee_rate' => 0, 'is_active' => true,
+        ]);
+        $headers = 'internal_sku,product_name,condition,purchase_unit_cost,purchase_quantity,quantity_available,inventory_status,marketplace_code,listed_at,listing_price,sale_state,sale_quantity,sold_price,sold_at,sales_fee,shipping_fee,sale_purchase_shipping_cost,packing_cost,repair_cost,cleaning_cost,sale_other_expense';
+        $file = UploadedFile::fake()->createWithContent('amount-boundaries.csv', implode("\n", [
+            $headers,
+            'CSV-OVERFLOW,仕入単価超過,used,'.(SaleProfitCalculator::MAX_UNSIGNED_AMOUNT + 1).',1,1,in_stock,,,,stock,,,,,,,,,,',
+            'CSV-COST-BASIS,原価積超過,used,3000000000,2,0,out_of_stock,mercari,2026-09-10,1000,sold,2,1000,2026-09-20,0,0,0,0,0,0,0',
+            'CSV-PROFIT-OVERFLOW,利益超過,used,0,1,0,out_of_stock,mercari,2026-09-10,1000,sold,1,'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.',2026-09-20,0,0,0,0,0,0,0',
+        ]));
+
+        $this->actingAs($user)->post(route('products.imports.preview'), ['csv_file' => $file])->assertRedirect();
+        $batch = ImportBatch::query()->firstOrFail();
+
+        $this->assertSame(3, $batch->total_rows);
+        $this->assertSame(3, $batch->failed_rows);
+        $this->assertSame(0, $user->products()->count());
+        $messages = collect($batch->rowResults()->pluck('errors_json')->all())->flatten()->implode(' ');
+        $this->assertStringContainsString('保存可能範囲', $messages);
     }
 
     public function test_out_of_stock_without_valid_sale_does_not_show_sold(): void
@@ -259,7 +570,9 @@ class ProductCsvImportCommitTest extends TestCase
         $response = $this->actingAs($user)
             ->get(route('furimadeck-export.products'))
             ->assertOk()
-            ->assertDownload('products.csv');
+            ->assertDownload('products.csv')
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
 
         $this->assertStringContainsString('product_id,product_name', $response->streamedContent());
     }
@@ -289,7 +602,9 @@ class ProductCsvImportCommitTest extends TestCase
         $response = $this->actingAs($user)
             ->get(route('furimadeck-export.products-backup'))
             ->assertOk()
-            ->assertDownload('furimadeck-products-backup.csv');
+            ->assertDownload('furimadeck-products-backup.csv')
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
 
         $csv = $response->streamedContent();
         $this->assertStringContainsString('internal_sku,product_name,category_id,condition', $csv);

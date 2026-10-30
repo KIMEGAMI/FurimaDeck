@@ -41,6 +41,35 @@ class FurimaDeckOwnershipTest extends TestCase
         $this->actingAs($visitor)->get(route('listings.edit', $listing))->assertNotFound();
     }
 
+    public function test_user_cannot_update_or_delete_another_users_product(): void
+    {
+        $owner = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
+        $visitor = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
+        $product = $owner->products()->create([
+            'internal_sku' => 'OWNER-MUTATION-001',
+            'product_name' => '所有者の商品',
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 1,
+            'inventory_status' => 'in_stock',
+        ]);
+
+        $this->actingAs($visitor)->put(route('products.update', $product), [
+            'internal_sku' => 'ATTACK-001',
+            'product_name' => '不正更新',
+            'condition' => 'used',
+            'purchase_unit_cost' => 1,
+        ])->assertNotFound();
+
+        $this->actingAs($visitor)->delete(route('products.destroy', $product), [
+            'confirm_deletion' => '1',
+        ])->assertNotFound();
+
+        $this->assertSame('所有者の商品', $product->fresh()->product_name);
+        $this->assertSame($owner->id, $product->fresh()->user_id);
+    }
+
     public function test_sales_index_is_scoped_to_the_authenticated_user(): void
     {
         $owner = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);

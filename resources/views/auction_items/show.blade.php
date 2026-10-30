@@ -82,20 +82,20 @@
 
                         <div class="mt-6 flex flex-col gap-3 sm:flex-row">
                             @if($auctionItem->status !== 'sold')
-                                <form action="{{ route('auction-items.sold', $auctionItem) }}" method="POST" onsubmit="return confirm('この商品をSOLDにしますか？')" class="flex-1">
+                                <form action="{{ route('auction-items.sold', $auctionItem) }}" method="POST" data-confirm="この商品をSOLDにしますか？" class="flex-1">
                                     @csrf
                                     @method('PATCH')
                                     <button type="submit" class="w-full rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-white shadow transition hover:bg-amber-600">SOLDにする</button>
                                 </form>
                             @else
-                                <form action="{{ route('auction-items.selling', $auctionItem) }}" method="POST" onsubmit="return confirm('この商品を出品中に戻しますか？')" class="flex-1">
+                                <form action="{{ route('auction-items.selling', $auctionItem) }}" method="POST" data-confirm="この商品を出品中に戻しますか？" class="flex-1">
                                     @csrf
                                     @method('PATCH')
                                     <button type="submit" class="w-full rounded-xl bg-blue-700 px-5 py-3 text-sm font-black text-white shadow transition hover:bg-blue-800">出品中に戻す</button>
                                 </form>
                             @endif
 
-                            <form action="{{ route('auction-items.destroy', $auctionItem) }}" method="POST" onsubmit="return confirm('この商品を削除しますか？画像も削除されます。')" class="flex-1">
+                            <form action="{{ route('auction-items.destroy', $auctionItem) }}" method="POST" data-confirm="この商品を削除しますか？画像も削除されます。" class="flex-1">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="w-full rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white shadow transition hover:bg-red-700">削除する</button>
@@ -115,13 +115,13 @@
                     編集
                 </a>
                 @if($auctionItem->status !== 'sold')
-                    <form action="{{ route('auction-items.sold', $auctionItem) }}" method="POST" onsubmit="return confirm('この商品をSOLDにしますか？')">
+                    <form action="{{ route('auction-items.sold', $auctionItem) }}" method="POST" data-confirm="この商品をSOLDにしますか？">
                         @csrf
                         @method('PATCH')
                         <button type="submit" class="w-full rounded-xl bg-amber-500 px-3 py-3 text-center text-xs font-black text-white shadow">SOLD</button>
                     </form>
                 @else
-                    <form action="{{ route('auction-items.selling', $auctionItem) }}" method="POST" onsubmit="return confirm('この商品を出品中に戻しますか？')">
+                    <form action="{{ route('auction-items.selling', $auctionItem) }}" method="POST" data-confirm="この商品を出品中に戻しますか？">
                         @csrf
                         @method('PATCH')
                         <button type="submit" class="w-full rounded-xl bg-cyan-300 px-3 py-3 text-center text-xs font-black text-slate-950 shadow">出品中</button>
