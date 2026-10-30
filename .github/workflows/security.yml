@@ -138,19 +138,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes apache2
           sudo a2enmod headers proxy proxy_http rewrite
+          printf 'ServerTokens Prod\nServerSignature Off\n' | sudo tee /etc/apache2/conf-available/furimadeck-zap-server-tokens.conf >/dev/null
+          sudo a2enconf furimadeck-zap-server-tokens
           printf '\nListen 127.0.0.1:8002\nListen 127.0.0.1:8004\n' | sudo tee -a /etc/apache2/ports.conf >/dev/null
           sudo tee /etc/apache2/sites-available/furimadeck-zap.conf >/dev/null <<APACHE
           <VirtualHost 127.0.0.1:8002>
               ServerName 127.0.0.1
-              DocumentRoot "$GITHUB_WORKSPACE/public"
+              DocumentRoot "$static_root"
               ProxyPreserveHost On
+              ProxyVia Off
               RewriteEngine On
               RewriteCond %{REQUEST_URI} !^/$
               RewriteCond %{REQUEST_URI} !\.php$
               RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} -f
               RewriteRule ^ - [L]
               RewriteRule ^/(.*)$ http://127.0.0.1:8003/\$1 [P,L]
-              <Directory "$GITHUB_WORKSPACE/public">
+              <Directory "$static_root">
                   AllowOverride All
                   Require all granted
               </Directory>
@@ -209,10 +212,14 @@ jobs:
           check_header Referrer-Policy strict-origin-when-cross-origin /
           check_header Permissions-Policy 'camera=(self), microphone=(), geolocation=()' /
           check_header Cross-Origin-Embedder-Policy require-corp /
-          check_header Cross-Origin-Opener-Policy same-origin-allow-popups /
+          check_header Cross-Origin-Opener-Policy same-origin /
           check_header Cross-Origin-Resource-Policy same-origin /
           if grep -qi '^X-Powered-By:' "$headers_file"; then
             echo 'X-Powered-By was exposed on the dynamic homepage.' >&2
+            exit 1
+          fi
+          if grep -Eqi '^Server:[[:space:]].*(/|[0-9]+\\.[0-9]+)' "$headers_file"; then
+            echo 'A server product version was exposed on the dynamic homepage.' >&2
             exit 1
           fi
           if grep -Eqi '[?&]v=[0-9]{10,}([&#[:space:]]|$)' "$body_file"; then
@@ -238,10 +245,14 @@ jobs:
             check_header Referrer-Policy strict-origin-when-cross-origin "$path"
             check_header Permissions-Policy 'camera=(self), microphone=(), geolocation=()' "$path"
             check_header Cross-Origin-Embedder-Policy require-corp "$path"
-            check_header Cross-Origin-Opener-Policy same-origin-allow-popups "$path"
+            check_header Cross-Origin-Opener-Policy same-origin "$path"
             check_header Cross-Origin-Resource-Policy same-origin "$path"
             if grep -qi '^X-Powered-By:' "$headers_file"; then
               echo "X-Powered-By was exposed on static asset $path." >&2
+              exit 1
+            fi
+            if grep -Eqi '^Server:[[:space:]].*(/|[0-9]+\\.[0-9]+)' "$headers_file"; then
+              echo "A server product version was exposed on static asset $path." >&2
               exit 1
             fi
           done
