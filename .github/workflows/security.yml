@@ -40,6 +40,7 @@ jobs:
           node --test scripts/check-github-actions-pinned.test.mjs
           node --test scripts/report-zap-diagnostics.test.mjs
           node --test scripts/prepare-authenticated-zap-session.test.mjs
+          node --test scripts/check-authenticated-zap-access-log.test.mjs
 
   dast-active:
     name: OWASP ZAP active DAST (isolated CI app)
@@ -142,6 +143,11 @@ jobs:
             sleep 1
           done
           curl --fail --silent --show-error --output /dev/null http://127.0.0.1:8003/up
+          zap_session_cookie_name="$(php scripts/read-session-cookie-name.php)"
+          if ! [[ "$zap_session_cookie_name" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo 'The testing session cookie name is invalid.' >&2
+            exit 1
+          fi
 
           sudo apt-get update
           sudo apt-get install --yes apache2
@@ -168,7 +174,7 @@ jobs:
           openssl x509 -in "$tls_root/server.pem" -noout -checkip 127.0.0.1
           chmod 600 "$tls_root/ca.key" "$tls_root/server.key"
           export CURL_CA_BUNDLE="$tls_root/ca.pem"
-          sudo a2enmod headers proxy proxy_http rewrite ssl
+          sudo a2enmod headers proxy proxy_http rewrite setenvif ssl
           printf '%s\n' 'ServerTokens Prod' 'ServerSignature Off' | sudo tee -a /etc/apache2/apache2.conf >/dev/null
           printf '\nListen 127.0.0.1:8002\nListen 127.0.0.1:8004\nListen 127.0.0.1:8443\n' | sudo tee -a /etc/apache2/ports.conf >/dev/null
           sudo tee /etc/apache2/sites-available/furimadeck-zap.conf >/dev/null <<APACHE
@@ -214,7 +220,8 @@ jobs:
                   AllowOverride All
                   Require all granted
               </Directory>
-              LogFormat "%m %U %H %>s %b" furimadeck_zap_https_safe
+              SetEnvIfNoCase Cookie "(^|;[[:space:]]*)${zap_session_cookie_name}=" zap_session_cookie_present=1
+              LogFormat "%m %U %>s %{zap_session_cookie_present}e" furimadeck_zap_https_safe
               CustomLog /var/log/apache2/furimadeck-zap-https-access.log furimadeck_zap_https_safe
               ErrorLog /var/log/apache2/furimadeck-zap-https-error.log
           </VirtualHost>
@@ -414,7 +421,7 @@ jobs:
             ZAP_TEST_APP_URL="$APP_URL" \
             ZAP_TEST_EMAIL="$zap_auth_email" \
             ZAP_TEST_PASSWORD="$zap_auth_password" \
-            ZAP_TEST_SESSION_COOKIE_NAME="$(php scripts/read-session-cookie-name.php)" \
+            ZAP_TEST_SESSION_COOKIE_NAME="$zap_session_cookie_name" \
             ZAP_AUTH_COOKIE_FILE="$auth_cookie_file" \
             node scripts/prepare-authenticated-zap-session.mjs
           unset zap_auth_email zap_auth_password
@@ -438,25 +445,16 @@ jobs:
             sh "$APP_URL/furimadeck-dashboard"
           unset auth_cookie_header
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"
-          if auth_dashboard_summary="$(tail -c +$((auth_log_offset + 1)) "$auth_log" | awk '
-            $1 == "GET" && ($2 == "/furimadeck-dashboard" || $2 == "/furimadeck-dashboard/") { status_count[$4]++ }
-            END {
-              total = 0
-              for (status in status_count) {
-                printf "GET /furimadeck-dashboard HTTP %s: %d\n", status, status_count[status]
-                total += status_count[status]
-              }
-              if (total == 0) {
-                print "GET /furimadeck-dashboard: no requests"
-                exit 1
-              }
-              exit (status_count["200"] > 0 ? 0 : 1)
-            }
-          ')"; then
-            printf 'Authenticated DAST dashboard response counts (method, route, status):\n%s\n' "$auth_dashboard_summary"
-          else
-            printf 'Authenticated DAST dashboard response counts (method, route, status):\n%s\n' "$auth_dashboard_summary" >&2
-            echo 'Authenticated ZAP did not reach the protected FurimaDeck dashboard with HTTP 200.' >&2
+          node scripts/check-authenticated-zap-access-log.mjs "$auth_log" "$auth_log_offset"
+          post_scan_cookie_header="$(cat "$auth_cookie_file")"
+          post_scan_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --header "Cookie: $post_scan_cookie_header" "$APP_URL/furimadeck-dashboard")" || {
+            unset post_scan_cookie_header
+            echo 'Authenticated post-scan dashboard control request failed.' >&2
+            exit 1
+          }
+          unset post_scan_cookie_header
+          if [ "$post_scan_status" != 200 ]; then
+            echo "The isolated authenticated session did not reach the dashboard after ZAP (HTTP $post_scan_status)." >&2
             exit 1
           fi
           ZAP_AUTH_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json" node <<'NODE'
