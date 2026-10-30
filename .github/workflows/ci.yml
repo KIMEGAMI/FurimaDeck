@@ -67,7 +67,9 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Test E2E runtime safety
-        run: npm run test:e2e-runtime
+        run: |
+          npm run test:e2e-runtime
+          node --test scripts/report-zap-diagnostics.test.mjs
 
       - name: Prepare application key
         run: |
