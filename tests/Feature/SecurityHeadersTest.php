@@ -131,8 +131,7 @@ class SecurityHeadersTest extends TestCase
     {
         $session = $this->app['session.store'];
         $session->start();
-        $middleware = new class($this->app, $this->app['encrypter']) extends PreventRequestForgery
-        {
+        $middleware = new class($this->app, $this->app['encrypter']) extends PreventRequestForgery {
             protected function runningUnitTests()
             {
                 return false;
