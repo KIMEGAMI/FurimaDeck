@@ -62,7 +62,7 @@ class SecurityHeadersTest extends TestCase
 
     public function test_redirect_responses_do_not_return_an_html_body(): void
     {
-        Route::get('/__security-regression/redirect', static fn () => redirect('/login'));
+        Route::middleware('web')->get('/__security-regression/redirect', static fn () => redirect('/login'));
 
         $response = $this->get('/__security-regression/redirect')
             ->assertRedirect('/login');
