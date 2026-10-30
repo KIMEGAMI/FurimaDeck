@@ -111,7 +111,10 @@ jobs:
           suffix="zap-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           database_file="$GITHUB_WORKSPACE/storage/framework/testing/furimadeck-zap-${suffix}.sqlite"
           storage_root="$RUNNER_TEMP/furimadeck-zap-${suffix}"
-          mkdir -p "$(dirname "$database_file")" "$storage_root/framework/views" "$storage_root/framework/cache/data" "$storage_root/framework/sessions" "$storage_root/logs" "$storage_root/app/private" "$storage_root/app/public" "$RUNNER_TEMP/zap"
+          static_root="/tmp/furimadeck-zap-static-${suffix}"
+          mkdir -p "$(dirname "$database_file")" "$storage_root/framework/views" "$storage_root/framework/cache/data" "$storage_root/framework/sessions" "$storage_root/logs" "$storage_root/app/private" "$storage_root/app/public" "$RUNNER_TEMP/zap" "$static_root"
+          cp -a public/. "$static_root/"
+          chmod -R a+rX "$static_root"
           sudo chown 1000:1000 "$RUNNER_TEMP/zap"
           touch "$database_file"
           export FURIMADECK_DB_DATABASE="$database_file"
@@ -157,8 +160,8 @@ jobs:
 
           <VirtualHost 127.0.0.1:8004>
               ServerName 127.0.0.1
-              DocumentRoot "$GITHUB_WORKSPACE/public"
-              <Directory "$GITHUB_WORKSPACE/public">
+              DocumentRoot "$static_root"
+              <Directory "$static_root">
                   AllowOverride All
                   Require all granted
               </Directory>
