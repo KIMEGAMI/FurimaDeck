@@ -193,6 +193,7 @@ jobs:
               ProxyPreserveHost On
               ProxyVia Off
               RequestHeader set X-Forwarded-Proto "https"
+              Header onsuccess unset X-Powered-By
               Header always unset X-Powered-By
               Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
               RewriteEngine On
