@@ -549,7 +549,7 @@ jobs:
       - name: Run strict tenant and private-image authorization tests
         run: |
           vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/FurimaDeckOwnershipTest.php
-          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/ProductImageAccessTest.php
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues --exclude-group=live-r2 tests/Feature/ProductImageAccessTest.php
 
       - name: Run strict CSP and third-party asset regression tests
         run: vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/SecurityHeadersTest.php
