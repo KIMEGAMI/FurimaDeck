@@ -177,12 +177,52 @@ jobs:
               return '<invalid-path>';
             }
           };
+          const summarizeInstance = (instance) => {
+            const rawResponse = String(instance.response || '');
+            const headers = new Map();
+            for (const line of rawResponse.split(/\r?\n/).slice(1)) {
+              const separator = line.indexOf(':');
+              if (separator < 1) continue;
+              const name = line.slice(0, separator).trim().toLowerCase();
+              const value = line.slice(separator + 1).trim();
+              headers.set(name, [...(headers.get(name) || []), value]);
+            }
+            const status = rawResponse.match(/^HTTP\/\S+\s+(\d{3})/m)?.[1] || 'unknown';
+            const cookies = (headers.get('set-cookie') || []).map((value) => {
+              const [pair, ...attributes] = value.split(';');
+              const name = pair.split('=', 1)[0].trim();
+              const flags = attributes
+                .map((attribute) => attribute.trim().split('=', 1)[0].toLowerCase())
+                .filter((attribute) => ['httponly', 'secure', 'samesite'].includes(attribute));
+              return `${name}[${flags.join(',') || 'no-security-attributes'}]`;
+            });
+            let redirect = 'none';
+            const location = headers.get('location')?.[0];
+            if (location) {
+              try {
+                const target = new URL(location, process.env.APP_URL);
+                redirect = `${target.pathname};query-keys=${[...new URLSearchParams(target.search).keys()].join(',') || 'none'}`;
+              } catch {
+                redirect = 'invalid-location';
+              }
+            }
+            return [
+              `${instance.method || 'GET'} ${redactPath(instance.uri || '')}`,
+              `status=${status}`,
+              `csp=${headers.has('content-security-policy')}`,
+              `nosniff=${headers.has('x-content-type-options')}`,
+              `permissions=${headers.has('permissions-policy')}`,
+              `cross-origin-resource=${headers.has('cross-origin-resource-policy')}`,
+              `x-powered-by=${headers.has('x-powered-by')}`,
+              `cookies=${cookies.join('|') || 'none'}`,
+              `allow=${headers.get('allow')?.join(',') || 'none'}`,
+              `redirect=${redirect}`,
+            ].join(' ');
+          };
           for (const site of sites) {
             for (const alert of Array.isArray(site.alerts) ? site.alerts : []) {
               const instances = Array.isArray(alert.instances) ? alert.instances : [];
-              const samples = [...new Set(instances.slice(0, 3).map((instance) =>
-                `${instance.method || 'GET'} ${redactPath(instance.uri || '')}`
-              ))];
+              const samples = [...new Set(instances.slice(0, 3).map(summarizeInstance))];
               console.log([
                 alert.pluginid || alert.pluginId || 'unknown-rule',
                 alert.riskdesc || 'unknown-risk',

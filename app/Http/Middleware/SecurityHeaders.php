@@ -18,6 +18,20 @@ class SecurityHeaders
         /** @var Response $response */
         $response = $next($request);
 
+        return $this->apply($response, $request, $nonce);
+    }
+
+    public function apply(Response $response, Request $request, ?string $nonce = null): Response
+    {
+        $nonce ??= $request->attributes->get('csp_nonce');
+
+        if (! is_string($nonce) || $nonce === '') {
+            $nonce = base64_encode(random_bytes(18));
+            $request->attributes->set('csp_nonce', $nonce);
+        }
+
+        Vite::useCspNonce($nonce);
+
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');

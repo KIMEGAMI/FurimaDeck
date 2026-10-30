@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
 
@@ -22,6 +23,33 @@ class SecurityHeadersTest extends TestCase
 
         $cacheDirectives = array_map('trim', explode(',', (string) $response->headers->get('Cache-Control')));
         $this->assertEqualsCanonicalizing(['no-store', 'private'], $cacheDirectives);
+    }
+
+    public function test_html_error_responses_keep_security_headers(): void
+    {
+        Route::post('/__security-regression/method-not-allowed', static fn () => response()->noContent());
+        Route::post('/__security-regression/csrf-error', static fn () => abort(419));
+
+        $responses = [
+            $this->get('/__security-regression/not-found')->assertNotFound(),
+            $this->get('/__security-regression/method-not-allowed')->assertMethodNotAllowed(),
+            $this->post('/__security-regression/csrf-error')->assertStatus(419),
+        ];
+
+        foreach ($responses as $response) {
+            $response->assertHeader('X-Content-Type-Options', 'nosniff')
+                ->assertHeader('X-Frame-Options', 'DENY')
+                ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+                ->assertHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+
+            $this->assertNotEmpty(
+                $response->headers->get('Content-Security-Policy'),
+                'HTML error responses must carry an enforcing Content-Security-Policy.'
+            );
+
+            $cacheDirectives = array_map('trim', explode(',', (string) $response->headers->get('Cache-Control')));
+            $this->assertEqualsCanonicalizing(['no-store', 'private'], $cacheDirectives);
+        }
     }
 
     public function test_hsts_is_added_only_for_requests_that_are_actually_secure(): void
