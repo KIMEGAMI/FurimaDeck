@@ -11,7 +11,9 @@
     $versionedAsset = function (string $path): string {
         $normalizedPath = ltrim($path, '/');
         $absolutePath = public_path($normalizedPath);
-        $version = is_file($absolutePath) ? (string) filemtime($absolutePath) : (string) config('seo.updated_at');
+        $version = is_file($absolutePath)
+            ? (hash_file('sha256', $absolutePath) ?: (string) config('seo.updated_at'))
+            : (string) config('seo.updated_at');
 
         return asset($normalizedPath).'?v='.$version;
     };

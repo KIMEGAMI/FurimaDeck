@@ -16,7 +16,8 @@ test('summarizes traditional ZAP JSON without printing request evidence or respo
           attack: 'ATTACK_VALUE_DO_NOT_LOG',
           evidence: 'EVIDENCE_VALUE_DO_NOT_LOG',
           otherinfo: 'OTHER_INFO_DO_NOT_LOG',
-          'response-header': 'Set-Cookie: session=secret-cookie-value',
+          'param': 'XSRF-TOKEN',
+          'response-header': 'Set-Cookie: XSRF-TOKEN=secret-cookie-value; HttpOnly',
           'response-body': 'BODY_VALUE_DO_NOT_LOG',
         }],
       }],
@@ -25,7 +26,8 @@ test('summarizes traditional ZAP JSON without printing request evidence or respo
 
   assert.match(output, /10010 \| Low \(Medium\) \| Medium \| Cookie No HttpOnly Flag/);
   assert.match(output, /GET \/products\/{redacted}\/edit/);
-  assert.match(output, /http-response-headers=not-in-traditional-json-report/);
+  assert.match(output, /cookie-names=XSRF-TOKEN/);
+  assert.match(output, /response-header-values=never-printed/);
   for (const secret of [
     'private@example.test', 'secret-query', 'ATTACK_VALUE_DO_NOT_LOG',
     'EVIDENCE_VALUE_DO_NOT_LOG', 'OTHER_INFO_DO_NOT_LOG', 'secret-cookie-value',

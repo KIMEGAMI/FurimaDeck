@@ -105,7 +105,7 @@ jobs:
       - name: Build isolated application assets
         run: npm run build
 
-      - name: Run active scan against disposable loopback app
+      - name: Run active scan through Apache and isolated application
         run: |
           set -Eeuo pipefail
           suffix="zap-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -120,9 +120,46 @@ jobs:
           php artisan key:generate --force --ansi
           php artisan config:clear --ansi
           php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force --no-interaction
-          setsid php artisan serve --host=127.0.0.1 --port=8002 > "$RUNNER_TEMP/furimadeck-zap-server.log" 2>&1 &
-          server_pid=$!
-          trap 'kill -- -"$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
+          setsid php artisan serve --host=127.0.0.1 --port=8003 > "$RUNNER_TEMP/furimadeck-zap-app.log" 2>&1 &
+          app_pid=$!
+          trap 'sudo systemctl stop apache2 2>/dev/null || true; kill -- -"$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:8003/up; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error --output /dev/null http://127.0.0.1:8003/up
+
+          sudo apt-get update
+          sudo apt-get install --yes apache2
+          sudo a2enmod headers proxy proxy_http rewrite
+          printf '\nListen 127.0.0.1:8002\n' | sudo tee -a /etc/apache2/ports.conf >/dev/null
+          sudo tee /etc/apache2/sites-available/furimadeck-zap.conf >/dev/null <<APACHE
+          <VirtualHost 127.0.0.1:8002>
+              ServerName 127.0.0.1
+              DocumentRoot "$GITHUB_WORKSPACE/public"
+              ProxyPreserveHost On
+              RewriteEngine On
+              RewriteCond %{REQUEST_URI} !^/$
+              RewriteCond %{REQUEST_URI} !\.php$
+              RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} -f
+              RewriteRule ^ - [END]
+              RewriteRule ^/(.*)$ http://127.0.0.1:8003/\$1 [P,L]
+              <Directory "$GITHUB_WORKSPACE/public">
+                  AllowOverride All
+                  Require all granted
+              </Directory>
+              LogFormat "%m %U %H %>s %b" furimadeck_zap_safe
+              CustomLog /var/log/apache2/furimadeck-zap-access.log furimadeck_zap_safe
+              ErrorLog /var/log/apache2/furimadeck-zap-error.log
+          </VirtualHost>
+          APACHE
+          sudo a2dissite 000-default
+          sudo a2ensite furimadeck-zap
+          sudo apachectl configtest
+          sudo systemctl start apache2
+
           for attempt in $(seq 1 60); do
             if curl --fail --silent --output /dev/null "$APP_URL/up"; then
               break
@@ -130,6 +167,43 @@ jobs:
             sleep 1
           done
           curl --fail --silent --show-error --output /dev/null "$APP_URL/up"
+
+          headers_file="$RUNNER_TEMP/furimadeck-zap-headers.txt"
+          body_file="$RUNNER_TEMP/furimadeck-zap-body.html"
+          asset_path="$(node -e "const manifest = require('./public/build/manifest.json'); const file = manifest['resources/js/app.js']?.file; if (!file) process.exit(1); process.stdout.write('/build/' + file);")"
+          check_header() {
+            local name="$1"
+            local expected="$2"
+            local actual
+            actual="$(awk -F: -v wanted="$name" 'tolower($1) == tolower(wanted) { sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); value = $0 } END { print value }' "$headers_file")"
+            if [ "$actual" != "$expected" ]; then
+              echo "Incorrect security header on $3: $name" >&2
+              exit 1
+            fi
+          }
+          for path in / /favicon.ico "$asset_path"; do
+            curl --fail --silent --show-error --dump-header "$headers_file" --output "$body_file" "$APP_URL$path"
+            check_header X-Content-Type-Options nosniff "$path"
+            check_header X-Frame-Options DENY "$path"
+            check_header Referrer-Policy strict-origin-when-cross-origin "$path"
+            check_header Permissions-Policy 'camera=(self), microphone=(), geolocation=()' "$path"
+            check_header Cross-Origin-Embedder-Policy require-corp "$path"
+            check_header Cross-Origin-Opener-Policy same-origin-allow-popups "$path"
+            check_header Cross-Origin-Resource-Policy same-origin "$path"
+            if grep -qi '^X-Powered-By:' "$headers_file"; then
+              echo "X-Powered-By was exposed on $path" >&2
+              exit 1
+            fi
+            if [ "$path" = "/" ] && grep -Eqi '[?&]v=[0-9]{10,}([&#[:space:]]|$)' "$body_file"; then
+              echo 'A Unix timestamp remains in the rendered page asset URLs.' >&2
+              exit 1
+            fi
+          done
+          curl --fail --silent --show-error --dump-header "$headers_file" --output /dev/null "$APP_URL/login"
+          if ! grep -Eqi '^Set-Cookie: XSRF-TOKEN=.*;[[:space:]]*HttpOnly([;[:space:]]|$)' "$headers_file"; then
+            echo 'The XSRF token cookie is not HttpOnly.' >&2
+            exit 1
+          fi
           docker run --rm --network host \
             --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
             docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
@@ -148,10 +222,10 @@ jobs:
             }
           });
           if (!scannedTarget) {
-            throw new Error('ZAP report does not contain the configured loopback target');
+            throw new Error('ZAP report does not contain the configured Apache loopback target');
           }
           const alertCount = sites.reduce((count, site) => count + (Array.isArray(site.alerts) ? site.alerts.length : 0), 0);
-          console.log(`Validated ZAP JSON report for the loopback target; alert groups: ${alertCount}`);
+          console.log(`Validated ZAP JSON report for the configured Apache target; alert groups: ${alertCount}`);
           NODE
 
       - name: Report scan diagnostics

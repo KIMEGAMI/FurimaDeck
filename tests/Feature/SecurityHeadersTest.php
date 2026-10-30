@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\SecurityHeaders;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Session\TokenMismatchException;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
 
@@ -19,7 +21,10 @@ class SecurityHeadersTest extends TestCase
             ->assertHeader('X-Content-Type-Options', 'nosniff')
             ->assertHeader('X-Frame-Options', 'DENY')
             ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
-            ->assertHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+            ->assertHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
+            ->assertHeader('Cross-Origin-Embedder-Policy', 'require-corp')
+            ->assertHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+            ->assertHeader('Cross-Origin-Resource-Policy', 'same-origin');
 
         $cacheDirectives = array_map('trim', explode(',', (string) $response->headers->get('Cache-Control')));
         $this->assertEqualsCanonicalizing(['no-store', 'private'], $cacheDirectives);
@@ -40,7 +45,10 @@ class SecurityHeadersTest extends TestCase
             $response->assertHeader('X-Content-Type-Options', 'nosniff')
                 ->assertHeader('X-Frame-Options', 'DENY')
                 ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
-                ->assertHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+                ->assertHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
+                ->assertHeader('Cross-Origin-Embedder-Policy', 'require-corp')
+                ->assertHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+                ->assertHeader('Cross-Origin-Resource-Policy', 'same-origin');
 
             $this->assertNotEmpty(
                 $response->headers->get('Content-Security-Policy'),
@@ -50,6 +58,58 @@ class SecurityHeadersTest extends TestCase
             $cacheDirectives = array_map('trim', explode(',', (string) $response->headers->get('Cache-Control')));
             $this->assertEqualsCanonicalizing(['no-store', 'private'], $cacheDirectives);
         }
+    }
+
+    public function test_redirect_responses_do_not_return_an_html_body(): void
+    {
+        Route::get('/__security-regression/redirect', static fn () => redirect('/login'));
+
+        $response = $this->get('/__security-regression/redirect')
+            ->assertRedirect('/login');
+
+        $this->assertSame('', $response->getContent());
+    }
+
+    public function test_public_homepage_asset_cache_tokens_do_not_disclose_unix_timestamps(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertOk()
+            ->assertSee('images/furimadeck-hero.png?v=', false);
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/[?&]v=\\d{10,}\\b/',
+            (string) $response->getContent()
+        );
+
+        $this->assertMatchesRegularExpression(
+            '/images\\/furimadeck-hero\\.png\\?v=[a-f0-9]{64}/',
+            (string) $response->getContent()
+        );
+    }
+
+    public function test_apache_static_responses_have_security_header_rules(): void
+    {
+        $rules = File::get(public_path('.htaccess'));
+
+        foreach ([
+            'X-Content-Type-Options' => 'nosniff',
+            'X-Frame-Options' => 'DENY',
+            'Referrer-Policy' => 'strict-origin-when-cross-origin',
+            'Permissions-Policy' => 'camera=(self), microphone=(), geolocation=()',
+            'Cross-Origin-Embedder-Policy' => 'require-corp',
+            'Cross-Origin-Opener-Policy' => 'same-origin-allow-popups',
+            'Cross-Origin-Resource-Policy' => 'same-origin',
+        ] as $header => $value) {
+            $this->assertMatchesRegularExpression(
+                '/Header\\s+always\\s+set\\s+'.preg_quote($header, '/').'\\s+"'.preg_quote($value, '/').'"/i',
+                $rules,
+                "Apache must set {$header} for static responses."
+            );
+        }
+
+        $this->assertMatchesRegularExpression('/Header\\s+onsuccess\\s+unset\\s+X-Powered-By/i', $rules);
+        $this->assertMatchesRegularExpression('/Header\\s+always\\s+unset\\s+X-Powered-By/i', $rules);
     }
 
     public function test_hsts_is_added_only_for_requests_that_are_actually_secure(): void
@@ -65,6 +125,52 @@ class SecurityHeadersTest extends TestCase
             'max-age=31536000; includeSubDomains',
             $httpsResponse->headers->get('Strict-Transport-Security')
         );
+    }
+
+    public function test_csrf_middleware_rejects_state_changes_without_a_matching_token(): void
+    {
+        $session = $this->app['session.store'];
+        $session->start();
+        $middleware = new class($this->app, $this->app['encrypter']) extends PreventRequestForgery
+        {
+            protected function runningUnitTests()
+            {
+                return false;
+            }
+        };
+
+        foreach ([null, 'wrong-token'] as $token) {
+            $request = Request::create('/profile', 'DELETE');
+            $request->setLaravelSession($session);
+            if (is_string($token)) {
+                $request->headers->set('X-CSRF-TOKEN', $token);
+            }
+
+            try {
+                $middleware->handle($request, static fn () => new Response('unexpected'));
+                $this->fail('A state-changing request without the session token must be rejected.');
+            } catch (TokenMismatchException) {
+                $this->assertTrue(true);
+            }
+        }
+
+        $request = Request::create('/profile', 'DELETE');
+        $request->setLaravelSession($session);
+        $request->headers->set('X-CSRF-TOKEN', $session->token());
+
+        $response = $middleware->handle($request, static fn () => new Response('accepted'));
+
+        $this->assertSame('accepted', $response->getContent());
+    }
+
+    public function test_xsrf_cookie_is_http_only(): void
+    {
+        $response = $this->get(route('login'));
+        $xsrfCookie = collect($response->headers->getCookies())
+            ->first(fn ($cookie) => $cookie->getName() === 'XSRF-TOKEN');
+
+        $this->assertNotNull($xsrfCookie, 'The CSRF middleware must issue its XSRF token cookie.');
+        $this->assertTrue($xsrfCookie->isHttpOnly(), 'The XSRF token must not be readable by JavaScript.');
     }
 
     public function test_session_cookie_has_http_only_and_configured_transport_attributes(): void

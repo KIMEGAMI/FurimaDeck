@@ -36,6 +36,19 @@ class SecurityHeaders
         $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+        $response->headers->set('Cross-Origin-Embedder-Policy', 'require-corp');
+        $response->headers->set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+        $response->headers->set('Cross-Origin-Resource-Policy', 'same-origin');
+
+        foreach ($response->headers->getCookies() as $cookie) {
+            if ($cookie->getName() === 'XSRF-TOKEN' && ! $cookie->isHttpOnly()) {
+                $response->headers->setCookie($cookie->withHttpOnly());
+            }
+        }
+
+        if ($response->isRedirection()) {
+            $response->setContent('');
+        }
 
         if (str_starts_with(strtolower((string) $response->headers->get('Content-Type')), 'text/html')) {
             $response->headers->set('Cache-Control', 'private, no-store');
