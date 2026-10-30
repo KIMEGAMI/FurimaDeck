@@ -134,7 +134,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes apache2
           sudo a2enmod headers proxy proxy_http rewrite
-          printf '\nListen 127.0.0.1:8002\n' | sudo tee -a /etc/apache2/ports.conf >/dev/null
+          printf '\nListen 127.0.0.1:8002\nListen 127.0.0.1:8004\n' | sudo tee -a /etc/apache2/ports.conf >/dev/null
           sudo tee /etc/apache2/sites-available/furimadeck-zap.conf >/dev/null <<APACHE
           <VirtualHost 127.0.0.1:8002>
               ServerName 127.0.0.1
@@ -153,6 +153,18 @@ jobs:
               LogFormat "%m %U %H %>s %b" furimadeck_zap_safe
               CustomLog /var/log/apache2/furimadeck-zap-access.log furimadeck_zap_safe
               ErrorLog /var/log/apache2/furimadeck-zap-error.log
+          </VirtualHost>
+
+          <VirtualHost 127.0.0.1:8004>
+              ServerName 127.0.0.1
+              DocumentRoot "$GITHUB_WORKSPACE/public"
+              <Directory "$GITHUB_WORKSPACE/public">
+                  AllowOverride All
+                  Require all granted
+              </Directory>
+              LogFormat "%m %U %H %>s %b" furimadeck_static_zap_safe
+              CustomLog /var/log/apache2/furimadeck-static-zap-access.log furimadeck_static_zap_safe
+              ErrorLog /var/log/apache2/furimadeck-static-zap-error.log
           </VirtualHost>
           APACHE
           sudo a2dissite 000-default
@@ -187,8 +199,25 @@ jobs:
               exit 1
             fi
           }
-          for path in / /favicon.ico "$asset_path"; do
-            curl --fail --silent --show-error --dump-header "$headers_file" --output "$body_file" "$APP_URL$path"
+          curl --fail --silent --show-error --dump-header "$headers_file" --output "$body_file" "$APP_URL/"
+          check_header X-Content-Type-Options nosniff /
+          check_header X-Frame-Options DENY /
+          check_header Referrer-Policy strict-origin-when-cross-origin /
+          check_header Permissions-Policy 'camera=(self), microphone=(), geolocation=()' /
+          check_header Cross-Origin-Embedder-Policy require-corp /
+          check_header Cross-Origin-Opener-Policy same-origin-allow-popups /
+          check_header Cross-Origin-Resource-Policy same-origin /
+          if grep -qi '^X-Powered-By:' "$headers_file"; then
+            echo 'X-Powered-By was exposed on the dynamic homepage.' >&2
+            exit 1
+          fi
+          if grep -Eqi '[?&]v=[0-9]{10,}([&#[:space:]]|$)' "$body_file"; then
+            echo 'A Unix timestamp remains in the rendered page asset URLs.' >&2
+            exit 1
+          fi
+
+          for path in /favicon.ico "$asset_path"; do
+            curl --fail --silent --show-error --dump-header "$headers_file" --output "$body_file" "http://127.0.0.1:8004$path"
             check_header X-Content-Type-Options nosniff "$path"
             check_header X-Frame-Options DENY "$path"
             check_header Referrer-Policy strict-origin-when-cross-origin "$path"
@@ -197,11 +226,7 @@ jobs:
             check_header Cross-Origin-Opener-Policy same-origin-allow-popups "$path"
             check_header Cross-Origin-Resource-Policy same-origin "$path"
             if grep -qi '^X-Powered-By:' "$headers_file"; then
-              echo "X-Powered-By was exposed on $path" >&2
-              exit 1
-            fi
-            if [ "$path" = "/" ] && grep -Eqi '[?&]v=[0-9]{10,}([&#[:space:]]|$)' "$body_file"; then
-              echo 'A Unix timestamp remains in the rendered page asset URLs.' >&2
+              echo "X-Powered-By was exposed on static asset $path." >&2
               exit 1
             fi
           done
