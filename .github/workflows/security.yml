@@ -438,13 +438,24 @@ jobs:
             sh "$APP_URL/furimadeck-dashboard"
           unset auth_cookie_header
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"
-          auth_dashboard_hits="$(tail -c +$((auth_log_offset + 1)) "$auth_log" | awk '$1 == "GET" && ($2 == "/furimadeck-dashboard" || $2 == "/furimadeck-dashboard/") { print $1 " " $2 " HTTP " $4 }')"
-          if ! printf '%s\n' "$auth_dashboard_hits" | grep -Eq '^GET /furimadeck-dashboard/? HTTP 200$'; then
-            if [ -n "$auth_dashboard_hits" ]; then
-              printf 'Authenticated DAST dashboard responses (method, route, status only):\n%s\n' "$auth_dashboard_hits" >&2
-            else
-              echo 'Authenticated DAST made no dashboard request through the Apache target.' >&2
-            fi
+          if auth_dashboard_summary="$(tail -c +$((auth_log_offset + 1)) "$auth_log" | awk '
+            $1 == "GET" && ($2 == "/furimadeck-dashboard" || $2 == "/furimadeck-dashboard/") { status_count[$4]++ }
+            END {
+              total = 0
+              for (status in status_count) {
+                printf "GET /furimadeck-dashboard HTTP %s: %d\n", status, status_count[status]
+                total += status_count[status]
+              }
+              if (total == 0) {
+                print "GET /furimadeck-dashboard: no requests"
+                exit 1
+              }
+              exit (status_count["200"] > 0 ? 0 : 1)
+            }
+          ')"; then
+            printf 'Authenticated DAST dashboard response counts (method, route, status):\n%s\n' "$auth_dashboard_summary"
+          else
+            printf 'Authenticated DAST dashboard response counts (method, route, status):\n%s\n' "$auth_dashboard_summary" >&2
             echo 'Authenticated ZAP did not reach the protected FurimaDeck dashboard with HTTP 200.' >&2
             exit 1
           fi
