@@ -608,7 +608,7 @@ class AuthenticatedZapWorkflowPolicyTest(unittest.TestCase):
         self.assertEqual(len(scan_commands), 2)
         expected_options = [
             "-config",
-            r"api.addrs.addr.name=^(localhost|127[.]0[.]0[.]1|::1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$",
+            r"api.addrs.addr.name=^(localhost|127[.]0[.]0[.]1|::1|0:0:0:0:0:0:0:1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$",
             "-config",
             "api.addrs.addr.regex=true",
         ]
@@ -619,10 +619,23 @@ class AuthenticatedZapWorkflowPolicyTest(unittest.TestCase):
                 self.assertIsNotNone(match)
                 self.assertEqual(shlex.split(match.group(1)), expected_options)
                 allowlist = re.compile(expected_options[1].split("=", 1)[1])
-                for local_address in ("localhost", "localhost:12345", "127.0.0.1", "::1", "::ffff:127.0.0.1"):
+                for local_address in (
+                    "localhost",
+                    "localhost:12345",
+                    "127.0.0.1",
+                    "::1",
+                    "0:0:0:0:0:0:0:1",
+                    "::ffff:127.0.0.1",
+                ):
                     with self.subTest(address=local_address):
                         self.assertRegex(local_address, allowlist)
-                for external_address in ("192.0.2.10", "example.invalid", "localhost.example.invalid"):
+                for external_address in (
+                    "192.0.2.10",
+                    "2001:db8::1",
+                    "0:0:0:0:0:0:0:2",
+                    "example.invalid",
+                    "localhost.example.invalid",
+                ):
                     with self.subTest(address=external_address):
                         self.assertNotRegex(external_address, allowlist)
 

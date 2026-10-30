@@ -11,7 +11,7 @@ test('both ZAP scans restrict the API to loopback hosts', () => {
   assert.equal(scanCommands.length, 2, 'expected exactly one passive and one authenticated scan');
   for (const command of scanCommands) {
     assert.ok(
-      command.includes('-z "-config api.addrs.addr.name=^(localhost|127[.]0[.]0[.]1|::1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$ -config api.addrs.addr.regex=true"'),
+      command.includes('-z "-config api.addrs.addr.name=^(localhost|127[.]0[.]0[.]1|::1|0:0:0:0:0:0:0:1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$ -config api.addrs.addr.regex=true"'),
       'each ZAP scan must allow only the local scanner API client',
     );
   }
