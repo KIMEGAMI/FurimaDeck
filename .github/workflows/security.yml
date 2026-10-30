@@ -233,6 +233,262 @@ jobs:
             exit 1
           fi
 
+          for path in /admin /auth /build/assets /build /email; do
+            status="$(curl --silent --show-error --dump-header "$headers_file" --output "$body_file" --write-out '%{http_code}' "$APP_URL$path")" || {
+              echo "Proxy-disclosure response probe failed: $path" >&2
+              exit 1
+            }
+            if [ "$status" != 404 ]; then
+              echo "Unexpected status for proxy-disclosure probe: $path (HTTP $status)" >&2
+              exit 1
+            fi
+            server_count="$(grep -Eic '^Server:' "$headers_file" || true)"
+            if [ "$server_count" -ne 1 ] || ! grep -Eiq '^Server:[[:space:]]*Apache[[:space:]]*            status="$(curl --silent --show-error --dump-header "$headers_file" --output "$body_file" --write-out '%{http_code}' "http://127.0.0.1:8004$path")" || {
+              echo "Static asset request transport failed: $path" >&2
+              sudo tail -n 60 /var/log/apache2/furimadeck-static-zap-error.log >&2 || true
+              sudo tail -n 20 /var/log/apache2/furimadeck-static-zap-access.log >&2 || true
+              exit 1
+            }
+            if [ "$status" != 200 ]; then
+              echo "Static asset request returned HTTP $status: $path" >&2
+              sudo tail -n 60 /var/log/apache2/furimadeck-static-zap-error.log >&2 || true
+              sudo tail -n 20 /var/log/apache2/furimadeck-static-zap-access.log >&2 || true
+              exit 1
+            fi
+            check_header X-Content-Type-Options nosniff "$path"
+            check_header X-Frame-Options DENY "$path"
+            check_header Referrer-Policy strict-origin-when-cross-origin "$path"
+            check_header Permissions-Policy 'camera=(self), microphone=(), geolocation=()' "$path"
+            check_header Cross-Origin-Embedder-Policy require-corp "$path"
+            check_header Cross-Origin-Opener-Policy same-origin "$path"
+            check_header Cross-Origin-Resource-Policy same-origin "$path"
+            check_header Server Apache "$path"
+            if grep -qi '^X-Powered-By:' "$headers_file"; then
+              echo "X-Powered-By was exposed on static asset $path." >&2
+              exit 1
+            fi
+            if grep -Eqi '^Server:[[:space:]].*([/][0-9]+([.][0-9]+)*|[0-9]+[.][0-9]+)' "$headers_file"; then
+            grep -i '^Server:' "$headers_file" >&2 || true
+              echo "A server product version was exposed on static asset $path." >&2
+              exit 1
+            fi
+          done
+          curl --fail --silent --show-error --dump-header "$headers_file" --output /dev/null "$APP_URL/login"
+          if ! awk 'tolower($0) ~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
+            echo 'The XSRF token cookie is not HttpOnly.' >&2
+            exit 1
+          fi
+          docker run --rm --network host \
+            --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
+            docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
+            zap-full-scan.py -t "$APP_URL" -m 5 -T 10 -J furimadeck-zap-report.json -r furimadeck-zap-report.html
+          test -s "$RUNNER_TEMP/zap/furimadeck-zap-report.json"
+          ZAP_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-report.json" node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync(process.env.ZAP_REPORT, 'utf8'));
+          const sites = Array.isArray(report.site) ? report.site : [];
+          const expectedHost = new URL(process.env.APP_URL).host;
+          const scannedTarget = sites.some((site) => {
+            try {
+              return new URL(site['@name'] ?? site.name).host === expectedHost;
+            } catch {
+              return false;
+            }
+          });
+          if (!scannedTarget) {
+            throw new Error('ZAP report does not contain the configured Apache loopback target');
+          }
+          const alertCount = sites.reduce((count, site) => count + (Array.isArray(site.alerts) ? site.alerts.length : 0), 0);
+          console.log(`Validated ZAP JSON report for the configured Apache target; alert groups: ${alertCount}`);
+          NODE
+
+      - name: Report scan diagnostics
+        if: always()
+        run: |
+          json="$RUNNER_TEMP/zap/furimadeck-zap-report.json"
+          if [ -s "$json" ]; then
+            echo 'ZAP JSON report exists in runner-local temporary storage; it is not uploaded.'
+            node scripts/report-zap-diagnostics.mjs "$json"
+          else
+            echo 'ZAP JSON report was not generated.'
+          fi
+          if [ ! -s "$RUNNER_TEMP/zap/furimadeck-zap-report.html" ]; then
+            echo 'ZAP HTML report was not generated; checking the isolated server log.'
+            if [ -f "$RUNNER_TEMP/furimadeck-zap-server.log" ]; then
+              tail -n 80 "$RUNNER_TEMP/furimadeck-zap-server.log"
+            fi
+          fi
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    needs: workflow-pinning
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep@sha256:c8f333ab0ad103d2bcd3b55cbeabcfc556bfeaa7446ba18594a4320f3807ffc9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Scan PHP, Blade, and JavaScript
+        env:
+          SEMGREP_SEND_METRICS: off
+        run: >
+          semgrep scan
+          --error
+          --severity WARNING
+          --config p/default
+          --config p/owasp-top-ten
+          --config p/php
+          --config p/javascript
+          --config .semgrep.yml
+          .
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-regression:
+    name: Security regression tests (strict local suites)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      FURIMADECK_R2_LIVE_TEST: '0'
+      FURIMADECK_R2_PRODUCTION_LIVE_TEST: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --ansi
+
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Prepare isolated test application
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force --ansi
+          php artisan config:clear --ansi
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Run strict CSP and third-party asset regression tests
+        run: vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/SecurityHeadersTest.php
+
+      - name: Run all local suites with strict issue handling
+        run: |
+          vendor/bin/phpunit --list-groups
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues --exclude-group=live-r2 --exclude-group=mariadb-gate
+
+  dependency-audit:
+    name: Composer and npm vulnerability audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, exif, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sqlite3, tokenizer, xml, zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --ansi
+
+      - name: Validate Composer metadata
+        run: composer validate --no-check-publish
+
+      - name: Install Node dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Audit PHP dependencies
+        run: composer audit --locked --no-interaction
+
+      - name: Audit Node dependencies
+        run: npm audit --audit-level=moderate
+ "$headers_file"; then
+              echo "Unexpected or duplicate Server header on $path (value redacted)." >&2
+              exit 1
+            fi
+            for header in Via X-Backend-Server X-Powered-By; do
+              if grep -Eqi "^${header}:" "$headers_file"; then
+                echo "Proxy or runtime disclosure header $header was exposed on $path." >&2
+                exit 1
+              fi
+            done
+            if grep -Eiq '(nginx|Apache)/[0-9]+([.][0-9]+)*' "$headers_file" "$body_file"; then
+              echo "A web-server product version was exposed on $path (value redacted)." >&2
+              exit 1
+            fi
+          done
           for path in /favicon.ico "$asset_path"; do
             status="$(curl --silent --show-error --dump-header "$headers_file" --output "$body_file" --write-out '%{http_code}' "http://127.0.0.1:8004$path")" || {
               echo "Static asset request transport failed: $path" >&2
