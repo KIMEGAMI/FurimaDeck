@@ -433,16 +433,19 @@ jobs:
             echo 'Authenticated DAST session was empty.' >&2
             exit 1
           fi
-          cp scripts/zap-authenticated-scan-hook.py "$RUNNER_TEMP/zap/zap-authenticated-scan-hook.py"
+          hook_file="$RUNNER_TEMP/zap-authenticated-scan-hook.py"
+          cp scripts/zap-authenticated-scan-hook.py "$hook_file"
+          test -r "$hook_file"
           docker run --rm --network host \
             --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
+            --volume "$hook_file:/tmp/zap-authenticated-scan-hook.py:ro" \
             --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
             --env ZAP_AUTH_HEADER=Cookie \
             --env ZAP_AUTH_HEADER_SITE=127.0.0.1 \
             --env "ZAP_AUTH_HEADER_VALUE=$auth_cookie_header" \
             --entrypoint /bin/sh \
             docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
-            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-auth-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-auth-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py --hook=/zap/wrk/zap-authenticated-scan-hook.py -t "$1" -m 5 -T 10 -J furimadeck-zap-authenticated-report.json -r furimadeck-zap-authenticated-report.html' \
+            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-auth-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-auth-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py --hook=/tmp/zap-authenticated-scan-hook.py -t "$1" -m 5 -T 10 -J furimadeck-zap-authenticated-report.json -r furimadeck-zap-authenticated-report.html' \
             sh "$APP_URL/furimadeck-dashboard"
           unset auth_cookie_header
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"
