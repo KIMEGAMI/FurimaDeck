@@ -217,7 +217,18 @@ jobs:
           fi
 
           for path in /favicon.ico "$asset_path"; do
-            curl --fail --silent --show-error --dump-header "$headers_file" --output "$body_file" "http://127.0.0.1:8004$path"
+            status="$(curl --silent --show-error --dump-header "$headers_file" --output "$body_file" --write-out '%{http_code}' "http://127.0.0.1:8004$path")" || {
+              echo "Static asset request transport failed: $path" >&2
+              sudo tail -n 60 /var/log/apache2/furimadeck-static-zap-error.log >&2 || true
+              sudo tail -n 20 /var/log/apache2/furimadeck-static-zap-access.log >&2 || true
+              exit 1
+            }
+            if [ "$status" != 200 ]; then
+              echo "Static asset request returned HTTP $status: $path" >&2
+              sudo tail -n 60 /var/log/apache2/furimadeck-static-zap-error.log >&2 || true
+              sudo tail -n 20 /var/log/apache2/furimadeck-static-zap-access.log >&2 || true
+              exit 1
+            fi
             check_header X-Content-Type-Options nosniff "$path"
             check_header X-Frame-Options DENY "$path"
             check_header Referrer-Policy strict-origin-when-cross-origin "$path"
