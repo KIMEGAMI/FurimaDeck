@@ -21,11 +21,11 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(prepend: [
+            SecurityHeaders::class,
             MaintenanceMode::class,
         ]);
 
         $middleware->web(append: [
-            SecurityHeaders::class,
             RedirectLegacyDashboardDuringFurimaDeckCutover::class,
         ]);
 
