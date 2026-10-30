@@ -2,10 +2,13 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class TestDatabaseIsolationTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_phpunit_defaults_to_isolated_sqlite_connections(): void
     {
         $this->assertSame('sqlite', getenv('DB_CONNECTION'));

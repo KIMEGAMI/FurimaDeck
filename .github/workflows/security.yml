@@ -531,6 +531,16 @@ jobs:
       - name: Build frontend assets
         run: npm run build
 
+      - name: Verify database isolation against hostile URLs
+        env:
+          DB_CONNECTION: mysql
+          DB_DATABASE: furimadeck_sentinel
+          DB_URL: mysql://127.0.0.1:1/furimadeck_sentinel
+          FURIMADECK_DB_DRIVER: mysql
+          FURIMADECK_DB_DATABASE: furimadeck_sentinel
+          FURIMADECK_DB_URL: mysql://127.0.0.1:1/furimadeck_sentinel
+        run: vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/TestDatabaseIsolationTest.php
+
       - name: Run strict CSP and third-party asset regression tests
         run: vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/SecurityHeadersTest.php
 
