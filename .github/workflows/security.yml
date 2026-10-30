@@ -430,7 +430,7 @@ jobs:
             --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
             --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
             --env ZAP_AUTH_HEADER=Cookie \
-            --env ZAP_AUTH_HEADER_SITE=127.0.0.1:8443 \
+            --env ZAP_AUTH_HEADER_SITE=127.0.0.1 \
             --env "ZAP_AUTH_HEADER_VALUE=$auth_cookie_header" \
             --entrypoint /bin/sh \
             docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
@@ -438,7 +438,13 @@ jobs:
             sh "$APP_URL/furimadeck-dashboard"
           unset auth_cookie_header
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"
-          if ! tail -c +$((auth_log_offset + 1)) "$auth_log" | awk '$1 == "GET" && $2 == "/furimadeck-dashboard" && $4 == "200" { found = 1 } END { exit !found }'; then
+          auth_dashboard_hits="$(tail -c +$((auth_log_offset + 1)) "$auth_log" | awk '$1 == "GET" && ($2 == "/furimadeck-dashboard" || $2 == "/furimadeck-dashboard/") { print $1 " " $2 " HTTP " $4 }')"
+          if ! printf '%s\n' "$auth_dashboard_hits" | grep -Eq '^GET /furimadeck-dashboard/? HTTP 200$'; then
+            if [ -n "$auth_dashboard_hits" ]; then
+              printf 'Authenticated DAST dashboard responses (method, route, status only):\n%s\n' "$auth_dashboard_hits" >&2
+            else
+              echo 'Authenticated DAST made no dashboard request through the Apache target.' >&2
+            fi
             echo 'Authenticated ZAP did not reach the protected FurimaDeck dashboard with HTTP 200.' >&2
             exit 1
           fi
