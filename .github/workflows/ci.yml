@@ -144,7 +144,7 @@ jobs:
         run: composer audit --locked --no-interaction
 
       - name: Audit Node dependencies
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=low
   mariadb-gate:
     name: MariaDB CSV gate
     runs-on: ubuntu-latest

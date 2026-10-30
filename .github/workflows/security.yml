@@ -39,6 +39,7 @@ jobs:
           node scripts/check-github-actions-pinned.mjs
           node --test scripts/check-github-actions-pinned.test.mjs
           node --test scripts/report-zap-diagnostics.test.mjs
+          node --test scripts/prepare-authenticated-zap-session.test.mjs
 
   dast-active:
     name: OWASP ZAP active DAST (isolated CI app)
@@ -112,6 +113,7 @@ jobs:
           suffix="zap-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           database_file="$GITHUB_WORKSPACE/storage/framework/testing/furimadeck-zap-${suffix}.sqlite"
           storage_root="$RUNNER_TEMP/furimadeck-zap-${suffix}"
+          auth_cookie_file="$RUNNER_TEMP/furimadeck-zap-auth-cookie-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
           static_root="/var/www/furimadeck-zap-static-${suffix}"
           storage_public_root="/var/www/furimadeck-zap-storage-${suffix}"
           mkdir -p "$(dirname "$database_file")" "$storage_root/framework/views" "$storage_root/framework/cache/data" "$storage_root/framework/sessions" "$storage_root/logs" "$storage_root/app/private" "$storage_root/app/public" "$RUNNER_TEMP/zap"
@@ -132,7 +134,7 @@ jobs:
           php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force --no-interaction
           setsid php artisan serve --host=127.0.0.1 --port=8003 > "$RUNNER_TEMP/furimadeck-zap-app.log" 2>&1 &
           app_pid=$!
-          trap 'sudo systemctl stop apache2 2>/dev/null || true; kill -- -"$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true' EXIT
+          trap 'sudo systemctl stop apache2 2>/dev/null || true; kill -- -"$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; rm -f "$auth_cookie_file"' EXIT
           for attempt in $(seq 1 60); do
             if curl --fail --silent --output /dev/null http://127.0.0.1:8003/up; then
               break
@@ -402,16 +404,75 @@ jobs:
           console.log(`Validated ZAP JSON report for the configured Apache target; alert groups: ${alertCount}`);
           NODE
 
+          zap_auth_email="furimadeck-zap-${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}@example.invalid"
+          zap_auth_password="$(openssl rand -hex 32)"
+          FURIMADECK_DEMO_USER_ENABLED=true \
+            FURIMADECK_DEMO_USER_EMAIL="$zap_auth_email" \
+            FURIMADECK_DEMO_USER_PASSWORD="$zap_auth_password" \
+            php artisan furimadeck:sync-demo-user --no-interaction --ansi
+          NODE_EXTRA_CA_CERTS="$tls_root/ca.pem" \
+            ZAP_TEST_APP_URL="$APP_URL" \
+            ZAP_TEST_EMAIL="$zap_auth_email" \
+            ZAP_TEST_PASSWORD="$zap_auth_password" \
+            ZAP_AUTH_COOKIE_FILE="$auth_cookie_file" \
+            node scripts/prepare-authenticated-zap-session.mjs
+          unset zap_auth_email zap_auth_password
+
+          auth_log="/var/log/apache2/furimadeck-zap-https-access.log"
+          auth_log_offset="$(wc -c < "$auth_log")"
+          auth_cookie_header="$(cat "$auth_cookie_file")"
+          if [ -z "$auth_cookie_header" ]; then
+            echo 'Authenticated DAST session was empty.' >&2
+            exit 1
+          fi
+          docker run --rm --network host \
+            --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
+            --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
+            --env ZAP_AUTH_HEADER=Cookie \
+            --env ZAP_AUTH_HEADER_SITE=127.0.0.1:8443 \
+            --env "ZAP_AUTH_HEADER_VALUE=$auth_cookie_header" \
+            --entrypoint /bin/sh \
+            docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
+            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-auth-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-auth-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py -t "$1" -m 5 -T 10 -J furimadeck-zap-authenticated-report.json -r furimadeck-zap-authenticated-report.html' \
+            sh "$APP_URL/furimadeck-dashboard"
+          unset auth_cookie_header
+          test -s "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"
+          if ! tail -c +$((auth_log_offset + 1)) "$auth_log" | awk '$1 == "GET" && $2 == "/furimadeck-dashboard" && $4 == "200" { found = 1 } END { exit !found }'; then
+            echo 'Authenticated ZAP did not reach the protected FurimaDeck dashboard with HTTP 200.' >&2
+            exit 1
+          fi
+          ZAP_AUTH_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json" node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync(process.env.ZAP_AUTH_REPORT, 'utf8'));
+          const sites = Array.isArray(report.site) ? report.site : [];
+          const expectedHost = new URL(process.env.APP_URL).host;
+          const scannedTarget = sites.some((site) => {
+            try {
+              return new URL(site['@name'] ?? site.name).host === expectedHost;
+            } catch {
+              return false;
+            }
+          });
+          if (!scannedTarget) {
+            throw new Error('Authenticated ZAP report does not contain the configured loopback target');
+          }
+          const alertCount = sites.reduce((count, site) => count + (Array.isArray(site.alerts) ? site.alerts.length : 0), 0);
+          console.log(`Validated authenticated ZAP JSON report for the configured Apache target; alert groups: ${alertCount}`);
+          NODE
+
       - name: Report scan diagnostics
         if: always()
         run: |
-          json="$RUNNER_TEMP/zap/furimadeck-zap-report.json"
-          if [ -s "$json" ]; then
-            echo 'ZAP JSON report exists in runner-local temporary storage; it is not uploaded.'
-            node scripts/report-zap-diagnostics.mjs "$json"
-          else
-            echo 'ZAP JSON report was not generated.'
-          fi
+          for json in \
+            "$RUNNER_TEMP/zap/furimadeck-zap-report.json" \
+            "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"; do
+            if [ -s "$json" ]; then
+              echo 'ZAP JSON report exists in runner-local temporary storage; it is not uploaded.'
+              node scripts/report-zap-diagnostics.mjs "$json"
+            else
+              echo 'A ZAP JSON report was not generated.'
+            fi
+          done
           if [ ! -s "$RUNNER_TEMP/zap/furimadeck-zap-report.html" ]; then
             echo 'ZAP HTML report was not generated; checking the isolated server log.'
             if [ -f "$RUNNER_TEMP/furimadeck-zap-server.log" ]; then
@@ -435,7 +496,7 @@ jobs:
       - name: Review dependency changes
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
-          fail-on-severity: moderate
+          fail-on-severity: low
 
   semgrep:
     name: Semgrep SAST
@@ -594,4 +655,4 @@ jobs:
         run: composer audit --locked --no-interaction
 
       - name: Audit Node dependencies
-        run: npm audit --audit-level=moderate
+        run: npm audit --audit-level=low
