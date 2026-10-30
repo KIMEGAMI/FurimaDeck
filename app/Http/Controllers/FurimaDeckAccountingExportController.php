@@ -43,7 +43,7 @@ class FurimaDeckAccountingExportController extends Controller
             ->orderBy('id');
         $headers = ['種別', '取引日', '管理ID', '商品名', '販売先', '売上', '原価', '販売手数料', '送料', 'その他費用', 'FurimaDeck実利益', '状態'];
         $filename = 'furimadeck-accounting-'.(isset($validated['from'], $validated['to']) ? $from->toDateString().'_'.$toExclusive->subDay()->toDateString() : (string) $from->year).'.csv';
-        $temporaryPath = tempnam(sys_get_temp_dir(), 'furimadeck-accounting-');
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'fda');
         if (! is_string($temporaryPath)) {
             return to_route('furimadeck-accounting.index', $this->periodQuery($validated) + ['section' => 'csv'])
                 ->with('error', '会計CSVを作成できませんでした。時間をおいて再度お試しください。');
@@ -231,7 +231,7 @@ class FurimaDeckAccountingExportController extends Controller
             || is_link($path)
             || ! is_file($resolvedPath)
             || realpath(dirname($resolvedPath)) !== $temporaryDirectory
-            || ! str_starts_with(basename($resolvedPath), 'furimadeck-accounting-')
+            || ! str_starts_with(basename($resolvedPath), 'fda')
         ) {
             return;
         }

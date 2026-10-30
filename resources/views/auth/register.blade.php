@@ -23,11 +23,10 @@
     <meta name="twitter:card" content="{{ config('seo.twitter_card', 'summary_large_image') }}">
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 </head>
 
 <body class="min-h-screen bg-slate-100">
-    <main class="flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none" style="background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('{{ asset('images/furimadeck-hero.png') }}');">
+    <main class="fd-bg-auth flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none">
         <div class="grid min-h-[720px] w-full max-w-7xl grid-cols-1 overflow-hidden rounded-[2rem] bg-white shadow-2xl lg:grid-cols-2">
             <section class="relative hidden bg-blue-900 lg:block">
                 <img
@@ -137,9 +136,7 @@
                                 class="mt-3 block w-full rounded-xl border-slate-300 px-4 py-4 text-black shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             >
 
-                            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                                <div id="password-strength-bar" class="h-full w-0 bg-blue-600 transition-all duration-300"></div>
-                            </div>
+                            <progress id="password-strength-bar" max="4" value="0" class="fd-progress mt-3 block h-2 w-full accent-blue-600"></progress>
                             <p id="password-strength-text" class="mt-2 text-xs font-bold text-slate-600">パスワード強度: 未入力</p>
 
                             @error('password')
@@ -219,16 +216,16 @@
         </div>
     </main>
 
-    <script>
-        $(function () {
-            const $password = $('#password')
-            const $passwordConfirmation = $('#password_confirmation')
-            const $strengthBar = $('#password-strength-bar')
-            const $strengthText = $('#password-strength-text')
-            const $matchText = $('#password-match-text')
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
+        document.addEventListener('DOMContentLoaded', () => {
+            const password = document.getElementById('password')
+            const passwordConfirmation = document.getElementById('password_confirmation')
+            const strengthBar = document.getElementById('password-strength-bar')
+            const strengthText = document.getElementById('password-strength-text')
+            const matchText = document.getElementById('password-match-text')
 
             function updatePasswordStrength() {
-                const value = $password.val()
+                const value = password.value
                 let score = 0
 
                 if (value.length >= 8) {
@@ -244,53 +241,59 @@
                     score += 1
                 }
 
-                const width = value.length === 0 ? 0 : Math.max(25, score * 25)
-                $strengthBar.css('width', width + '%')
+                strengthBar.value = value.length === 0 ? 0 : Math.max(1, score)
 
                 if (value.length === 0) {
-                    $strengthBar.removeClass().addClass('h-full w-0 bg-blue-600 transition-all duration-300')
-                    $strengthText.text('パスワード強度: 未入力').removeClass().addClass('mt-2 text-xs font-bold text-slate-600')
+                    strengthBar.className = 'mt-3 block h-2 w-full accent-blue-600'
+                    strengthText.textContent = 'パスワード強度: 未入力'
+                    strengthText.className = 'mt-2 text-xs font-bold text-slate-600'
                     return
                 }
 
                 if (score <= 1) {
-                    $strengthBar.removeClass().addClass('h-full bg-red-500 transition-all duration-300')
-                    $strengthText.text('パスワード強度: 弱い').removeClass().addClass('mt-2 text-xs font-bold text-red-600')
+                    strengthBar.className = 'mt-3 block h-2 w-full accent-red-500'
+                    strengthText.textContent = 'パスワード強度: 弱い'
+                    strengthText.className = 'mt-2 text-xs font-bold text-red-600'
                     return
                 }
 
                 if (score <= 3) {
-                    $strengthBar.removeClass().addClass('h-full bg-blue-500 transition-all duration-300')
-                    $strengthText.text('パスワード強度: 普通').removeClass().addClass('mt-2 text-xs font-bold text-blue-700')
+                    strengthBar.className = 'mt-3 block h-2 w-full accent-blue-500'
+                    strengthText.textContent = 'パスワード強度: 普通'
+                    strengthText.className = 'mt-2 text-xs font-bold text-blue-700'
                     return
                 }
 
-                $strengthBar.removeClass().addClass('h-full bg-blue-700 transition-all duration-300')
-                $strengthText.text('パスワード強度: 強い').removeClass().addClass('mt-2 text-xs font-bold text-blue-800')
+                strengthBar.className = 'mt-3 block h-2 w-full accent-blue-700'
+                strengthText.textContent = 'パスワード強度: 強い'
+                strengthText.className = 'mt-2 text-xs font-bold text-blue-800'
             }
 
             function updatePasswordMatch() {
-                const password = $password.val()
-                const confirmation = $passwordConfirmation.val()
+                const passwordValue = password.value
+                const confirmation = passwordConfirmation.value
 
                 if (confirmation.length === 0) {
-                    $matchText.text('パスワード確認を入力してください').removeClass().addClass('mt-2 text-xs font-bold text-slate-600')
+                    matchText.textContent = 'パスワード確認を入力してください'
+                    matchText.className = 'mt-2 text-xs font-bold text-slate-600'
                     return
                 }
 
-                if (password === confirmation) {
-                    $matchText.text('パスワードが一致しています').removeClass().addClass('mt-2 text-xs font-bold text-blue-700')
+                if (passwordValue === confirmation) {
+                    matchText.textContent = 'パスワードが一致しています'
+                    matchText.className = 'mt-2 text-xs font-bold text-blue-700'
                     return
                 }
 
-                $matchText.text('パスワードが一致していません').removeClass().addClass('mt-2 text-xs font-bold text-red-600')
+                matchText.textContent = 'パスワードが一致していません'
+                matchText.className = 'mt-2 text-xs font-bold text-red-600'
             }
 
-            $password.on('input', function () {
+            password.addEventListener('input', () => {
                 updatePasswordStrength()
                 updatePasswordMatch()
             })
-            $passwordConfirmation.on('input', updatePasswordMatch)
+            passwordConfirmation.addEventListener('input', updatePasswordMatch)
         })
     </script>
 </body>

@@ -106,7 +106,7 @@
             </fieldset>
             <div class="flex flex-wrap gap-3"><button class="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white">設定を保存</button><a href="{{ route('furimadeck-accounting.index') }}" class="rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700">戻る</a></div>
         </form>
-        <script>
+        <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
             const businessTaxPeriods = document.getElementById('business-tax-periods');
             const businessTaxPeriodTemplate = document.getElementById('business-tax-period-template');
             const existingBusinessTaxPeriodIndices = Array.from(businessTaxPeriods?.querySelectorAll('[data-business-period-row] [name^="business_tax_periods["]') ?? [])

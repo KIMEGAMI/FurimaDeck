@@ -62,11 +62,11 @@
 
     <section class="rounded-xl border border-slate-200 bg-slate-50 p-5" aria-live="polite"><h3 class="font-black text-slate-900">出品前確認</h3><ul id="marketplace-readiness" class="mt-3 grid gap-2 text-sm text-slate-700"><li>販売先を選択してください。</li></ul></section>
     @if (!empty($selectedProductId))
-        <script>document.querySelector('select[name="product_id"]')?.value = @json($selectedProductId); document.querySelector('select[name="product_id"]')?.dispatchEvent(new Event('change'));</script>
+        <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">document.querySelector('select[name="product_id"]')?.value = @json($selectedProductId); document.querySelector('select[name="product_id"]')?.dispatchEvent(new Event('change'));</script>
     @endif
 </div>
 
-<script>
+<script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
     document.addEventListener('DOMContentLoaded', function () {
         const requirementsByMarketplace = @json($marketplaceRequirements);
         const marketplaceFeeRates = @json($marketplaceFeeRates);

@@ -11,7 +11,7 @@
 </head>
 
 <body class="min-h-screen bg-slate-100">
-    <main class="flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none" style="background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('{{ asset('images/furimadeck-hero.png') }}');">
+    <main class="fd-bg-auth flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none">
         <div class="grid min-h-[720px] w-full max-w-7xl grid-cols-1 overflow-hidden rounded-lg bg-white shadow-2xl lg:grid-cols-2">
             <section class="relative hidden bg-blue-900 lg:block">
                 <img

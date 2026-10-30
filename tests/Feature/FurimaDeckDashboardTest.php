@@ -97,7 +97,7 @@ class FurimaDeckDashboardTest extends TestCase
             ->assertSee('aria-label="次の月を表示"', false);
     }
 
-    public function test_desktop_navigation_dropdowns_open_by_click_and_close_when_pointer_leaves(): void
+    public function test_desktop_navigation_uses_native_details_and_mobile_menu_has_accessible_hooks(): void
     {
         $user = User::factory()->create(['email_verified_at' => now()]);
 
@@ -118,8 +118,13 @@ class FurimaDeckDashboardTest extends TestCase
             ->assertSee('text-cyan-200">商品管理</p>', false)
             ->assertSee('text-cyan-200">分析</p>', false)
             ->assertSee('text-cyan-200">アカウント</p>', false)
-            ->assertSee('@mouseleave="$el.open = false"', false)
-            ->assertSee('@keydown.escape="$el.open = false"', false)
+            ->assertSee('<nav data-responsive-nav', false)
+            ->assertSee('<details class="group relative">', false)
+            ->assertSee('data-nav-toggle', false)
+            ->assertSee('aria-controls="responsive-navigation-menu"', false)
+            ->assertSee('data-nav-menu', false)
+            ->assertDontSee('@mouseleave=', false)
+            ->assertDontSee('@keydown.escape=', false)
             ->assertDontSee('top-full z-50 mt-2', false)
             ->assertDontSee('class="group relative" open', false);
     }

@@ -87,7 +87,7 @@
                                     </td>
                                     <td class="px-5 py-4 text-right align-top">
                                         @if ($canForceDelete)
-                                            <form method="POST" action="{{ route('admin.users.destroy', $listedUser) }}" class="ml-auto flex max-w-xs flex-col items-end gap-2" onsubmit="return confirm('このユーザを削除します。Stripe契約がある場合は停止し、商品、通知、セッションも削除されます。実行しますか？');">
+                                            <form method="POST" action="{{ route('admin.users.destroy', $listedUser) }}" class="ml-auto flex max-w-xs flex-col items-end gap-2" data-confirm="このユーザを削除します。Stripe契約がある場合は停止し、商品、通知、セッションも削除されます。実行しますか？">
                                                 @csrf
                                                 @method('DELETE')
                                                 <label for="confirmation_email_{{ $listedUser->id }}" class="sr-only">確認用メールアドレス</label>

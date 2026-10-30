@@ -96,7 +96,7 @@
     <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @foreach ($schemas as $schemaItem)
-        <script type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
+        <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}" type="application/ld+json">@json($schemaItem, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
     @endforeach
 </head>
 <body class="bg-slate-100 text-slate-900 antialiased">
@@ -129,7 +129,7 @@
             </div>
         </article>
     </main>
-    <style>
+    <style nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         .legal-content { color: #334155; font-size: 1rem; line-height: 1.95; }
         .legal-content h2 { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; color: #0f172a; font-size: 1.35rem; font-weight: 900; line-height: 1.45; }
         .legal-content h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }

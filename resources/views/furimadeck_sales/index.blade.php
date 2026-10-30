@@ -52,7 +52,7 @@
                                                 <label class="text-xs font-bold text-slate-700">返金額<input required min="0" type="number" name="refund_amount" value="{{ $sale->sold_price }}" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
                                                 <label class="text-xs font-bold text-slate-700">返送送料<input min="0" type="number" name="return_shipping_fee" value="0" class="mt-1 w-full rounded border-slate-300 text-slate-900"></label>
                                                 <label class="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" name="restock" value="1">在庫へ戻す</label>
-                                                <button class="rounded bg-amber-500 px-3 py-1 font-bold text-slate-950" onclick="return confirm('返品・返金を記録しますか？')">返品を記録</button>
+                                                <button class="rounded bg-amber-500 px-3 py-1 font-bold text-slate-950" data-confirm="返品・返金を記録しますか？">返品を記録</button>
                                             </form>
                                         </details>
                                     @endif

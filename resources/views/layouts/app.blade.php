@@ -11,11 +11,10 @@
     <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
     <link rel="shortcut icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
 
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
-    <style>
+    <style nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         .furimadeck-app-shell {
             background-color: var(--color-slate-950);
             background-image:

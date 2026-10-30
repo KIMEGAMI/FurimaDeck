@@ -31,7 +31,7 @@
                 <a href="{{ route('furimadeck-sales.index') }}" class="text-sm font-semibold text-blue-800 underline">販売記録一覧へ戻る</a>
             </div>
         </form>
-        <script>
+        <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
             document.addEventListener('DOMContentLoaded', function () {
                 const marketplace = document.getElementById('sale-marketplace');
                 const price = document.querySelector('input[name="sold_price"]');

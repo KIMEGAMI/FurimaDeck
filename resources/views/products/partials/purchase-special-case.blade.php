@@ -38,7 +38,7 @@
         </div>
     </div>
 </fieldset>
-<script>
+<script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
     (() => {
         const checkbox = document.getElementById('purchase-special-case-enabled');
         const fields = document.getElementById('purchase-special-case-fields');

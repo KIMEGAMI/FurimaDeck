@@ -14,7 +14,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-slate-950 text-white">
-    <main class="flex min-h-screen items-center justify-center bg-cover bg-center px-4 py-10" style="background-image: linear-gradient(rgba(2, 6, 23, 0.58), rgba(2, 6, 23, 0.82)), url('{{ asset('images/bg.png') }}');">
+    <main class="fd-bg-main flex min-h-screen items-center justify-center bg-cover bg-center px-4 py-10">
         <section class="w-full max-w-2xl rounded-3xl border border-cyan-300/20 bg-slate-950/70 p-8 text-center shadow-2xl backdrop-blur-md">
             <div class="text-3xl font-black tracking-[0.08em] text-cyan-200">FurimaDeck</div>
 

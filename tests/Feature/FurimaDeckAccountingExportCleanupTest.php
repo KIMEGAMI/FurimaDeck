@@ -11,7 +11,7 @@ class FurimaDeckAccountingExportCleanupTest extends TestCase
 {
     public function test_generated_csv_inside_system_temporary_directory_is_deleted(): void
     {
-        $path = tempnam(sys_get_temp_dir(), 'furimadeck-accounting-');
+        $path = tempnam(sys_get_temp_dir(), 'fda');
         $this->assertNotFalse($path);
 
         try {
@@ -41,17 +41,23 @@ class FurimaDeckAccountingExportCleanupTest extends TestCase
 
     public function test_matching_name_outside_system_temporary_directory_is_not_deleted(): void
     {
-        $path = tempnam(base_path(), 'furimadeck-accounting-outside-');
-        $this->assertNotFalse($path);
-        $this->assertNotSame(realpath(sys_get_temp_dir()), realpath(dirname($path)));
+        $outsideDirectory = storage_path('framework/testing/fda-outside-'.bin2hex(random_bytes(8)));
+        File::ensureDirectoryExists($outsideDirectory);
+        $path = null;
 
         try {
+            $path = tempnam($outsideDirectory, 'fda');
+            $this->assertNotFalse($path);
+            $this->assertNotSame(realpath(sys_get_temp_dir()), realpath(dirname($path)));
             $this->assertNotFalse(file_put_contents($path, 'outside test file'));
             $this->invokeCleanup($path);
 
             $this->assertFileExists($path);
         } finally {
-            File::delete($path);
+            if (is_string($path)) {
+                File::delete($path);
+            }
+            File::deleteDirectory($outsideDirectory);
         }
     }
 

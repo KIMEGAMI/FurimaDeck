@@ -13,18 +13,13 @@
         <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
         <link rel="shortcut icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
-
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
 
     <body class="font-sans text-cyan-50 antialiased">
         <div
-            class="flex min-h-screen flex-col items-center pt-6 text-white sm:justify-center sm:pt-0"
-            style="background-image: linear-gradient(rgba(2, 6, 23, 0.28), rgba(2, 6, 23, 0.52)), url('{{ asset('images/bg.png') }}?v={{ time() }}'); background-size: cover; background-position: center; background-attachment: fixed;"
+            class="fd-bg-guest flex min-h-screen flex-col items-center pt-6 text-white sm:justify-center sm:pt-0"
         >
             <div>
                 <a href="/" class="text-3xl font-black tracking-[0.22em] text-white drop-shadow-2xl">

@@ -29,7 +29,7 @@
     </div>
 </section>
 @endunless
-<script>
+<script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
     const categoryInput = document.getElementById('category_id');
 
     const categoryList = @json($categoryList, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
@@ -127,7 +127,7 @@
         }
     });
 </script>
-<script>
+<script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
     document.addEventListener('DOMContentLoaded', function () {
         const input = document.getElementById('product-images'); const folderInput = document.getElementById('product-image-folder'); const zone = document.getElementById('product-image-drop-zone'); const choose = document.getElementById('product-image-choose'); const chooseFolder = document.getElementById('product-image-folder-choose'); const preview = document.getElementById('product-image-preview'); const error = document.getElementById('product-image-error'); const files = [];
         const maximumCount = {{ $remainingImageSlots }}; const maximumBytes = {{ (int) config('furimadeck.product_images.max_size_kilobytes') * 1024 }}; const allowed = ['image/jpeg', 'image/png', 'image/webp'];

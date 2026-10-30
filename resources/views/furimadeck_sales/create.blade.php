@@ -17,7 +17,7 @@
                 </div>
                 <button class="mt-6 rounded bg-cyan-600 px-5 py-3 font-black text-white">販売を確定する</button>
             </form>
-            <script>
+            <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
                 document.addEventListener('DOMContentLoaded', function () {
                     const marketplace = document.querySelector('select[name="marketplace_id"]');
                     const price = document.querySelector('input[name="sold_price"]');

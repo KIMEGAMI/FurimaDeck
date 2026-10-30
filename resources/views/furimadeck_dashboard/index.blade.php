@@ -9,7 +9,7 @@
         $isPremium = $dashboard['can_use_premium_features'];
     @endphp
 
-    <div class="min-h-screen bg-slate-950/70 py-8 text-white" style="background-image: linear-gradient(rgba(2, 6, 23, 0.42), rgba(2, 6, 23, 0.76)), url('{{ asset('images/bg.png') }}'); background-attachment: fixed; background-position: center; background-size: cover;">
+    <div class="fd-bg-main min-h-screen bg-slate-950/70 py-8 text-white">
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <h1 class="sr-only">FurimaDeck Dashboard</h1>
 
@@ -31,7 +31,7 @@
 
                     <div class="mt-4">
                         <div class="mb-2 flex items-center justify-between text-xs font-bold text-white"><span>目標進捗</span><span>{{ number_format($dashboard['monthly_target_progress'], 1) }}%</span></div>
-                        <div class="h-2 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-emerald-400" style="width: {{ $dashboard['monthly_target_progress'] }}%"></div></div>
+                        <progress class="fd-progress h-2 w-full" max="100" value="{{ min(100, max(0, $dashboard['monthly_target_progress'])) }}" aria-label="月間目標の進捗"></progress>
                     </div>
 
                     @if (! $summary['sales_data_available'])
@@ -106,8 +106,8 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         const monthlySalesChart = document.getElementById('furimadeckMonthlySalesChart');
         if (monthlySalesChart && window.Chart) {
             new Chart(monthlySalesChart, {

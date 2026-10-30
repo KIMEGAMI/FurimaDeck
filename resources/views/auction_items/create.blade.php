@@ -131,7 +131,7 @@
         </div>
     </div>
 
-    <script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         document.addEventListener('DOMContentLoaded', function () {
             const feeRates = @json($salesFeeRates);
             const platform = document.getElementById('platform');

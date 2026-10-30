@@ -178,20 +178,20 @@
 
                                 <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                                     @if ($item->status !== 'sold')
-                                        <form action="{{ route('auction-items.sold', $item) }}" method="POST" onsubmit="return confirm('この商品をSOLDにしますか？')">
+                                        <form action="{{ route('auction-items.sold', $item) }}" method="POST" data-confirm="この商品をSOLDにしますか？">
                                             @csrf
                                             @method('PATCH')
                                             <button type="submit" class="w-full rounded-xl bg-amber-500 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-amber-600">SOLDにする</button>
                                         </form>
                                     @else
-                                        <form action="{{ route('auction-items.selling', $item) }}" method="POST" onsubmit="return confirm('この商品を出品中に戻しますか？')">
+                                        <form action="{{ route('auction-items.selling', $item) }}" method="POST" data-confirm="この商品を出品中に戻しますか？">
                                             @csrf
                                             @method('PATCH')
                                             <button type="submit" class="w-full rounded-xl bg-blue-700 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-blue-800">出品中に戻す</button>
                                         </form>
                                     @endif
 
-                                    <form action="{{ route('auction-items.destroy', $item) }}" method="POST" onsubmit="return confirm('この商品を削除しますか？画像も削除されます。')">
+                                    <form action="{{ route('auction-items.destroy', $item) }}" method="POST" data-confirm="この商品を削除しますか？画像も削除されます。">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="w-full rounded-xl bg-red-600 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-red-700">削除</button>
@@ -220,7 +220,7 @@
         </nav>
     </div>
 
-    <script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         document.addEventListener('DOMContentLoaded', function () {
             const dateInput = document.getElementById('unsold_before');
             const calendarInput = document.getElementById('unsold_before_calendar');

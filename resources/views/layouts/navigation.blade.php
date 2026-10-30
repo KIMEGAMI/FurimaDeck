@@ -28,7 +28,7 @@
     $isAccountMenuActive = request()->routeIs('furimadeck-billing.*', 'furimadeck-account.*', 'furimadeck-activity.*');
 @endphp
 
-<nav x-data="{ open: false }" class="relative z-50 border-b border-cyan-300/20 bg-slate-950/45 text-white shadow-2xl backdrop-blur-md">
+<nav data-responsive-nav class="relative z-50 border-b border-cyan-300/20 bg-slate-950/45 text-white shadow-2xl backdrop-blur-md">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="flex h-16 justify-between">
             <div class="flex min-w-0">
@@ -44,7 +44,7 @@
                             HOME
                         </x-nav-link>
 
-                        <details class="group relative" @mouseleave="$el.open = false" @keydown.escape="$el.open = false">
+                        <details class="group relative">
                             <summary class="cursor-pointer list-none border-b-2 px-1 pb-1 pt-6 text-sm font-bold leading-5 text-slate-300 marker:hidden hover:text-white {{ $isProductMenuActive ? 'border-cyan-300 text-white' : 'border-transparent' }}">商品管理 <span aria-hidden="true">⌄</span></summary>
                             <div class="absolute left-0 top-full z-50 w-48 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-xl">
                                 <p class="px-3 pb-2 pt-1 text-xs font-black tracking-wide text-cyan-200">商品管理</p>
@@ -57,7 +57,7 @@
                             CSV管理{{ $hasPremiumPlan ? '' : ' Premium' }}
                         </x-nav-link>
 
-                        <details class="group relative" @mouseleave="$el.open = false" @keydown.escape="$el.open = false">
+                        <details class="group relative">
                             <summary class="cursor-pointer list-none border-b-2 px-1 pb-1 pt-6 text-sm font-bold leading-5 text-slate-300 marker:hidden hover:text-white {{ $isSalesMenuActive ? 'border-cyan-300 text-white' : 'border-transparent' }}">分析 <span aria-hidden="true">⌄</span></summary>
                             <div class="absolute left-0 top-full z-50 w-52 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-xl">
                                 <p class="px-3 pb-2 pt-1 text-xs font-black tracking-wide text-cyan-200">分析</p>
@@ -69,7 +69,7 @@
                             </div>
                         </details>
 
-                        <details class="group relative" @mouseleave="$el.open = false" @keydown.escape="$el.open = false">
+                        <details class="group relative">
                             <summary class="cursor-pointer list-none border-b-2 px-1 pb-1 pt-6 text-sm font-bold leading-5 text-slate-300 marker:hidden hover:text-white {{ $isAccountingMenuActive ? 'border-cyan-300 text-white' : 'border-transparent' }}">会計データ <span aria-hidden="true">⌄</span></summary>
                             <div class="absolute left-0 top-full z-50 max-h-[70vh] min-w-72 overflow-y-auto rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-xl">
                                 @foreach($accountingMenuGroups as $group)
@@ -81,7 +81,7 @@
                             </div>
                         </details>
 
-                        <details class="group relative" @mouseleave="$el.open = false" @keydown.escape="$el.open = false">
+                        <details class="group relative">
                             <summary class="cursor-pointer list-none border-b-2 px-1 pb-1 pt-6 text-sm font-bold leading-5 text-slate-300 marker:hidden hover:text-white {{ $isAccountMenuActive ? 'border-cyan-300 text-white' : 'border-transparent' }}">アカウント <span aria-hidden="true">⌄</span></summary>
                             <div class="absolute left-0 top-full z-50 w-44 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-xl">
                                 <p class="px-3 pb-2 pt-1 text-xs font-black tracking-wide text-cyan-200">アカウント</p>
@@ -92,7 +92,7 @@
                         </details>
 
                         @if ($isAdmin)
-                            <details class="group relative" @mouseleave="$el.open = false" @keydown.escape="$el.open = false">
+                            <details class="group relative">
                                 <summary class="cursor-pointer list-none border-b-2 px-1 pb-1 pt-6 text-sm font-bold leading-5 text-amber-200 marker:hidden hover:text-white {{ request()->routeIs('admin.*', 'notices.*') ? 'border-amber-300 text-white' : 'border-transparent' }}">管理者 <span aria-hidden="true">⌄</span></summary>
                                 <div class="absolute left-0 top-full z-50 w-52 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-xl">
                                     <p class="px-3 pb-2 pt-1 text-xs font-black tracking-wide text-amber-200">管理者メニュー</p>
@@ -192,14 +192,17 @@
 
             <div class="-me-2 flex items-center lg:hidden">
                 <button
-                    @click="open = ! open"
+                    type="button"
+                    data-nav-toggle
                     class="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-black text-slate-100 transition duration-150 ease-in-out hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white focus:outline-none"
                     aria-label="メニューを開く"
+                    aria-expanded="false"
+                    aria-controls="responsive-navigation-menu"
                 >
                     <span>メニュー</span>
                     <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
                         <path
-                            :class="{'hidden': open, 'inline-flex': ! open }"
+                            data-nav-icon
                             class="inline-flex"
                             stroke-linecap="round"
                             stroke-linejoin="round"
@@ -208,7 +211,7 @@
                         />
 
                         <path
-                            :class="{'hidden': ! open, 'inline-flex': open }"
+                            data-nav-close-icon
                             class="hidden"
                             stroke-linecap="round"
                             stroke-linejoin="round"
@@ -221,7 +224,7 @@
         </div>
     </div>
 
-    <div :class="{'block': open, 'hidden': ! open}" class="hidden lg:hidden">
+    <div id="responsive-navigation-menu" data-nav-menu class="hidden lg:hidden">
         <div class="space-y-1 pb-3 pt-2">
             @if ($isFurimaDeckCutover)
                 <x-responsive-nav-link :href="route('furimadeck-dashboard')" :active="request()->routeIs('furimadeck-dashboard')">
@@ -360,10 +363,9 @@
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
 
-                    <x-responsive-nav-link :href="route('logout')"
-                                           onclick="event.preventDefault(); this.closest('form').submit();">
+                    <button type="submit" class="block w-full border-l-4 border-transparent py-2 pe-4 ps-3 text-start text-base font-bold text-slate-100 transition duration-150 ease-in-out hover:border-emerald-300 hover:bg-white/10 hover:text-white focus:border-emerald-300 focus:bg-white/10 focus:text-white focus:outline-none">
                         ログアウト
-                    </x-responsive-nav-link>
+                    </button>
                 </form>
             </div>
         </div>

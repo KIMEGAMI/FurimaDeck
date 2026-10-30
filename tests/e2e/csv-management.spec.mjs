@@ -52,6 +52,124 @@ test('login page renders the authentication controls', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'ログイン' })).toBeVisible();
 });
 
+test('desktop and mobile navigation controls remain keyboard and screen-reader accessible', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'デモを見る' }).click();
+  await expect(page).toHaveURL(/dashboard/);
+  await page.waitForLoadState('load');
+
+  const productMenu = page.locator('nav[data-responsive-nav] details').filter({ hasText: '商品一覧' }).first();
+  const summary = productMenu.locator('summary');
+  await summary.click();
+  await expect(productMenu).toHaveAttribute('open', '');
+  await summary.press('Escape');
+  await expect(productMenu).not.toHaveAttribute('open');
+  await expect(summary).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const toggle = page.locator('nav[data-responsive-nav] [data-nav-toggle]');
+  const menu = page.locator('nav[data-responsive-nav] [data-nav-menu]');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(menu).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(menu).toBeHidden();
+});
+
+test('protected demo account cannot be deleted through the account endpoint', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'デモを見る' }).click();
+  await expect(page).toHaveURL(/dashboard/);
+  await page.waitForLoadState('load');
+  await page.goto('/furimadeck-account');
+
+  await page.locator('#delete-password').fill(process.env.FURIMADECK_E2E_DEMO_USER_PASSWORD);
+  await page.locator('input[name="confirm_deletion"]').check();
+  const deletionResponse = page.waitForResponse((response) =>
+    response.url().endsWith('/furimadeck-account'),
+  );
+  await page.getByRole('button', { name: 'アカウントを削除', exact: true }).click();
+
+  expect((await deletionResponse).status()).toBe(403);
+  const accountResponse = await page.goto('/furimadeck-account');
+  expect(accountResponse?.status()).toBe(200);
+  await expect(page.getByRole('button', { name: 'ログアウト' })).toBeVisible();
+});
+
+test('nonce-authorized SRI-pinned Chart.js executes under the enforcing CSP', async ({ page }) => {
+  const scriptPolicyErrors = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' && /content security policy|integrity/i.test(message.text())) {
+      scriptPolicyErrors.push(message.text());
+    }
+  });
+
+  await page.goto('/login');
+  const dashboardNavigation = page.waitForResponse((response) =>
+    response.status() === 200
+      && response.request().isNavigationRequest()
+      && new URL(response.url()).pathname.includes('dashboard')
+  );
+  await page.getByRole('button', { name: 'デモを見る' }).click();
+  const dashboardResponse = await dashboardNavigation;
+  await expect(page).toHaveURL(/dashboard/);
+  await expect.poll(() => page.evaluate(() => typeof window.Chart)).toBe('function');
+  const headers = dashboardResponse.headers();
+  const policy = headers['content-security-policy'];
+  expect(policy).toContain("script-src 'self'");
+  expect(policy).toContain("script-src-attr 'none'");
+  expect(headers['content-security-policy-report-only']).toBeUndefined();
+  const nonce = policy.match(/(?:^|;)\s*script-src\s+[^;]*'nonce-([^']+)'/)?.[1];
+  expect(nonce).toBeTruthy();
+
+  const chartScript = page.locator('script[src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"]');
+  await expect(chartScript).toHaveCount(1);
+  await expect(chartScript).toHaveAttribute('integrity', 'sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC');
+  await expect(chartScript).toHaveAttribute('crossorigin', 'anonymous');
+  await expect(chartScript).toHaveJSProperty('nonce', nonce);
+  await expect.poll(() => page.evaluate(() => {
+    const canvas = document.getElementById('furimadeckMonthlySalesChart');
+    return Boolean(canvas && window.Chart?.getChart(canvas));
+  })).toBe(true);
+  expect(scriptPolicyErrors).toEqual([]);
+});
+
+test('CSV export routes do not return files to an unauthenticated browser context', async ({ page, browser }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'デモを見る' }).click();
+  await expect(page).toHaveURL(/dashboard/);
+
+  await page.goto('/products/import');
+  const exportHrefs = [];
+  for (const name of ['販売CSV', '完全バックアップCSV', '復元用CSV', '出品中のみCSV']) {
+    const link = page.getByRole('link', { name });
+    await expect(link).toBeVisible();
+    exportHrefs.push(await link.getAttribute('href'));
+  }
+
+  await page.goto('/furimadeck-accounting?section=csv&from=2000-01-01&to=2000-01-02');
+  const commonCsv = page.getByRole('link', { name: '共通CSVをダウンロード' });
+  await expect(commonCsv).toBeVisible();
+  exportHrefs.push(await commonCsv.getAttribute('href'));
+
+  expect(exportHrefs.every((href) => typeof href === 'string' && href !== '')).toBe(true);
+  const anonymousContext = await browser.newContext();
+
+  try {
+    const anonymousPage = await anonymousContext.newPage();
+    for (const href of exportHrefs) {
+      const response = await anonymousPage.goto(new URL(href, page.url()).toString());
+      expect(new URL(anonymousPage.url()).pathname).toBe('/login');
+      expect(response?.headers()['content-type'] ?? '').not.toMatch(/text\/csv/i);
+      expect(response?.headers()['content-disposition'] ?? '').toBe('');
+    }
+  } finally {
+    await anonymousContext.close();
+  }
+});
+
 test('CSV management routes require authentication', async ({ page }) => {
   for (const path of ['/products/import', '/furimadeck-export/restore/spec']) {
     const response = await page.goto(path);

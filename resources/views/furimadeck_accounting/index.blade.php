@@ -495,7 +495,7 @@
             @if($directJournalSendEnabled)
             <div class="mt-4 flex flex-wrap items-center gap-3">
                     @if($accountingConnections->get('freee')?->status === 'connected' && $freeeSyncMissingConfiguration === [] && $freeeBatchCount > 0)
-                        <form method="post" action="{{ route('furimadeck-accounting.send.freee.batch') }}" onsubmit="return confirm('この期間のConfirm済み{{ number_format($freeeBatchCount) }}件をfreeeへ一括送信します。よろしいですか？')">
+                        <form method="post" action="{{ route('furimadeck-accounting.send.freee.batch') }}" data-confirm="この期間のConfirm済み{{ number_format($freeeBatchCount) }}件をfreeeへ一括送信します。よろしいですか？">
                             @csrf
                             <input type="hidden" name="year" value="{{ $year }}">
                             <input type="hidden" name="from" value="{{ request('from') }}">
@@ -513,7 +513,7 @@
                         <span class="text-sm text-gray-600">freeeと連携すると一括送信できます。</span>
                     @endif
                     @if($accountingConnections->get('money_forward')?->status === 'connected' && $moneyForwardSyncMissingConfiguration === [] && $moneyForwardBatchCount > 0)
-                        <form method="post" action="{{ route('furimadeck-accounting.send.money-forward.batch') }}" onsubmit="return confirm('この期間のConfirm済み{{ number_format($moneyForwardBatchCount) }}件をMoney Forwardへ一括送信します。よろしいですか？')">
+                        <form method="post" action="{{ route('furimadeck-accounting.send.money-forward.batch') }}" data-confirm="この期間のConfirm済み{{ number_format($moneyForwardBatchCount) }}件をMoney Forwardへ一括送信します。よろしいですか？">
                             @csrf
                             <input type="hidden" name="year" value="{{ $year }}">
                             <input type="hidden" name="from" value="{{ request('from') }}">
@@ -887,7 +887,7 @@
 </x-app-layout>
 
 @if($recentAccountingBatches->contains(fn ($batch) => in_array($batch->status, ['queued', 'running'], true)))
-    <script>
+    <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
         window.setTimeout(() => window.location.reload(), 5000);
     </script>
 @endif
