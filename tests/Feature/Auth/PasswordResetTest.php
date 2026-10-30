@@ -85,7 +85,8 @@ class PasswordResetTest extends TestCase
         $firstUser = User::factory()->create(['email' => 'first-reset@example.com']);
         $secondUser = User::factory()->create(['email' => 'second-reset@example.com']);
 
-        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.51'])
+        $this->from('/forgot-password')
+            ->withServerVariables(['REMOTE_ADDR' => '203.0.113.51'])
             ->post('/forgot-password', ['email' => $firstUser->email])
             ->assertRedirect('/forgot-password')
             ->assertSessionHasNoErrors();
@@ -98,7 +99,8 @@ class PasswordResetTest extends TestCase
 
         Notification::assertNotSentTo($secondUser, ResetPassword::class);
 
-        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.52'])
+        $this->from('/forgot-password')
+            ->withServerVariables(['REMOTE_ADDR' => '198.51.100.52'])
             ->post('/forgot-password', ['email' => $secondUser->email])
             ->assertRedirect('/forgot-password')
             ->assertSessionHasNoErrors();
