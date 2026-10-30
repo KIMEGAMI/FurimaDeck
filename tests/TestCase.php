@@ -14,7 +14,7 @@ abstract class TestCase extends BaseTestCase
 
     protected function setUp(): void
     {
-        $isMariaDbGateTest = $this instanceof Feature\\FurimaDeckMariaDbCsvGateTest
+        $isMariaDbGateTest = $this instanceof Feature\FurimaDeckMariaDbCsvGateTest
             && getenv('FURIMADECK_MARIADB_GATE') === '1';
 
         if (! $isMariaDbGateTest) {
