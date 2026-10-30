@@ -36,7 +36,7 @@
     Header onsuccess unset Cross-Origin-Embedder-Policy
     Header always set Cross-Origin-Embedder-Policy "require-corp"
     Header onsuccess unset Cross-Origin-Opener-Policy
-    Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+    Header always set Cross-Origin-Opener-Policy "same-origin"
     Header onsuccess unset Cross-Origin-Resource-Policy
     Header always set Cross-Origin-Resource-Policy "same-origin"
     Header onsuccess unset X-Powered-By
