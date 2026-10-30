@@ -213,30 +213,41 @@ class SecurityHeadersTest extends TestCase
             fn (array $parts): array => [strtolower(array_shift($parts)) => array_map('strtolower', $parts)]
         );
 
-        $this->assertContains("'self'", $directives->get('default-src', []), 'default-src must be restricted to this origin.');
+        $this->assertSame(["'self'"], $directives->get('default-src', []), 'default-src must be restricted to this origin.');
         $this->assertContains("'self'", $directives->get('script-src', []), 'script-src must allow the application origin.');
         $nonceSources = collect($directives->get('script-src', []))
             ->filter(fn (string $source): bool => preg_match("/^'nonce-[A-Za-z0-9+\/=]+'$/", $source) === 1);
         $this->assertCount(1, $nonceSources, 'script-src must allow exactly one request-specific nonce.');
-        $this->assertContains("'none'", $directives->get('object-src', []), 'object-src must disable plugin content.');
-        $this->assertTrue(
-            in_array("'self'", $directives->get('base-uri', []), true)
-                || in_array("'none'", $directives->get('base-uri', []), true),
-            'base-uri must prevent untrusted base URL injection.'
+        $this->assertEqualsCanonicalizing(
+            ["'self'", $nonceSources->first()],
+            $directives->get('script-src', []),
+            'script-src must not allow additional hosts, schemes, wildcards, or nonces.'
         );
+        $this->assertSame(["'none'"], $directives->get('object-src', []), 'object-src must disable plugin content.');
+        $this->assertSame(["'self'"], $directives->get('base-uri', []), 'base-uri must prevent untrusted base URL injection.');
         $this->assertSame(["'none'"], $directives->get('frame-ancestors', []));
-        $this->assertContains("'self'", $directives->get('form-action', []), 'form-action must be restricted to this origin.');
+        $this->assertSame(["'self'"], $directives->get('form-action', []), 'form-action must be restricted to this origin.');
         $this->assertSame(["'none'"], $directives->get('script-src-attr', []));
         $this->assertSame(["'none'"], $directives->get('style-src-attr', []));
         $this->assertContains("'self'", $directives->get('style-src', []));
+        $styleNonceSources = collect($directives->get('style-src', []))
+            ->filter(fn (string $source): bool => preg_match("/^'nonce-[A-Za-z0-9+\\/=]+'$/", $source) === 1);
+        $this->assertCount(1, $styleNonceSources, 'style-src must allow exactly one request-specific nonce.');
         $this->assertSame(
             $nonceSources->first(),
-            collect($directives->get('style-src', []))->first(fn (string $source): bool => preg_match("/^'nonce-[A-Za-z0-9+\\/=]+'$/", $source) === 1),
+            $styleNonceSources->first(),
             'style-src must use the same request-specific nonce as script-src.'
+        );
+        $this->assertEqualsCanonicalizing(
+            ["'self'", $nonceSources->first()],
+            $directives->get('style-src', []),
+            'style-src must not allow additional hosts, schemes, wildcards, or nonces.'
         );
         $this->assertSame(["'self'"], $directives->get('connect-src', []), 'connect-src must not permit third-party endpoints.');
         $this->assertSame(["'self'", 'data:', 'blob:'], $directives->get('img-src', []), 'Images must not load from unreviewed external origins.');
         $this->assertSame(["'self'", 'data:'], $directives->get('font-src', []), 'Fonts must not load from unreviewed external origins.');
+        $this->assertSame(["'self'"], $directives->get('manifest-src', []));
+        $this->assertEqualsCanonicalizing(["'self'", 'blob:'], $directives->get('worker-src', []));
         $this->assertNull($response->headers->get('Content-Security-Policy-Report-Only'), 'A report-only policy does not enforce the security policy.');
 
         foreach ($directives as $name => $sources) {

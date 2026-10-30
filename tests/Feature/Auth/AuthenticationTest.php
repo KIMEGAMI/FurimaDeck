@@ -169,6 +169,38 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
     }
 
+    public function test_demo_login_requests_are_throttled_by_ip_without_blocking_another_visitor(): void
+    {
+        config([
+            'demo.user_email' => 'demo@example.com',
+            'demo.user_password' => 'demo-password',
+            'furimadeck.public_rate_limits.demo_login_per_minute' => 1,
+        ]);
+
+        $user = User::factory()->create([
+            'email' => 'demo@example.com',
+            'password' => 'demo-password',
+        ]);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.41'])
+            ->post(route('login.demo'))
+            ->assertRedirect(route('furimadeck-dashboard', absolute: false));
+
+        $this->post('/logout')->assertRedirect('/');
+        $this->assertGuest();
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.41'])
+            ->post(route('login.demo'))
+            ->assertTooManyRequests();
+        $this->assertGuest();
+
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.42'])
+            ->post(route('login.demo'))
+            ->assertRedirect(route('furimadeck-dashboard', absolute: false));
+
+        $this->assertAuthenticatedAs($user);
+    }
+
     public function test_demo_login_is_unavailable_when_disabled(): void
     {
         config([

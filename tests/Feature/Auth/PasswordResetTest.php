@@ -77,6 +77,35 @@ class PasswordResetTest extends TestCase
             ->assertSessionHasNoErrors();
     }
 
+    public function test_password_reset_route_throttles_by_ip_before_sending_another_notification(): void
+    {
+        Notification::fake();
+        config(['furimadeck.public_rate_limits.password_reset_per_minute' => 1]);
+
+        $firstUser = User::factory()->create(['email' => 'first-reset@example.com']);
+        $secondUser = User::factory()->create(['email' => 'second-reset@example.com']);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.51'])
+            ->post('/forgot-password', ['email' => $firstUser->email])
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHasNoErrors();
+
+        Notification::assertSentTo($firstUser, ResetPassword::class);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.51'])
+            ->post('/forgot-password', ['email' => $secondUser->email])
+            ->assertTooManyRequests();
+
+        Notification::assertNotSentTo($secondUser, ResetPassword::class);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.52'])
+            ->post('/forgot-password', ['email' => $secondUser->email])
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHasNoErrors();
+
+        Notification::assertSentTo($secondUser, ResetPassword::class);
+    }
+
     public function test_reset_password_link_can_be_requested_with_uppercase_email_input(): void
     {
         Notification::fake();

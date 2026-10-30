@@ -7,6 +7,7 @@ return [
         'contact_per_minute' => (int) env('FURIMADECK_PUBLIC_CONTACT_RATE_PER_MINUTE', 5),
         'registration_per_minute' => (int) env('FURIMADECK_PUBLIC_REGISTRATION_RATE_PER_MINUTE', 5),
         'password_reset_per_minute' => (int) env('FURIMADECK_PUBLIC_PASSWORD_RESET_RATE_PER_MINUTE', 5),
+        'demo_login_per_minute' => (int) env('FURIMADECK_PUBLIC_DEMO_LOGIN_RATE_PER_MINUTE', 5),
     ],
     'product_images' => [
         'disk' => env('FURIMADECK_PRODUCT_IMAGE_DISK', 'local'),

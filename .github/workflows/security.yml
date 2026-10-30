@@ -541,6 +541,16 @@ jobs:
           FURIMADECK_DB_URL: mysql://127.0.0.1:1/furimadeck_sentinel
         run: vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/TestDatabaseIsolationTest.php
 
+      - name: Run strict authentication abuse regression tests
+        run: |
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/Auth/AuthenticationTest.php
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/Auth/PasswordResetTest.php
+
+      - name: Run strict tenant and private-image authorization tests
+        run: |
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/FurimaDeckOwnershipTest.php
+          vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/ProductImageAccessTest.php
+
       - name: Run strict CSP and third-party asset regression tests
         run: vendor/bin/phpunit --no-coverage --fail-on-all-issues --display-all-issues tests/Feature/SecurityHeadersTest.php
 
