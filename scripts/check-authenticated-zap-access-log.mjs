@@ -6,18 +6,30 @@ const protectedDashboardPaths = new Set(['/furimadeck-dashboard', '/furimadeck-d
 
 export function summarizeAuthenticatedZapAccessLog(logText) {
   const statusCounts = new Map();
+  const logoutStatusCounts = new Map();
   let dashboardRequests = 0;
   let requestsWithSessionCookie = 0;
+  let logoutRequests = 0;
 
   for (const line of logText.split(/\r?\n/)) {
     if (line === '') continue;
 
     const fields = line.split(' ');
-    if (fields.length !== 4 || !/^[1-5][0-9]{2}$/.test(fields[2])) {
+    if (
+      fields.length !== 4
+      || !/^[A-Z]+$/.test(fields[0])
+      || !fields[1].startsWith('/')
+      || !/^[1-5][0-9]{2}$/.test(fields[2])
+      || !['1', '-'].includes(fields[3])
+    ) {
       throw new Error('The sanitized authenticated DAST access log has an unexpected format.');
     }
 
     const [method, path, status, sessionCookiePresent] = fields;
+    if (path === '/logout') {
+      logoutRequests += 1;
+      logoutStatusCounts.set(status, (logoutStatusCounts.get(status) ?? 0) + 1);
+    }
     if (method !== 'GET' || !protectedDashboardPaths.has(path)) continue;
 
     dashboardRequests += 1;
@@ -28,19 +40,25 @@ export function summarizeAuthenticatedZapAccessLog(logText) {
   if (dashboardRequests === 0) {
     throw new Error('Authenticated ZAP made no requests to the protected dashboard.');
   }
-  if (requestsWithSessionCookie !== dashboardRequests) {
-    throw new Error('One or more protected-dashboard requests did not include the isolated session cookie.');
-  }
-  if ((statusCounts.get('200') ?? 0) === 0) {
-    throw new Error('Authenticated ZAP did not receive HTTP 200 from the protected dashboard.');
-  }
-
   const statuses = [...statusCounts]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([status, count]) => `${status}:${count}`)
     .join(',');
+  const logoutStatuses = [...logoutStatusCounts]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([status, count]) => `${status}:${count}`)
+    .join(',') || 'none';
 
-  return `Authenticated ZAP dashboard requests: total=${dashboardRequests}; session-cookie-present=${requestsWithSessionCookie}; HTTP statuses=${statuses}`;
+  const summary = `Authenticated ZAP dashboard requests: total=${dashboardRequests}; session-cookie-present=${requestsWithSessionCookie}; HTTP statuses=${statuses}; /logout requests=${logoutRequests}; /logout HTTP statuses=${logoutStatuses}`;
+
+  if (requestsWithSessionCookie !== dashboardRequests) {
+    throw new Error(`${summary}\nOne or more protected-dashboard requests did not include the isolated session cookie.`);
+  }
+  if (dashboardRequests !== (statusCounts.get('200') ?? 0)) {
+    throw new Error(`${summary}\nOne or more authenticated requests to the protected dashboard did not return HTTP 200.`);
+  }
+
+  return summary;
 }
 
 async function main() {

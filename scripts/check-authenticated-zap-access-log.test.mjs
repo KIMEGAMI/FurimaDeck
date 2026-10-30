@@ -5,18 +5,23 @@ import { summarizeAuthenticatedZapAccessLog } from './check-authenticated-zap-ac
 test('accepts authenticated dashboard scan requests and reports status counts only', () => {
   const summary = summarizeAuthenticatedZapAccessLog([
     'GET /furimadeck-dashboard 200 1',
-    'GET /furimadeck-dashboard 302 1',
+    'GET /furimadeck-dashboard 200 1',
+    'POST /logout 419 1',
     'GET /login 200 -',
   ].join('\n'));
 
-  assert.equal(summary, 'Authenticated ZAP dashboard requests: total=2; session-cookie-present=2; HTTP statuses=200:1,302:1');
+  assert.equal(summary, 'Authenticated ZAP dashboard requests: total=2; session-cookie-present=2; HTTP statuses=200:2; /logout requests=1; /logout HTTP statuses=419:1');
   assert.equal(summary.includes('cookie-value'), false);
+  assert.equal(summary.includes('/login'), false);
 });
 
-test('fails when the authenticated scan never receives a successful protected response', () => {
+test('fails closed when any authenticated dashboard request redirects or otherwise fails', () => {
   assert.throws(
-    () => summarizeAuthenticatedZapAccessLog('GET /furimadeck-dashboard 302 1'),
-    /did not receive HTTP 200/,
+    () => summarizeAuthenticatedZapAccessLog([
+      'GET /furimadeck-dashboard 200 1',
+      'GET /furimadeck-dashboard 302 1',
+    ].join('\n')),
+    /One or more authenticated requests to the protected dashboard did not return HTTP 200/,
   );
 });
 
@@ -42,4 +47,15 @@ test('fails closed on malformed access-log records', () => {
     () => summarizeAuthenticatedZapAccessLog('GET /furimadeck-dashboard 200'),
     /unexpected format/,
   );
+});
+
+test('does not disclose unrecognized request paths in diagnostics', () => {
+  const summary = summarizeAuthenticatedZapAccessLog([
+    'GET /furimadeck-dashboard 200 1',
+    'POST /logout 302 1',
+    'GET /users/private@example.invalid 302 1',
+  ].join('\n'));
+
+  assert.equal(summary.includes('private@example.invalid'), false);
+  assert.match(summary, /\/logout requests=1; \/logout HTTP statuses=302:1/);
 });
