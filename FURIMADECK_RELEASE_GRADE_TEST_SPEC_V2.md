@@ -543,3 +543,10 @@ PR #37のworkflowがZAPへ渡す`api.addrs.addr.name`正規表現はlocalhostと
 - 作業ツリーで、直接ログイン応答に`authSuccessful=true`がない場合は`poll_as_user`へ進み、保護Dashboardの`pollSuccessful=true`だけを代替成功根拠として認める修正を実装。pollが失敗・不明ならfail closed。関連25 tests成功、`git diff --check`成功。PR未反映、同SHA CI/Securityは次の確認待ち。
 - 1.0はNO-GO。本番DB復元、Stripe Live/Webhook、Google OAuth本番、会計実サービス取込、本番VPS R2画像CRUDは未確認。
 
+
+## 2026-11-14 ZAP Pythonクライアントの応答切り捨てを修正
+
+- PR #38 head `7b6b4f5442fce2e6e47782675fe489246099a19c`のTest and build、MariaDB CSV gate、Secret scan、Semgrep SAST、Dependency reviewは成功。OWASP ZAP active DASTは2系統とも失敗。
+- 失敗ログはフォーム認証試行後に`authSuccessful`型と`pollSuccessful`型が両方欠落したと示した。公式ZAP Pythonクライアントの`authenticate_as_user`/`poll_as_user`はAPI JSONの先頭値のみを返し、応答セット内の成功フラグを落とす。ZAP認証失敗やアプリログイン失敗とは判断できない。公式ソース: https://github.com/zaproxy/zap-api-python/blob/main/src/zapv2/users.py
+- フックはクライアントの`_request`で認証・ポーリングの完全なJSON応答を取得するよう変更。ローカル関連25テスト、`git diff --check`成功。これはCI上のZAP再検証成功を意味しない。
+- 修正版はPRへ未反映。ユーザーからCI再実行禁止の指示があるため、手動実行はしない。PR更新で通常発火する検証の確認が必要。1.0はNO-GO。本番DB復元、Stripe Live/Webhook、Google OAuth本番、会計実サービス取込、本番VPS R2画像CRUDも未確認。

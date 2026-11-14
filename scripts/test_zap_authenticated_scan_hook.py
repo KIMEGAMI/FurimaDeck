@@ -3,6 +3,7 @@
 from contextlib import redirect_stdout
 from importlib.util import module_from_spec, spec_from_file_location
 import io
+import json
 import os
 from pathlib import Path
 import re
@@ -163,11 +164,13 @@ class FakeUsers:
 
     def authenticate_as_user(self, context_id, user_id):
         self.authenticated = True
-        return self.auth_result
+        response = self.auth_result
+        return next(iter(response.values())) if isinstance(response, dict) else response
 
     def poll_as_user(self, context_id, user_id):
         self.poll_called = True
-        return self.poll_result
+        response = self.poll_result
+        return next(iter(response.values())) if isinstance(response, dict) else response
 
 
 class FakeSessionManagement:
@@ -277,6 +280,25 @@ class FakeZap:
         self.authentication.context = self.context
         self.acsrf = csrf or FakeCsrf()
         self.pscan = passive_scan or FakePassiveScan()
+
+    base = "http://zap/JSON/"
+
+    def _request(self, url, parameters):
+        self.asserted_user_action = (url, parameters)
+        if url.endswith("users/action/authenticateAsUser/"):
+            self.users.authenticated = True
+            response = self.users.auth_result
+        elif url.endswith("users/action/pollAsUser/"):
+            self.users.poll_called = True
+            response = self.users.poll_result
+        else:
+            raise AssertionError("Unexpected ZAP API action")
+        if isinstance(response, str):
+            try:
+                return json.loads(response)
+            except json.JSONDecodeError:
+                return {"Result": response}
+        return response
 
 
 class AuthenticatedZapHookTest(unittest.TestCase):

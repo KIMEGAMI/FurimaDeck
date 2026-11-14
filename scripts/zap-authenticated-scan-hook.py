@@ -375,7 +375,12 @@ def zap_import_context_wrap(context_id):
 
         # This action executes the configured login and checks the logged-in
         # indicator against its response. Do not treat configuration alone as proof.
-        auth_result = _ZAP.users.authenticate_as_user(context_id, user_id)
+        # Generated ZAP Python helpers retain only the first field in a response set.
+        # Use the client's JSON request method so authSuccessful remains available.
+        auth_result = _ZAP._request(
+            _ZAP.base + "users/action/authenticateAsUser/",
+            {"contextId": context_id, "userId": user_id},
+        )
         auth_result_mapping = _auth_result_mapping(auth_result)
         auth_successful = auth_result_mapping is not None and _is_api_true(
             _mapping_value(auth_result_mapping, "authSuccessful")
@@ -386,7 +391,10 @@ def zap_import_context_wrap(context_id):
             # ZAP 2.17 returns ApiResponseElement.OK when it cannot find a
             # persisted auth request. Poll the configured protected URL before
             # failing; only its explicit pollSuccessful flag can verify the session.
-            poll_result = _ZAP.users.poll_as_user(context_id, user_id)
+            poll_result = _ZAP._request(
+                _ZAP.base + "users/action/pollAsUser/",
+                {"contextId": context_id, "userId": user_id},
+            )
             poll_mapping = _auth_result_mapping(poll_result)
             poll_successful = poll_mapping is not None and _is_api_true(
                 _mapping_value(poll_mapping, "pollSuccessful")
