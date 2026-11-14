@@ -219,6 +219,7 @@ def zap_import_context_wrap(context_id):
                 "POLL_URL",
                 pollurl=f"{origin}/furimadeck-dashboard",
                 polldata="",
+                pollheaders="",
                 pollfrequency=1,
                 pollfrequencyunits="REQUESTS",
             ),
