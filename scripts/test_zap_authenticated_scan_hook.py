@@ -549,7 +549,30 @@ class AuthenticatedZapHookTest(unittest.TestCase):
         self.assertNotIn("secret-placeholder", str(raised.exception))
         self.assertNotIn("secret-placeholder", output.getvalue())
         self.assertNotIn("private-response-placeholder", output.getvalue())
+        self.assertIn("success_flag_type=string", str(raised.exception))
         self.assertFalse(self.context_file.exists())
+
+    def test_authentication_failure_diagnostic_contains_only_bounded_metadata(self):
+        diagnostic = HOOK._auth_failure_diagnostic(
+            {
+                "authSuccessful": "false",
+                "responseHeader": (
+                    "HTTP/1.1 302 Found\r\n"
+                    "Location: https://127.0.0.1:8443/furimadeck-dashboard\r\n"
+                    "Set-Cookie: session=private-cookie"
+                ),
+                "responseBody": "private-response-placeholder",
+            },
+            HOOK._auth_indicator("https://127.0.0.1:8443"),
+            HOOK._logged_out_indicator("https://127.0.0.1:8443"),
+        )
+
+        self.assertIn("success_flag_type=string", diagnostic)
+        self.assertIn("HTTP=302", diagnostic)
+        self.assertIn("dashboard_redirect=true", diagnostic)
+        self.assertIn("logged_in_marker=true", diagnostic)
+        self.assertNotIn("private-cookie", diagnostic)
+        self.assertNotIn("private-response-placeholder", diagnostic)
 
     def test_fails_closed_when_authentication_response_is_ambiguous(self):
         for response in (
@@ -648,3 +671,4 @@ class AuthenticatedZapWorkflowPolicyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

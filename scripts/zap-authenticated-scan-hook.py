@@ -134,6 +134,44 @@ def _mapping_value(response, name):
     return next((value for key, value in response.items() if str(key).lower() == wanted), None)
 
 
+def _auth_failure_diagnostic(response, logged_in_indicator, logged_out_indicator):
+    """Return bounded auth metadata without exposing headers, bodies, or credentials."""
+    if not isinstance(response, dict):
+        return "response=unexpected"
+
+    success = _mapping_value(response, "authSuccessful")
+    if success is None:
+        success_kind = "missing"
+    elif isinstance(success, bool):
+        success_kind = "boolean"
+    elif isinstance(success, str):
+        success_kind = "string"
+    else:
+        success_kind = "other"
+
+    response_headers = _mapping_value(response, "responseHeader")
+    response_body = _mapping_value(response, "responseBody")
+    safe_response = "\n".join(
+        value for value in (response_headers, response_body) if isinstance(value, str)
+    )
+    status_match = re.search(r"(?im)^HTTP/[0-9.]+[ \t]+([0-9]{3})\b", safe_response)
+    status = status_match.group(1) if status_match else "unknown"
+    dashboard_redirect = bool(
+        re.search(
+            r"(?im)^Location:[ \t]*(?:https://(?:127\.0\.0\.1|localhost)(?::[0-9]+)?|)/furimadeck-dashboard(?:[?#][^\r\n]*)?[ \t]*\r?$",
+            safe_response,
+        )
+    )
+    logged_in_match = bool(re.search(logged_in_indicator, safe_response, re.IGNORECASE | re.MULTILINE))
+    logged_out_match = bool(re.search(logged_out_indicator, safe_response, re.IGNORECASE | re.MULTILINE))
+    return (
+        f"success_flag_type={success_kind}; HTTP={status}; "
+        f"dashboard_redirect={str(dashboard_redirect).lower()}; "
+        f"logged_in_marker={str(logged_in_match).lower()}; "
+        f"logged_out_marker={str(logged_out_match).lower()}"
+    )
+
+
 def _auth_indicator(origin):
     dashboard_url = re.escape(f"{origin}/furimadeck-dashboard")
     return (
@@ -299,7 +337,12 @@ def zap_import_context_wrap(context_id):
             not isinstance(auth_result, dict)
             or _mapping_value(auth_result, "authSuccessful") != "true"
         ):
-            raise RuntimeError("ZAP could not authenticate the disposable scan user.")
+            diagnostic = _auth_failure_diagnostic(
+                auth_result, logged_in_indicator, logged_out_indicator
+            )
+            raise RuntimeError(
+                f"ZAP could not authenticate the disposable scan user ({diagnostic})."
+            )
     except Exception as error:
         if isinstance(error, RuntimeError) and str(error).startswith("ZAP "):
             raise
@@ -322,3 +365,4 @@ def zap_get_alerts(zap, baseurl, ignore_scan_rules, out_of_scope_dict):
     if pending_records != 0:
         raise RuntimeError("ZAP passive scan is incomplete; refusing to accept a partial report.")
     return zap, baseurl, ignore_scan_rules, out_of_scope_dict
+
