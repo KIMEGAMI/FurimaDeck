@@ -12,8 +12,12 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('フリマ販売の収益管理', false);
-        $response->assertSee('images/furimadeck-hero.png?v=', false);
-        $response->assertSee('images/furimadeck-value.png?v=', false);
+        foreach (['furimadeck-hero.png', 'furimadeck-value.png'] as $image) {
+            $hash = hash_file('sha256', public_path('images/'.$image));
+
+            $this->assertIsString($hash);
+            $response->assertSee('images/'.$image.'?v='.$hash, false);
+        }
     }
 
     public function test_sitemap_is_available(): void
