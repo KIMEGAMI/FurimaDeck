@@ -587,12 +587,28 @@ class AuthenticatedZapHookTest(unittest.TestCase):
         )
         self.assertNotIn("private-response-placeholder", diagnostic)
 
+    def test_accepts_json_encoded_authentication_response_without_logging_it(self):
+        zap = FakeZap(
+            users=FakeUsers(
+                auth_result=(
+                    '{"authSuccessful":true,"responseBody":"private-response-placeholder"}'
+                )
+            )
+        )
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            self._run_full_setup(zap)
+
+        self.assertTrue(zap.users.authenticated)
+        self.assertNotIn("private-response-placeholder", output.getvalue())
+
     def test_fails_closed_when_authentication_response_is_ambiguous(self):
         for response in (
             "not-confirmed",
             "true",
-            {"authSuccessful": True},
-            {"authSuccessful": "TRUE"},
+            {"authSuccessful": False},
+            {"authSuccessful": "false"},
             {"id": "41", "responseHeader": "HTTP/1.1 302 Found"},
         ):
             with self.subTest(response_type=type(response).__name__):

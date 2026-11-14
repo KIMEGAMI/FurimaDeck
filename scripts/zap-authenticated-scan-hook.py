@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -134,9 +135,26 @@ def _mapping_value(response, name):
     return next((value for key, value in response.items() if str(key).lower() == wanted), None)
 
 
+def _auth_result_mapping(response):
+    if isinstance(response, dict):
+        return response
+    if isinstance(response, str):
+        try:
+            decoded = json.loads(response)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        return decoded if isinstance(decoded, dict) else None
+    return None
+
+
+def _is_api_true(value):
+    return value is True or (isinstance(value, str) and value.casefold() == "true")
+
+
 def _auth_failure_diagnostic(response, logged_in_indicator, logged_out_indicator):
     """Return bounded auth metadata without exposing headers, bodies, or credentials."""
-    if not isinstance(response, dict):
+    response_mapping = _auth_result_mapping(response)
+    if response_mapping is None:
         response_type = {
             str: "string",
             list: "list",
@@ -147,7 +165,7 @@ def _auth_failure_diagnostic(response, logged_in_indicator, logged_out_indicator
         }.get(type(response), "other")
         return f"response=unexpected; response_type={response_type}"
 
-    success = _mapping_value(response, "authSuccessful")
+    success = _mapping_value(response_mapping, "authSuccessful")
     if success is None:
         success_kind = "missing"
     elif isinstance(success, bool):
@@ -157,8 +175,8 @@ def _auth_failure_diagnostic(response, logged_in_indicator, logged_out_indicator
     else:
         success_kind = "other"
 
-    response_headers = _mapping_value(response, "responseHeader")
-    response_body = _mapping_value(response, "responseBody")
+    response_headers = _mapping_value(response_mapping, "responseHeader")
+    response_body = _mapping_value(response_mapping, "responseBody")
     safe_response = "\n".join(
         value for value in (response_headers, response_body) if isinstance(value, str)
     )
@@ -341,9 +359,10 @@ def zap_import_context_wrap(context_id):
         # This action executes the configured login and checks the logged-in
         # indicator against its response. Do not treat configuration alone as proof.
         auth_result = _ZAP.users.authenticate_as_user(context_id, user_id)
+        auth_result_mapping = _auth_result_mapping(auth_result)
         if (
-            not isinstance(auth_result, dict)
-            or _mapping_value(auth_result, "authSuccessful") != "true"
+            auth_result_mapping is None
+            or not _is_api_true(_mapping_value(auth_result_mapping, "authSuccessful"))
         ):
             diagnostic = _auth_failure_diagnostic(
                 auth_result, logged_in_indicator, logged_out_indicator

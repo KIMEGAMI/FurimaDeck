@@ -1,5 +1,5 @@
-Warning: truncated output (original token count: 104878)
-Total output lines: 1035
+Warning: truncated output (original token count: 105121)
+Total output lines: 1042
 
 # FurimaDeck 1.0 Release Grade Test Specification
 
@@ -298,8 +298,7 @@ Money Forwardサポートの2026/10/23回答では、免税設定で税区分・
 - 2026-10-28のMoney Forward CSVマスタ二重読込修正: CSV出力時に勘定科目・税区分マスタを検証用と出力用で2回取得していたため、1回取得した同一スナップショットを両方で使うよう変更した。出力ごとに各マスタを1回だけ読む回帰確認を追加。Money Forward関連テスト89件・538 assertions、対象Pint、`git diff --check`が成功。HTTPはfake、外部会計API・業務DB・本番は未使用。
 - 2026-10-28の1.0会計API非表示回帰確認: リリースゲート無効時、個別・一括のfreee/Money Forward仕訳送信とAPI再照合ボタンが会計画面に表示されないことをFeatureテストに追加し、該当テスト1件・15 assertionsが成功。URL直打ちの404と既存待機ジョブの送信停止も同テスト群で維持。Pintと対象差分チェック成功。外部サービス、DB、本番への接続・変更なし。
 - 2026-10-28の現行作業ツリー全体PHPUnit再確認: `scripts/run-phpunit.ps1` はPHP 8.5.12で946件中941件成功・5件スキップ、6,365 assertions、終了コード0。スキップはMariaDB opt-in 4件と開発R2実接続1件。会計CSVサービス単体38件・129 assertions、手順書Feature 2件・48 assertionsも成功（全体結果に含まれる）。標準PHPUnitの起動失敗は、PHPUnit `BootstrapLoader` が `is_readable()` falseで止まるためと特定。同じPHPプロセスで `fopen`・`require` は成功し、ACLにも読み取り権限があるが、Windows/PHP側の判定差の根本原因は未特定。vendorやDBは変更していない。ステージ済み・未ステージ双方の `git diff --check` に空白エラーなし（CRLF警告のみ）。Money Forwardへの再アップロード・保存・登録、Stripe、業務DB、本番、GitHub CIへの操作なし。
-- 2026-10-28の追加会計テスト: ホストPHP 8.5.12で会計関連テスト379件・2,627 assertionsが成功。商品・出品・販売画面から会計入力ができないことと、通常の商品更新…54878 tokens truncated…複数画像・画像順序・出品・販売/返品・主要画面・モバイル幅・PWA・CSVプレビュー/取込などを確認。E2E後に隔離DB/Storageと8002番待受けがないこと、プロジェクト専用プロファイルのChromeプロセス0件を確認。実ユーザーデータ、外部サービス、本番、CIは使用していない。
-- 2026-11-13 PC表示を保つモバイル幅境界の修正: 画像撮影UI・ダッシュボード改修とは別のグローバル`app.css`で、色・入力・ナビ等のモバイル用ルールが1023px幅まで適用されることを発見。スマートフォン用ルールを639px以下に限定し、PC/タブレット幅へ漏れない境界に統一。E2Eへ639px/640pxのスタイル境界assertionを追加し、1440pxの既存PCスタイルassertionも維持。Vite build、JS構文確認、境界E2E 1件成功。E2Eの隔離DB/Storage、8002番待受け、専用Chromeプロセスは実行後0件。これは代表的なCSS寸法の回帰確認で、全PC画面のピクセル単位比較ではない。
+- 2026-10-28の追加会計テスト: ホストPHP 8.5.12で会計関連テスト379件・2,627 assertionsが成功。商品・出品・販売画面から会計入力ができないことと、通常の商品更新…55121 tokens truncated…行後0件。これは代表的なCSS寸法の回帰確認で、全PC画面のピクセル単位比較ではない。
 - 2026-11-13 CSS境界変更後の全Browser E2E: 現行ビルドで全28 tests成功（45.1秒）。639px/640px境界と1440pxの既存デスクトップ寸法assertion、768pxを含む横はみ出し確認を通過。テスト後、固有SQLite/Storageなし、専用Chromeプロセス0件、再確認時の8002番待受け0件。初回の終了直後スナップショットは待受け6件を示したが、所有PID照会時に該当接続が消え、`Get-NetTCPConnection`と`netstat`の再確認はいずれも0件だったため、プロセス停止は行っていない。実データ、本番、外部サービス、CI未使用。
 - 2026-11-13 現行GO判定スナップショット: **判定はNO-GO**。ローカル隔離PHPUnit 1,057 tests（1,049 passed、8 skipped、7,177 assertions）、MySQL 8.4とMariaDB 11.4各7 tests / 59 assertions、CSS境界修正後Browser E2E 28/28 passed。PC表示は1440pxの主要寸法と640px境界をassertionで確認したが、全画面のピクセル比較・実機カメラは未検証。開発DBの画像削除outbox migrationはbatch 25 `Ran`、行数0で、再実行なし。
   - GOを妨げる外部証拠: Resendドメインの`Verified`/`Sending enabled`と実メール到達、Google OAuth実Callback、Stripe Live Checkout/Portal/Webhook、freee/Money Forward OAuth読取と手数料・販売送料・梱包費・仕入の各CSV実取込、本番VPSのR2保存・DBバックアップ/復元、本番設定確認。
@@ -532,4 +531,11 @@ PR #37のworkflowがZAPへ渡す`api.addrs.addr.name`正規表現はlocalhostと
 - 認証付きDASTの前段で一時ユーザーのログイン・セッション更新・保護Dashboard HTTP 200を確認。ZAP API呼び出し結果はコード想定の辞書ではなく、ログには`response=unexpected`だけが記録されていた。失敗レスポンス本文・ヘッダー等は出ていないため、戻り値の型はまだ不明。
 - 作業ツリーでは許可リスト化したPython型名のみを追加記録し、応答データを出さない切り分けテストを追加。`python -m unittest scripts.test_zap_authenticated_scan_hook`は22 tests成功、`git diff --check`成功。PR未反映、同SHAの再確認前。
 - ZAP成功やレポート生成を確認できておらず、1.0リリース判定はNO-GO。本番DB復元、Live決済/Webhook、本番Google OAuth、freee/Money Forward実取込、本番VPS R2画像CRUDも未確認。
+
+## 2026-11-14 PR #38 ZAP API応答解析の修正候補
+
+- head SHA `ad9eaa04bf24b38601e0f0eb47cbe29295e98a15`のCIのテスト・MariaDB gate、SecurityのSecret scan・Semgrep・Dependency reviewは成功。ZAP active DASTは失敗。
+- ZAPフォームログインと保護Dashboard HTTP 200は成功。ZAPの`authenticateAsUser`戻り値は辞書でなく文字列型。本文はログに出していないため、JSON形式かどうかは未確認。
+- 作業ツリーに、文字列をJSONとして厳密に解析し、オブジェクト内の明示的な`authSuccessful=true`のみを受け入れる修正を追加。文字列・JSON値・falseの回帰テストを含め23 tests成功、`git diff --check`成功。まだPR未反映で、ZAP公式APIの実応答形式や修正の有効性は次の同SHA検証待ち。
+- 1.0はNO-GO。本番DB復元、Stripe Live/Webhook、Google OAuth本番、会計サービス実取込、本番VPS R2画像CRUDも未確認。
 
