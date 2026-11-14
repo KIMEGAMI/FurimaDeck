@@ -23,3 +23,14 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(?:css|gif|ico|jpe?g|js|json|map|png|svg|webmanifest|webp|woff2?)$">
+        Header always set X-Content-Type-Options "nosniff"
+        Header always set X-Frame-Options "DENY"
+        Header always set Referrer-Policy "strict-origin-when-cross-origin"
+        Header always set Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+        Header always set Cross-Origin-Opener-Policy "same-origin"
+        Header always set Cross-Origin-Resource-Policy "same-origin"
+    </FilesMatch>
+</IfModule>
