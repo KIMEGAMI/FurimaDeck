@@ -557,3 +557,11 @@ PR #37のworkflowがZAPへ渡す`api.addrs.addr.name`正規表現はlocalhostと
 - 失敗時に限りApacheのサニタイズ済みアクセスログを既存集計スクリプトへ渡すWorkflow変更を追加。集計対象はDashboardのHTTP status・session cookie有無とログイン/ログアウトの件数のみ。URLクエリ、Cookie値、メール、リクエスト本文は出力しない。正常完了時の二重集計は抑止する。
 - これは原因診断用の変更であり、認証失敗を許容したりZAP判定を弱めたりしない。ローカル検査後、PRブランチ更新で自動起動する最新CI/Security結果を確認する。手動の再実行はしない。
 - 1.0リリース判定は引き続きNO-GO。ZAP認証付きDASTの成功に加え、本番DBバックアップ復元、Stripe Live/Webhook/Portal、Google OAuth本番、freee/Money Forward実取込、本番VPS R2画像CRUDが未確認。
+
+## 2026-11-14 ZAP CSRF失敗とモバイル横はみ出しの切り分け
+
+- PR #38 head `f9cc892bca1c0fac83e7d0cf5eee5c14f48bd4b0`で、認証付きZAP DASTは失敗。追加した集計ログでは保護Dashboard要求36件中36件がHTTP 302、セッションCookieあり35件、なし1件。ログインGETは6件すべてHTTP 200、ログインPOSTは5件すべてHTTP 419で、成功POSTは0件。CSRF拒否と認証状態が維持されないことを確認した。ユーザー名、Cookie値、本文は記録していない。
+- 同SHAのTest and buildでは、E2E 29件中28件成功。1件はモバイル幅テストで`documentElement.scrollWidth > window.innerWidth`となった。どの画面・幅・要素かは既存CIログに記録されておらず未確定。
+- 次の診断変更はログインPOSTのセッションCookie有無を集計し、E2E失敗時は対象画面・幅・はみ出し要素のタグ/ID/classと矩形だけを出す。ページ本文や入力値は出さない。認証判定、横はみ出し基準は弱めない。
+- ZAP公式手順はフォーム認証のCSRF token名設定とCookie session managementを要求している。一次資料: https://www.zaproxy.org/docs/desktop/start/features/authmethods/ および https://www.zaproxy.org/docs/authentication/session-handling/ 。正しい設定だけでは本アプリの実認証成功の証拠にならないため、次の隔離CIで再検証する。
+- 関連Nodeテスト11件とE2Eファイル構文検査はローカル成功。実画面E2Eはローカル起動が長時間出力せず完了しなかったため、切り分け未完了。1.0はNO-GO。

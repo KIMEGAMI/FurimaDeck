@@ -11,7 +11,7 @@ test('accepts authenticated dashboard scan requests and reports status counts on
     'POST /login 302 1',
   ].join('\n'));
 
-  assert.equal(summary, 'Authenticated ZAP dashboard requests: total=2; session-cookie-present=2; HTTP statuses=200:2; /logout requests=1; /logout method-status=POST:419:1; /login requests=2; /login successful-posts=1; /login method-status=GET:200:1,POST:302:1');
+  assert.equal(summary, 'Authenticated ZAP dashboard requests: total=2; session-cookie-present=2; HTTP statuses=200:2; /logout requests=1; /logout method-status=POST:419:1; /login requests=2; /login successful-posts=1; /login POST session-cookie-present=1; missing=0; /login method-status=GET:200:1,POST:302:1');
   assert.equal(summary.includes('cookie-value'), false);
 });
 
@@ -70,4 +70,17 @@ test('does not disclose unrecognized request paths in diagnostics', () => {
 
   assert.equal(summary.includes('private@example.invalid'), false);
   assert.match(summary, /\/logout requests=1; \/logout method-status=POST:302/);
+});
+
+test('reports only aggregate cookie-presence counts for failed login posts', () => {
+  assert.throws(() => summarizeAuthenticatedZapAccessLog([
+    'GET /furimadeck-dashboard 302 -',
+    'GET /login 200 1',
+    'POST /login 419 1',
+    'POST /login 419 -',
+  ].join('\n')), (error) => {
+    assert.match(error.message, /\/login POST session-cookie-present=1; missing=1/);
+    assert.doesNotMatch(error.message, /session=[A-Za-z0-9]/);
+    return true;
+  });
 });

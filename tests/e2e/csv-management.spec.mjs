@@ -561,7 +561,31 @@ test('dashboard, products, and accounting stay within a mobile viewport', async 
       { width: 768, height: 1024 },
     ]) {
       await page.setViewportSize(viewport);
-      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const viewportHasNoOverflow = await page.waitForFunction(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+        undefined,
+        { timeout: 5000 },
+      ).then(() => true).catch(() => false);
+      if (!viewportHasNoOverflow) {
+        const overflowDetails = await page.evaluate(() => {
+          const viewportWidth = window.innerWidth;
+          const elements = Array.from(document.body.querySelectorAll('*'))
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              const className = typeof element.className === 'string' ? element.className : '';
+              return {
+                selector: `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}${className ? `.${className.trim().split(/\\s+/).slice(0, 3).join('.')}` : ''}`,
+                left: Math.round(rect.left),
+                right: Math.round(rect.right),
+                width: Math.round(rect.width),
+              };
+            })
+            .filter((element) => element.right > viewportWidth || element.left < 0)
+            .slice(0, 8);
+          return { viewportWidth, documentWidth: document.documentElement.scrollWidth, elements };
+        });
+        expect(viewportHasNoOverflow, `Horizontal overflow on ${path} at ${viewport.width}px: ${JSON.stringify(overflowDetails)}`).toBe(true);
+      }
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
