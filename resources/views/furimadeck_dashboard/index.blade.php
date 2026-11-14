@@ -220,14 +220,14 @@
         </div>
     </div>
 
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}">
         const dashboardCollapsibleSections = document.querySelectorAll('#furimadeck-dashboard .dashboard-mobile-collapsible');
         if (window.matchMedia('(max-width: 639px)').matches) {
             dashboardCollapsibleSections.forEach((section) => section.removeAttribute('open'));
         }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script nonce="{{ Vite::cspNonce() }}">
         const monthlySalesChart = document.getElementById('furimadeckMonthlySalesChart');
         if (monthlySalesChart && window.Chart) {
             new Chart(monthlySalesChart, {

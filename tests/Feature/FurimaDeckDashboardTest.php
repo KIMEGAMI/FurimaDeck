@@ -261,8 +261,10 @@ class FurimaDeckDashboardTest extends TestCase
             ->assertSee('text-cyan-200">商品管理</p>', false)
             ->assertSee('text-cyan-200">分析</p>', false)
             ->assertSee('text-cyan-200">アカウント</p>', false)
-            ->assertSee('@mouseleave="$el.open = false"', false)
-            ->assertSee('@keydown.escape="$el.open = false"', false)
+            ->assertSee('data-mobile-nav-toggle', false)
+            ->assertSee('<details class="group relative">', false)
+            ->assertDontSee('@mouseleave=', false)
+            ->assertDontSee('@keydown.escape=', false)
             ->assertDontSee('top-full z-50 mt-2', false)
             ->assertDontSee('class="group relative" open', false);
     }

@@ -158,7 +158,7 @@
                     </div>
                 @endif
             </section>
-            <script>
+            <script nonce="{{ Vite::cspNonce() }}">
                 document.querySelectorAll('[data-delete-image-url]').forEach(function (button) {
                     button.addEventListener('click', function () {
                         if (!window.confirm('この画像を削除しますか？')) return;

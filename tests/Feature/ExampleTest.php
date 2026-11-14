@@ -135,11 +135,16 @@ class ExampleTest extends TestCase
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/javascript; charset=UTF-8');
         $response->assertHeader('Service-Worker-Allowed', '/');
+        $response->assertHeader('Content-Security-Policy');
         $response->assertSee('self.addEventListener', false);
         $response->assertSee("const CACHE_PREFIX = 'furimadeck-pwa-';", false);
         $response->assertSee('key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME', false);
         $response->assertSee('event.waitUntil(responsePromise.then(() => cacheWritePromise).catch(() => undefined));', false);
         $response->assertSee('furimadeck-pwa-v3', false);
+        preg_match("/script-src 'self' 'nonce-([^']+)' 'strict-dynamic'/", $response->headers->get('Content-Security-Policy'), $nonceMatch);
+        $this->assertNotEmpty($nonceMatch[1] ?? null);
+        $response->assertSee('const OFFLINE_CSP_NONCE = '.json_encode($nonceMatch[1]).';', false);
+        $response->assertSee('<script nonce="${OFFLINE_CSP_NONCE}">', false);
         $encodedRetryLabel = json_encode('再接続する');
         $this->assertIsString($encodedRetryLabel);
         $response->assertSee('const OFFLINE_RETRY_LABEL = '.$encodedRetryLabel.';', false);

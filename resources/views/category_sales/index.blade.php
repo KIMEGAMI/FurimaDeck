@@ -81,8 +81,8 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script nonce="{{ Vite::cspNonce() }}">
         const categoryLabels = @json($chartLabels);
         const categorySalesData = @json($chartSalesData);
         const categoryProfitData = @json($chartProfitData);

@@ -77,8 +77,8 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script nonce="{{ Vite::cspNonce() }}">
         const yen = value => `¥${Number(value).toLocaleString()}`;
         const renderCategoryChart = (elementId, config) => {
             const canvas = document.getElementById(elementId);

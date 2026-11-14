@@ -96,7 +96,7 @@
     <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @foreach ($schemas as $schemaItem)
-        <script type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
+        <script nonce="{{ Vite::cspNonce() }}" type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
     @endforeach
 </head>
 <body class="bg-slate-100 text-slate-900 antialiased">

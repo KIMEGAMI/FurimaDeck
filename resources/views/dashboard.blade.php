@@ -248,8 +248,8 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script nonce="{{ Vite::cspNonce() }}">
         const monthlyChartLabels = @json($monthlyChartLabels);
         const monthlyChartSales = @json($monthlyChartSales);
         const monthlyChartProfit = @json($monthlyChartProfit);

@@ -102,7 +102,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
     @foreach ($schemas as $schemaItem)
-        <script type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
+        <script nonce="{{ Vite::cspNonce() }}" type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
     @endforeach
 </head>
 <body class="bg-white text-slate-950 antialiased">
