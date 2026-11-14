@@ -5,6 +5,10 @@
 
     RewriteEngine On
 
+    # Product images must be served through the owner-authorized Laravel route.
+    # Keep unrelated public storage (for example legacy listing images) available.
+    RewriteRule ^storage/products(?:/|$) - [F,L,NC]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
