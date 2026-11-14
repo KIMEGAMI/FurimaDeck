@@ -128,7 +128,25 @@ jobs:
           php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force --no-interaction
           setsid php artisan serve --host=127.0.0.1 --port=8003 > "$RUNNER_TEMP/furimadeck-zap-app.log" 2>&1 &
           app_pid=$!
-          trap 'sudo systemctl stop apache2 2>/dev/null || true; kill -- -"$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; if [ -n "$auth_credentials_file" ]; then rm -f -- "$auth_credentials_file"; fi; if [ -n "$auth_runtime_credentials_file" ]; then sudo rm -f -- "$auth_runtime_credentials_file"; fi; if [ -n "$auth_hook_file" ]; then sudo rm -f -- "$auth_hook_file"; fi; rm -f -- "$RUNNER_TEMP/zap/furimadeck-zap-auth-context.xml"' EXIT
+          auth_log=""
+          auth_log_offset=""
+          auth_log_reported=false
+          cleanup_security_scan() {
+            exit_status=$?
+            if [ "$exit_status" -ne 0 ] && [ "$auth_log_reported" != true ] && [ -n "$auth_log" ] && [ -f "$auth_log" ] && [[ "$auth_log_offset" =~ ^[0-9]+$ ]]; then
+              echo 'Authenticated ZAP failed; emitting aggregate access-log diagnostics only.' >&2
+              node scripts/check-authenticated-zap-access-log.mjs "$auth_log" "$auth_log_offset" || true
+            fi
+            sudo systemctl stop apache2 2>/dev/null || true
+            kill -- -"$app_pid" 2>/dev/null || true
+            wait "$app_pid" 2>/dev/null || true
+            if [ -n "$auth_credentials_file" ]; then rm -f -- "$auth_credentials_file"; fi
+            if [ -n "$auth_runtime_credentials_file" ]; then sudo rm -f -- "$auth_runtime_credentials_file"; fi
+            if [ -n "$auth_hook_file" ]; then sudo rm -f -- "$auth_hook_file"; fi
+            rm -f -- "$RUNNER_TEMP/zap/furimadeck-zap-auth-context.xml"
+            exit "$exit_status"
+          }
+          trap cleanup_security_scan EXIT
           for attempt in $(seq 1 60); do
             if curl --fail --silent --output /dev/null http://127.0.0.1:8003/up; then
               break
@@ -450,6 +468,7 @@ jobs:
             sh "$APP_URL/furimadeck-dashboard"
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"
           node scripts/check-authenticated-zap-access-log.mjs "$auth_log" "$auth_log_offset"
+          auth_log_reported=true
           ZAP_AUTH_REPORT="$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json" node <<'NODE'
           const fs = require('node:fs');
           const report = JSON.parse(fs.readFileSync(process.env.ZAP_AUTH_REPORT, 'utf8'));

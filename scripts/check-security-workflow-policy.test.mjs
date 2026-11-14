@@ -34,3 +34,11 @@ test('the disposable ZAP credential file is private and removed on exit', () => 
   assert.ok(workflow.includes('--hook=/zap/wrk/furimadeck-zap-authenticated-scan-hook.py'));
   assert.ok(workflow.includes("docker run --rm --entrypoint /bin/sh \"$zap_image\" -c 'id -u; id -g'"));
 });
+
+test('failed authenticated ZAP scans emit only aggregate access-log diagnostics before cleanup', () => {
+  assert.ok(workflow.includes('auth_log_reported=false'));
+  assert.ok(workflow.includes('if [ "$exit_status" -ne 0 ] && [ "$auth_log_reported" != true ]'));
+  assert.ok(workflow.includes('node scripts/check-authenticated-zap-access-log.mjs "$auth_log" "$auth_log_offset" || true'));
+  assert.ok(workflow.includes('trap cleanup_security_scan EXIT'));
+  assert.ok(workflow.includes('auth_log_reported=true'));
+});

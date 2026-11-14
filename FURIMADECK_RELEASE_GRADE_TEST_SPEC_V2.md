@@ -550,3 +550,10 @@ PR #37のworkflowがZAPへ渡す`api.addrs.addr.name`正規表現はlocalhostと
 - 失敗ログはフォーム認証試行後に`authSuccessful`型と`pollSuccessful`型が両方欠落したと示した。公式ZAP Pythonクライアントの`authenticate_as_user`/`poll_as_user`はAPI JSONの先頭値のみを返し、応答セット内の成功フラグを落とす。ZAP認証失敗やアプリログイン失敗とは判断できない。公式ソース: https://github.com/zaproxy/zap-api-python/blob/main/src/zapv2/users.py
 - フックはクライアントの`_request`で認証・ポーリングの完全なJSON応答を取得するよう変更。ローカル関連25テスト、`git diff --check`成功。これはCI上のZAP再検証成功を意味しない。
 - 修正版はPRへ未反映。ユーザーからCI再実行禁止の指示があるため、手動実行はしない。PR更新で通常発火する検証の確認が必要。1.0はNO-GO。本番DB復元、Stripe Live/Webhook、Google OAuth本番、会計実サービス取込、本番VPS R2画像CRUDも未確認。
+
+## 2026-11-14 認証付きZAP失敗時の安全な集計診断
+
+- PR #38 head `14145b8af9ed9d55e2282c82e28cbbcc744e0a17`で、ZAP認証前段と保護DashboardのHTTP 200確認は成功した一方、スキャン中にZAP Insightsが認証失敗を検出しScannerを停止した。認証付きレポートは未生成。原因は未確定で、ログイン成功だけではスキャン中のセッション維持を証明しない。
+- 失敗時に限りApacheのサニタイズ済みアクセスログを既存集計スクリプトへ渡すWorkflow変更を追加。集計対象はDashboardのHTTP status・session cookie有無とログイン/ログアウトの件数のみ。URLクエリ、Cookie値、メール、リクエスト本文は出力しない。正常完了時の二重集計は抑止する。
+- これは原因診断用の変更であり、認証失敗を許容したりZAP判定を弱めたりしない。ローカル検査後、PRブランチ更新で自動起動する最新CI/Security結果を確認する。手動の再実行はしない。
+- 1.0リリース判定は引き続きNO-GO。ZAP認証付きDASTの成功に加え、本番DBバックアップ復元、Stripe Live/Webhook/Portal、Google OAuth本番、freee/Money Forward実取込、本番VPS R2画像CRUDが未確認。
