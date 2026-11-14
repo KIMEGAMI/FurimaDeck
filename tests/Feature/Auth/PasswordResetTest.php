@@ -40,9 +40,41 @@ class PasswordResetTest extends TestCase
 
         $user = User::factory()->create();
 
-        $this->post('/forgot-password', ['email' => $user->email]);
+        $response = $this
+            ->from('/forgot-password')
+            ->post('/forgot-password', ['email' => $user->email]);
 
+        $response
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHas('status', '入力を受け付けました。該当するアカウントがあり、送信可能な場合は再設定用メールを送信します。届かない場合は時間をおいて再度お試しください。');
         Notification::assertSentTo($user, ResetPassword::class);
+    }
+
+    public function test_unknown_email_receives_generic_password_reset_feedback(): void
+    {
+        Notification::fake();
+
+        $response = $this->from('/forgot-password')
+            ->post('/forgot-password', ['email' => 'unknown@example.com']);
+
+        $response
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHas('status', '入力を受け付けました。該当するアカウントがあり、送信可能な場合は再設定用メールを送信します。届かない場合は時間をおいて再度お試しください。')
+            ->assertSessionHasNoErrors();
+        Notification::assertNothingSent();
+    }
+
+    public function test_password_reset_throttle_feedback_does_not_reveal_account_existence(): void
+    {
+        Password::shouldReceive('sendResetLink')
+            ->once()
+            ->andReturn(Password::RESET_THROTTLED);
+
+        $this->from('/forgot-password')
+            ->post('/forgot-password', ['email' => 'known@example.com'])
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHas('status', '入力を受け付けました。該当するアカウントがあり、送信可能な場合は再設定用メールを送信します。届かない場合は時間をおいて再度お試しください。')
+            ->assertSessionHasNoErrors();
     }
 
     public function test_reset_password_link_can_be_requested_with_uppercase_email_input(): void
@@ -58,7 +90,7 @@ class PasswordResetTest extends TestCase
         Notification::assertSentTo($user, ResetPassword::class);
     }
 
-    public function test_reset_password_request_returns_validation_error_when_mail_transport_fails(): void
+    public function test_reset_password_request_returns_generic_feedback_when_mail_transport_fails(): void
     {
         Password::shouldReceive('sendResetLink')
             ->once()
@@ -70,10 +102,11 @@ class PasswordResetTest extends TestCase
 
         $response
             ->assertRedirect('/forgot-password')
-            ->assertSessionHasErrors('email');
+            ->assertSessionHas('status', '入力を受け付けました。該当するアカウントがあり、送信可能な場合は再設定用メールを送信します。届かない場合は時間をおいて再度お試しください。')
+            ->assertSessionHasNoErrors();
     }
 
-    public function test_reset_password_request_returns_validation_error_when_unexpected_mail_error_happens(): void
+    public function test_reset_password_request_returns_generic_feedback_when_unexpected_mail_error_happens(): void
     {
         Password::shouldReceive('sendResetLink')
             ->once()
@@ -85,8 +118,8 @@ class PasswordResetTest extends TestCase
 
         $response
             ->assertRedirect('/forgot-password')
-            ->assertSessionHasErrors('email')
-            ->assertSessionHasInput('email', 'user@example.com');
+            ->assertSessionHas('status', '入力を受け付けました。該当するアカウントがあり、送信可能な場合は再設定用メールを送信します。届かない場合は時間をおいて再度お試しください。')
+            ->assertSessionHasNoErrors();
     }
 
     public function test_reset_password_screen_can_be_rendered(): void

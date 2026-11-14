@@ -3,18 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\FurimaDeckStripeSubscriptionPriceMatcher;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Throwable;
 
 class FurimaDeckStripeWebhookController extends Controller
 {
     private const WEBHOOK_TOLERANCE_SECONDS = 300;
 
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, FurimaDeckStripeSubscriptionPriceMatcher $priceMatcher): Response
     {
         if (! (bool) config('furimadeck.cutover_enabled')) {
             return response('Not found', 404);
@@ -43,13 +46,12 @@ class FurimaDeckStripeWebhookController extends Controller
 
         try {
             $object = data_get($event, 'data.object', []);
-            $eventCreatedAt = is_numeric(data_get($event, 'created')) ? (int) data_get($event, 'created') : null;
 
             match ($eventType) {
                 'checkout.session.completed' => $this->handleCheckoutCompleted($object),
                 'customer.subscription.created',
                 'customer.subscription.updated',
-                'customer.subscription.deleted' => $this->syncSubscription($object, $eventCreatedAt),
+                'customer.subscription.deleted' => $this->syncSubscription($object, $priceMatcher),
                 default => null,
             };
         } catch (Throwable) {
@@ -76,30 +78,41 @@ class FurimaDeckStripeWebhookController extends Controller
         }
     }
 
-    private function syncSubscription(mixed $subscription, ?int $eventCreatedAt): void
+    private function syncSubscription(mixed $subscriptionSnapshot, FurimaDeckStripeSubscriptionPriceMatcher $priceMatcher): void
     {
-        if (! is_array($subscription)) {
+        if (! is_array($subscriptionSnapshot)) {
             return;
         }
 
-        $user = $this->resolveUser($subscription);
+        $user = $this->resolveUser($subscriptionSnapshot, persistCustomer: false);
         if (! $user) {
             return;
         }
 
-        $eventCreated = $eventCreatedAt === null ? null : Carbon::createFromTimestampUTC($eventCreatedAt);
-        $storedEventCreated = $user->getRawOriginal('stripe_subscription_event_created_at');
-        $storedEventCreatedAt = is_string($storedEventCreated) && $storedEventCreated !== ''
-            ? Carbon::parse($storedEventCreated, 'UTC')
-            : null;
-        if ($eventCreated !== null
-            && $storedEventCreatedAt !== null
-            && $eventCreated->lt($storedEventCreatedAt)) {
+        $customerId = data_get($subscriptionSnapshot, 'customer');
+        if (! is_string($customerId) || $customerId === '') {
             return;
         }
 
-        $subscriptionId = data_get($subscription, 'id');
-        $customerId = data_get($subscription, 'customer');
+        $subscriptions = $this->currentSubscriptionsForCustomer($customerId, $priceMatcher);
+        $subscription = collect($subscriptions)
+            ->filter(fn (array $item): bool => in_array(data_get($item, 'status'), ['active', 'trialing'], true))
+            ->sortByDesc(fn (array $item): int => (int) data_get($item, 'created', 0))
+            ->first();
+        $subscription ??= collect($subscriptions)
+            ->sortByDesc(fn (array $item): int => (int) data_get($item, 'created', 0))
+            ->first();
+
+        if (! is_array($subscription)) {
+            $user->forceFill([
+                'subscription_plan' => User::SUBSCRIPTION_INACTIVE,
+                'subscription_status' => null,
+                'stripe_customer_id' => $customerId,
+            ])->save();
+
+            return;
+        }
+
         $status = (string) data_get($subscription, 'status', '');
         $periodEnd = is_numeric(data_get($subscription, 'current_period_end'))
             ? Carbon::createFromTimestamp((int) data_get($subscription, 'current_period_end'))
@@ -109,6 +122,7 @@ class FurimaDeckStripeWebhookController extends Controller
         $hasTrial = $status === 'trialing'
             || is_numeric(data_get($subscription, 'trial_start'))
             || is_numeric(data_get($subscription, 'trial_end'));
+        $subscriptionId = data_get($subscription, 'id');
 
         $user->forceFill([
             'subscription_plan' => $isActive ? User::SUBSCRIPTION_ACTIVE : User::SUBSCRIPTION_INACTIVE,
@@ -118,11 +132,64 @@ class FurimaDeckStripeWebhookController extends Controller
             'premium_started_at' => $isActive && $user->premium_started_at === null ? now() : $user->premium_started_at,
             'premium_ends_at' => $periodEnd ?? $user->premium_ends_at,
             'trial_used_at' => $hasTrial && $user->trial_used_at === null ? now() : $user->trial_used_at,
-            'stripe_subscription_event_created_at' => $eventCreated ?? $user->stripe_subscription_event_created_at,
         ])->save();
     }
 
-    private function resolveUser(array $stripeObject): ?User
+    /** @return list<array<string, mixed>> */
+    private function currentSubscriptionsForCustomer(string $customerId, FurimaDeckStripeSubscriptionPriceMatcher $priceMatcher): array
+    {
+        $secret = config('furimadeck.billing.stripe_secret');
+        if (! is_string($secret) || $secret === '') {
+            throw new RuntimeException('Stripe subscription state could not be checked.');
+        }
+
+        $apiBase = rtrim((string) config('furimadeck.billing.stripe_api_base', 'https://api.stripe.com/v1'), '/');
+        $subscriptions = [];
+        $startingAfter = null;
+
+        do {
+            $query = [
+                'customer' => $customerId,
+                'status' => 'all',
+                'limit' => 100,
+            ];
+            if (is_string($startingAfter)) {
+                $query['starting_after'] = $startingAfter;
+            }
+
+            $response = Http::timeout(10)
+                ->withToken($secret)
+                ->acceptJson()
+                ->get($apiBase.'/subscriptions', $query);
+            $page = $response->json('data');
+            if (! $response->successful() || ! is_array($page)) {
+                throw new RuntimeException('Stripe subscription state could not be checked.');
+            }
+
+            foreach ($page as $item) {
+                if (is_array($item)
+                    && data_get($item, 'customer') === $customerId
+                    && $priceMatcher->matchesConfiguredPrice($item)) {
+                    $subscriptions[] = $item;
+                }
+            }
+
+            if ($response->json('has_more') !== true) {
+                break;
+            }
+
+            $lastSubscription = end($page);
+            $nextStartingAfter = is_array($lastSubscription) ? data_get($lastSubscription, 'id') : null;
+            if (! is_string($nextStartingAfter) || $nextStartingAfter === '' || $nextStartingAfter === $startingAfter) {
+                throw new RuntimeException('Stripe subscription pagination could not be checked.');
+            }
+            $startingAfter = $nextStartingAfter;
+        } while (true);
+
+        return $subscriptions;
+    }
+
+    private function resolveUser(array $stripeObject, bool $persistCustomer = true): ?User
     {
         $customerId = data_get($stripeObject, 'customer');
         if (! is_string($customerId) || $customerId === '') {
@@ -144,7 +211,9 @@ class FurimaDeckStripeWebhookController extends Controller
             return null;
         }
 
-        $user->forceFill(['stripe_customer_id' => $customerId])->save();
+        if ($persistCustomer) {
+            $user->forceFill(['stripe_customer_id' => $customerId])->save();
+        }
 
         return $user;
     }

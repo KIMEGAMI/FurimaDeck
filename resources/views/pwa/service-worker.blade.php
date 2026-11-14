@@ -1,12 +1,13 @@
 const CACHE_NAME = @json($cacheName);
+const CACHE_PREFIX = 'furimadeck-pwa-';
 const OFFLINE_TITLE = @json($offlineTitle);
 const OFFLINE_MESSAGE = @json($offlineMessage);
 const OFFLINE_RETRY_LABEL = @json($offlineRetryLabel);
 const CORE_ASSETS = [
-    '/favicon.ico',
+    '/favicon.ico?v=3',
     '/images/logo.png',
-    '/images/icons/icon-192.png',
-    '/images/icons/icon-512.png'
+    '/images/icons/icon-192.png?v=3',
+    '/images/icons/icon-512.png?v=3'
 ];
 
 self.addEventListener('install', (event) => {
@@ -22,7 +23,7 @@ self.addEventListener('activate', (event) => {
         caches.keys()
             .then((keys) => Promise.all(
                 keys
-                    .filter((key) => key !== CACHE_NAME)
+                    .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
                     .map((key) => caches.delete(key))
             ))
             .then(() => self.clients.claim())
@@ -57,22 +58,24 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    event.respondWith(
-        caches.match(request).then((cachedResponse) => {
-            if (cachedResponse) {
-                return cachedResponse;
+    let cacheWritePromise = Promise.resolve();
+    const responsePromise = caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) {
+            return cachedResponse;
+        }
+
+        return fetch(request).then((networkResponse) => {
+            if (! networkResponse || networkResponse.status !== 200) {
+                return networkResponse;
             }
 
-            return fetch(request).then((networkResponse) => {
-                if (! networkResponse || networkResponse.status !== 200) {
-                    return networkResponse;
-                }
+            const responseToCache = networkResponse.clone();
+            cacheWritePromise = caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
 
-                const responseToCache = networkResponse.clone();
-                caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
+            return networkResponse;
+        });
+    });
 
-                return networkResponse;
-            });
-        })
-    );
+    event.respondWith(responsePromise);
+    event.waitUntil(responsePromise.then(() => cacheWritePromise).catch(() => undefined));
 });

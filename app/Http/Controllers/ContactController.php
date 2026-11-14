@@ -10,11 +10,12 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Throwable;
 
 class ContactController extends Controller
 {
-    private const UNSAFE_MAILERS = ['log', 'array'];
+    private const SUPPORTED_MAILERS = ['smtp', 'resend'];
 
     public function create(): View
     {
@@ -37,25 +38,38 @@ class ContactController extends Controller
             ]);
         }
 
-        if ($this->canSendMail()) {
-            try {
-                Mail::send('emails.contact', ['contact' => $validated], function ($message) use ($validated): void {
-                    $message
-                        ->to(config('contact.to_address'), config('contact.to_name'))
-                        ->replyTo($validated['email'], $validated['name'])
-                        ->subject(config('contact.subject_prefix').': '.$validated['subject']);
-                });
-            } catch (Throwable $exception) {
-                Log::warning('Contact mail notification failed.', [
-                    'error_class' => $exception::class,
-                ]);
+        if (! $this->canSendMail()) {
+            return back()
+                ->withErrors([
+                    'message' => 'お問い合わせの送信設定が未完了です。時間をおいて再度お試しください。',
+                ])
+                ->withInput($validated);
+        }
 
-                return back()
-                    ->withErrors([
-                        'message' => 'お問い合わせを送信できませんでした。時間をおいて再度お試しください。',
-                    ])
-                    ->withInput($validated);
+        try {
+            Mail::send('emails.contact', ['contact' => $validated], function ($message) use ($validated): void {
+                $message
+                    ->to(config('contact.to_address'), config('contact.to_name'))
+                    ->replyTo($validated['email'], $validated['name'])
+                    ->subject(config('contact.subject_prefix').': '.$validated['subject']);
+            });
+        } catch (Throwable $exception) {
+            $diagnostics = [
+                'error_class' => $exception::class,
+            ];
+
+            $responseCode = $exception instanceof TransportExceptionInterface ? $exception->getCode() : 0;
+            if ($responseCode >= 400 && $responseCode <= 599) {
+                $diagnostics['transport_response_code'] = $responseCode;
             }
+
+            Log::warning('Contact mail notification failed.', $diagnostics);
+
+            return back()
+                ->withErrors([
+                    'message' => 'お問い合わせを送信できませんでした。時間をおいて再度お試しください。',
+                ])
+                ->withInput($validated);
         }
 
         ContactInquiry::create([
@@ -89,7 +103,7 @@ class ContactController extends Controller
         return is_string($toAddress)
             && $toAddress !== ''
             && is_string($mailer)
-            && ! in_array($mailer, self::UNSAFE_MAILERS, true);
+            && in_array($mailer, self::SUPPORTED_MAILERS, true);
     }
 
     private function normalizeLineBreaks(string $value): string

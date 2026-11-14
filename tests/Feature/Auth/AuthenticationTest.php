@@ -4,7 +4,9 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use App\Notifications\SuspiciousLoginNotification;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
@@ -204,8 +206,9 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
     }
 
-    public function test_unverified_demo_user_can_authenticate_using_the_demo_login(): void
+    public function test_unverified_demo_user_cannot_authenticate_using_the_demo_login(): void
     {
+        Event::fake([Login::class]);
         config([
             'demo.user_email' => 'demo@example.com',
             'demo.user_password' => 'demo-password',
@@ -218,12 +221,14 @@ class AuthenticationTest extends TestCase
 
         $response = $this->post(route('login.demo'));
 
-        $this->assertAuthenticatedAs($user);
-        $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
+        $this->assertGuest();
+        $response->assertSessionHasErrors('email');
+        Event::assertNotDispatched(Login::class);
     }
 
-    public function test_unverified_admin_user_can_authenticate_without_email_verification(): void
+    public function test_unverified_admin_user_cannot_authenticate_without_email_verification(): void
     {
+        Event::fake([Login::class]);
         $user = User::factory()->unverified()->create([
             'is_admin' => true,
         ]);
@@ -233,13 +238,15 @@ class AuthenticationTest extends TestCase
             'password' => 'password',
         ]);
 
-        $this->assertAuthenticatedAs($user);
+        $this->assertGuest();
         $this->assertNull($user->fresh()->email_verified_at);
-        $response->assertRedirect(route('furimadeck-dashboard', absolute: false));
+        $response->assertSessionHasErrors('email');
+        Event::assertNotDispatched(Login::class);
     }
 
-    public function test_unverified_users_can_authenticate_using_the_login_screen(): void
+    public function test_unverified_users_cannot_authenticate_using_the_login_screen(): void
     {
+        Event::fake([Login::class]);
         $user = User::factory()->unverified()->create();
 
         $response = $this->post('/login', [
@@ -247,8 +254,9 @@ class AuthenticationTest extends TestCase
             'password' => 'password',
         ]);
 
-        $this->assertAuthenticatedAs($user);
-        $response->assertRedirect(route('verification.notice', absolute: false));
+        $this->assertGuest();
+        $response->assertSessionHasErrors('email');
+        Event::assertNotDispatched(Login::class);
     }
 
     public function test_unverified_users_cannot_open_authenticated_app_pages(): void

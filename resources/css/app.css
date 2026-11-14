@@ -1,3 +1,181 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@media (max-width: 639px) {
+    :root {
+    --color-fd-primary: #334155;
+    --color-fd-accent: #047857;
+    --color-fd-canvas: #f8fafc;
+    --color-fd-surface: #ffffff;
+    --color-fd-ink: #0f172a;
+    --color-fd-muted: #475569;
+    --color-fd-border: #e2e8f0;
+    --color-fd-input-border: #cbd5e1;
+    --color-fd-info: #155e75;
+    --color-fd-success: #065f46;
+    --color-fd-warning: #92400e;
+    --color-fd-danger: #b91c1c;
+    --color-fd-violet: #5b21b6;
+    --color-fd-info-surface: #ecfeff;
+    --color-fd-success-surface: #ecfdf5;
+    --color-fd-warning-surface: #fffbeb;
+    --color-fd-danger-surface: #fef2f2;
+    --color-fd-violet-surface: #f5f3ff;
+    --color-fd-grid: rgb(148 163 184 / 0.28);
+    }
+}
+
+@layer base {
+    @media (max-width: 639px) {
+        button:not(:disabled),
+        [role="button"]:not(:disabled) {
+            cursor: pointer;
+        }
+    }
+
+    @media (max-width: 639px) {
+        *,
+        ::after,
+        ::before,
+        ::backdrop,
+        ::file-selector-button {
+            border-color: var(--color-fd-border, currentColor);
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: var(--color-fd-muted);
+        }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-padding-top: 5rem;
+        }
+
+        body {
+            color: var(--color-fd-ink);
+            font-family: Inter, "Noto Sans JP", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+            font-size: 1rem;
+            line-height: 1.6;
+            text-rendering: optimizeLegibility;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(button, input, select, textarea, a, summary):focus-visible {
+            outline: 3px solid var(--color-fd-accent);
+            outline-offset: 2px;
+        }
+
+        :where(button, input[type="submit"], input[type="button"], [role="button"]) {
+            min-height: 2.75rem;
+        }
+
+        :where(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="range"]), select, textarea) {
+            max-width: 100%;
+            border-color: var(--color-fd-input-border);
+            border-radius: 0.75rem;
+            color: var(--color-fd-ink);
+        }
+
+        :where(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="range"]), select) {
+            min-height: 2.75rem;
+        }
+
+        textarea {
+            min-height: 7rem;
+        }
+
+        img,
+        video,
+        canvas,
+        svg {
+            max-width: 100%;
+        }
+
+        a,
+        button,
+        input,
+        select,
+        textarea {
+            transition-duration: 160ms;
+            transition-timing-function: ease-out;
+        }
+    }
+}
+
+@layer components {
+    @media (max-width: 639px) {
+        .fd-surface {
+            border: 1px solid var(--color-fd-border);
+            border-radius: 1rem;
+            background-color: var(--color-fd-surface);
+            color: var(--color-fd-ink);
+        }
+
+        .fd-eyebrow {
+            color: var(--color-fd-accent);
+            font-size: 0.75rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            line-height: 1.4;
+        }
+    }
+
+    @media (max-width: 639px) {
+        .furimadeck-app-navigation a,
+        .furimadeck-app-navigation summary,
+        .fd-public-nav a,
+        .fd-footer-nav a {
+            min-height: 2.75rem;
+        }
+
+        .fd-public-nav a,
+        .fd-footer-nav a {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 0.5rem;
+        }
+    }
+}
+
+@media (max-width: 639px) {
+    :where(input, select, textarea) {
+        font-size: 1rem;
+    }
+
+    .furimadeck-app-shell main div:has(> table) {
+        max-width: 100%;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .furimadeck-app-shell main div:has(> table) > table {
+        width: max-content;
+        min-width: 100%;
+    }
+}
+
+@media (max-width: 639px) {
+    .furimadeck-mobile-menu {
+        max-height: calc(100dvh - 4rem);
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+    }
+}
+
+@media (max-width: 63.99rem) and (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

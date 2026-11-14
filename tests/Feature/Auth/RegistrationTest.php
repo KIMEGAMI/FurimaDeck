@@ -3,8 +3,10 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Services\EmailVerificationSession;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use RuntimeException;
 use Symfony\Component\Mailer\Exception\TransportException;
@@ -34,8 +36,11 @@ class RegistrationTest extends TestCase
             'privacy_accepted' => '1',
         ]);
 
-        $this->assertAuthenticated();
+        $this->assertGuest();
+        $response->assertSessionHasNoErrors();
         $response->assertRedirect(route('verification.notice', absolute: false));
+        $response->assertSessionHas('status', 'verification-link-requested');
+        $response->assertSessionHas(EmailVerificationSession::PENDING_USER_ID);
 
         $user = User::where('email', 'test@example.com')->firstOrFail();
         $this->assertNull($user->email_verified_at);
@@ -43,14 +48,55 @@ class RegistrationTest extends TestCase
 
         $this
             ->get(route('dashboard'))
-            ->assertRedirect(route('verification.notice', absolute: false));
+            ->assertRedirect(route('login', absolute: false));
+    }
+
+    public function test_registration_requests_are_throttled_before_another_user_is_created(): void
+    {
+        Notification::fake();
+        config(['furimadeck.public_rate_limits.registration_per_minute' => 1]);
+
+        $this->post('/register', [
+            'name' => 'First User',
+            'email' => 'first@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'terms_accepted' => '1',
+            'privacy_accepted' => '1',
+        ])->assertRedirect(route('verification.notice', absolute: false));
+
+        $this->post('/register', [
+            'name' => 'Second User',
+            'email' => 'second@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'terms_accepted' => '1',
+            'privacy_accepted' => '1',
+        ])->assertTooManyRequests();
+
+        $this->assertDatabaseCount('users', 1);
+        Notification::assertSentTo(User::where('email', 'first@example.com')->firstOrFail(), VerifyEmail::class);
+        $this->assertDatabaseMissing('users', ['email' => 'second@example.com']);
     }
 
     public function test_registration_does_not_fail_when_verification_email_cannot_be_sent(): void
     {
+        $exceptionMessage = 'SMTP rejected the message; user@example.test password=do-not-log';
         Notification::shouldReceive('send')
             ->once()
-            ->andThrow(new TransportException('SMTP failed'));
+            ->andThrow(new TransportException($exceptionMessage, 535));
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->withArgs(function (string $message, array $context): bool {
+                return $message === 'Email verification notification delivery failed.'
+                    && $context === [
+                        'user_id' => User::where('email', 'mail-failure@example.com')->value('id'),
+                        'context' => 'registration',
+                        'error_class' => TransportException::class,
+                        'transport_response_code' => 535,
+                    ];
+            });
 
         $response = $this->post('/register', [
             'name' => 'Mail Failure User',
@@ -61,7 +107,7 @@ class RegistrationTest extends TestCase
             'privacy_accepted' => '1',
         ]);
 
-        $this->assertAuthenticated();
+        $this->assertGuest();
         $response
             ->assertRedirect(route('verification.notice', absolute: false))
             ->assertSessionHas('status', 'verification-link-send-failed');
@@ -75,7 +121,35 @@ class RegistrationTest extends TestCase
 
         $this
             ->get(route('dashboard'))
-            ->assertRedirect(route('verification.notice', absolute: false));
+            ->assertRedirect(route('login', absolute: false));
+    }
+
+    public function test_registration_does_not_claim_email_was_sent_when_mailer_only_logs_messages(): void
+    {
+        config(['mail.default' => 'log']);
+        Notification::shouldReceive('send')->never();
+        Log::shouldReceive('warning')
+            ->once()
+            ->with('Email verification notification delivery is not configured for external delivery.', [
+                'context' => 'registration',
+                'mailer' => 'log',
+            ]);
+
+        $response = $this->post('/register', [
+            'name' => 'Mail Log User',
+            'email' => 'mail-log@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'terms_accepted' => '1',
+            'privacy_accepted' => '1',
+        ]);
+
+        $response
+            ->assertRedirect(route('verification.notice', absolute: false))
+            ->assertSessionHas('status', 'verification-link-send-failed');
+
+        $user = User::where('email', 'mail-log@example.com')->firstOrFail();
+        $this->assertFalse($user->hasVerifiedEmail());
     }
 
     public function test_registration_does_not_fail_when_verification_notification_throws_unexpected_error(): void
@@ -93,7 +167,7 @@ class RegistrationTest extends TestCase
             'privacy_accepted' => '1',
         ]);
 
-        $this->assertAuthenticated();
+        $this->assertGuest();
         $response
             ->assertRedirect(route('verification.notice', absolute: false))
             ->assertSessionHas('status', 'verification-link-send-failed');
@@ -107,7 +181,7 @@ class RegistrationTest extends TestCase
 
         $this
             ->get(route('dashboard'))
-            ->assertRedirect(route('verification.notice', absolute: false));
+            ->assertRedirect(route('login', absolute: false));
     }
 
     public function test_unverified_existing_user_can_continue_registration_to_verification_notice(): void
@@ -128,10 +202,11 @@ class RegistrationTest extends TestCase
             'privacy_accepted' => '1',
         ]);
 
-        $this->assertAuthenticatedAs($user);
+        $this->assertGuest();
         $response
             ->assertRedirect(route('verification.notice', absolute: false))
-            ->assertSessionHas('status', 'verification-link-sent');
+            ->assertSessionHas('status', 'verification-link-requested')
+            ->assertSessionHas(EmailVerificationSession::PENDING_USER_ID, $user->id);
 
         Notification::assertSentTo($user, VerifyEmail::class);
     }
@@ -156,10 +231,10 @@ class RegistrationTest extends TestCase
             'privacy_accepted' => '1',
         ]);
 
-        $this->assertAuthenticatedAs($user);
+        $this->assertGuest();
         $response
             ->assertRedirect(route('verification.notice', absolute: false))
-            ->assertSessionHas('status', 'verification-link-send-failed');
+            ->assertSessionHas('status', 'verification-link-requested');
 
         $this->assertDatabaseHas('users', [
             'id' => $user->id,
@@ -167,7 +242,7 @@ class RegistrationTest extends TestCase
         ]);
     }
 
-    public function test_verified_existing_user_cannot_register_again(): void
+    public function test_registration_response_does_not_reveal_a_verified_existing_email(): void
     {
         Notification::fake();
 
@@ -187,8 +262,36 @@ class RegistrationTest extends TestCase
 
         $this->assertGuest();
         $response
-            ->assertRedirect('/register')
-            ->assertSessionHasErrors('email');
+            ->assertRedirect(route('verification.notice', absolute: false))
+            ->assertSessionHas('status', 'verification-link-requested')
+            ->assertSessionHasNoErrors();
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_registration_response_does_not_reveal_an_unverified_email_when_password_is_wrong(): void
+    {
+        Notification::fake();
+
+        User::factory()->unverified()->create([
+            'email' => 'pending@example.com',
+            'password' => 'correct-password',
+        ]);
+
+        $response = $this->post('/register', [
+            'name' => 'Pending User',
+            'email' => 'pending@example.com',
+            'password' => 'wrong-password',
+            'password_confirmation' => 'wrong-password',
+            'terms_accepted' => '1',
+            'privacy_accepted' => '1',
+        ]);
+
+        $this->assertGuest();
+        $response
+            ->assertRedirect(route('verification.notice', absolute: false))
+            ->assertSessionHas('status', 'verification-link-requested')
+            ->assertSessionHasNoErrors();
 
         Notification::assertNothingSent();
     }

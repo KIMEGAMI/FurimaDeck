@@ -5,6 +5,10 @@ namespace Tests\Feature;
 use App\Models\Marketplace;
 use App\Models\ProductCategory;
 use App\Models\User;
+use App\Services\FurimaDeckAdvancedAnalyticsService;
+use App\Services\FurimaDeckSalesAnalysisService;
+use App\Services\FurimaDeckSalesImprovementService;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -54,9 +58,9 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             'category_id' => $category->id,
             'condition' => 'used',
             'purchase_unit_cost' => 1000,
-            'purchase_quantity' => 2,
-            'quantity_available' => 1,
-            'inventory_status' => 'in_stock',
+            'purchase_quantity' => 1,
+            'quantity_available' => 0,
+            'inventory_status' => 'out_of_stock',
         ]);
         $user->sales()->create([
             'product_id' => $product->id,
@@ -70,11 +74,31 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             'cost_basis' => 1000,
             'net_profit' => 3000,
         ]);
+        $secondProduct = $user->products()->create([
+            'internal_sku' => 'ANALYTICS-002',
+            'product_name' => '分析対象商品2',
+            'category_id' => $category->id,
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 0,
+            'inventory_status' => 'out_of_stock',
+        ]);
+        $user->products()->create([
+            'internal_sku' => 'ANALYTICS-003',
+            'product_name' => '在庫分析対象商品',
+            'category_id' => $category->id,
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 1,
+            'inventory_status' => 'in_stock',
+        ]);
         $user->sales()->create([
-            'product_id' => $product->id,
+            'product_id' => $secondProduct->id,
             'marketplace_id' => $secondMarketplace->id,
-            'internal_sku_snapshot' => $product->internal_sku,
-            'product_name_snapshot' => $product->product_name,
+            'internal_sku_snapshot' => $secondProduct->internal_sku,
+            'product_name_snapshot' => $secondProduct->product_name,
             'quantity' => 1,
             'sold_price' => 3000,
             'sold_at' => '2026-09-12 12:00:00',
@@ -147,6 +171,65 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             ->assertDontSee('¥8,999');
     }
 
+    public function test_monthly_analysis_uses_japan_time_for_utc_sale_boundaries(): void
+    {
+        config()->set('app.timezone', 'Asia/Tokyo');
+
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        $marketplace = Marketplace::query()->create([
+            'code' => 'analysis-month-boundary',
+            'name' => '月境界テスト',
+            'base_url' => 'https://example.test',
+            'fee_type' => 'percentage',
+            'default_fee_rate' => 0,
+            'is_active' => true,
+        ]);
+        $product = $user->products()->create([
+            'internal_sku' => 'ANALYTICS-MONTH-BOUNDARY',
+            'product_name' => '月境界分析商品',
+            'condition' => 'used',
+            'purchase_unit_cost' => 0,
+            'purchase_quantity' => 1,
+            'quantity_available' => 0,
+            'inventory_status' => 'out_of_stock',
+        ]);
+
+        foreach ([
+            ['2026-08-31 14:59:59', 10000],
+            ['2026-08-31 15:00:00', 20000],
+            ['2026-09-30 14:59:59', 30000],
+            ['2026-09-30 15:00:00', 50000],
+        ] as [$timestamp, $amount]) {
+            $user->sales()->create([
+                'product_id' => $product->id,
+                'marketplace_id' => $marketplace->id,
+                'internal_sku_snapshot' => $product->internal_sku,
+                'product_name_snapshot' => $product->product_name,
+                'quantity' => 1,
+                'sold_price' => $amount,
+                'sold_at' => CarbonImmutable::parse($timestamp, 'UTC'),
+                'status' => 'completed',
+                'cost_basis' => 0,
+                'sales_fee' => 0,
+                'shipping_fee' => 0,
+                'net_profit' => $amount,
+            ]);
+        }
+
+        $report = app(FurimaDeckSalesAnalysisService::class)->report(
+            $user,
+            CarbonImmutable::createFromFormat('!Y-m', '2026-09', 'Asia/Tokyo'),
+        );
+
+        $this->assertSame(50000, $report['summary']['sales_total']);
+        $this->assertSame(50000, $report['summary']['profit_total']);
+        $this->assertSame(2, $report['summary']['sale_count']);
+    }
+
     public function test_product_inventory_is_shown_without_inventing_sales_data(): void
     {
         $user = User::factory()->create([
@@ -161,7 +244,16 @@ class FurimaDeckSalesAnalysisTest extends TestCase
                 'condition' => 'used',
                 'purchase_unit_cost' => 1900,
                 'purchase_quantity' => 1,
-                'quantity_available' => 2,
+                'quantity_available' => 1,
+                'inventory_status' => 'in_stock',
+            ],
+            [
+                'internal_sku' => 'CSV-IN-STOCK-002',
+                'product_name' => '在庫商品2',
+                'condition' => 'used',
+                'purchase_unit_cost' => 1900,
+                'purchase_quantity' => 1,
+                'quantity_available' => 1,
                 'inventory_status' => 'in_stock',
             ],
             [
@@ -184,6 +276,69 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             ->assertSee('販売データが登録されていないため');
     }
 
+    public function test_analytics_and_sales_improvement_never_include_another_users_data(): void
+    {
+        $owner = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        $otherUser = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        $category = ProductCategory::query()->create(['name' => '分離確認カテゴリ', 'slug' => 'ownership-analytics', 'is_active' => true]);
+        $marketplace = Marketplace::query()->create([
+            'code' => 'ownership-analytics-marketplace',
+            'name' => '所有者分離確認サイト',
+            'base_url' => 'https://example.test/ownership',
+            'fee_type' => 'percentage',
+            'default_fee_rate' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->createSuitabilitySale($otherUser, $marketplace, $category->id, 'OTHER-OWNER-SALE', 4000, '2026-08-01 12:00:00', '2026-09-10 12:00:00');
+        $otherProduct = $otherUser->products()->create([
+            'internal_sku' => 'OTHER-OWNER-LISTING',
+            'product_name' => '他ユーザーの滞留商品',
+            'category_id' => $category->id,
+            'condition' => 'used',
+            'purchase_unit_cost' => 1200,
+            'purchase_quantity' => 1,
+            'quantity_available' => 1,
+            'inventory_status' => 'in_stock',
+        ]);
+        $otherUser->listings()->create([
+            'product_id' => $otherProduct->id,
+            'marketplace_id' => $marketplace->id,
+            'listing_title' => '他ユーザーの滞留商品',
+            'listing_price' => 2500,
+            'status' => 'active',
+            'listed_at' => '2026-06-01 12:00:00',
+        ]);
+
+        $month = CarbonImmutable::createFromFormat('!Y-m', '2026-09', 'Asia/Tokyo');
+        $monthly = app(FurimaDeckSalesAnalysisService::class)->report($owner, $month);
+        $advanced = app(FurimaDeckAdvancedAnalyticsService::class)->report(
+            $owner,
+            CarbonImmutable::parse('2026-09-01', 'Asia/Tokyo'),
+            CarbonImmutable::parse('2026-10-01', 'Asia/Tokyo'),
+        );
+        $improvement = app(FurimaDeckSalesImprovementService::class)->actions(
+            $owner,
+            CarbonImmutable::parse('2026-09-30', 'Asia/Tokyo'),
+        );
+
+        $this->assertSame(0, $monthly['summary']['sales_total']);
+        $this->assertSame(0, $monthly['summary']['sale_count']);
+        $this->assertSame(0, $advanced['sales']['sales_amount']);
+        $this->assertSame(0, $advanced['sales']['sale_count']);
+        $this->assertSame(5000, app(FurimaDeckSalesAnalysisService::class)->report($otherUser, $month)['summary']['sales_total']);
+        $this->assertNotContains('他ユーザーの滞留商品', collect($improvement)->flatten(2)->all());
+        $this->assertNotContains('OTHER-OWNER-SALE', collect($monthly['category_rows'])->pluck('name')->all());
+    }
+
     public function test_premium_user_can_view_advanced_analysis_with_date_boundaries(): void
     {
         $user = User::factory()->create([
@@ -198,7 +353,16 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             ->assertSee('高度分析')
             ->assertSee('販売日数')
             ->assertSee('利益速度')
+            ->assertSee('商品別')
+            ->assertSee('ジャンル別')
+            ->assertSee('ブランド別')
+            ->assertSee('仕入先別')
             ->assertSee('価格帯分析')
+            ->assertSee('ブランド別分析')
+            ->assertSee('季節性（月別）')
+            ->assertSee('ジャンル構成（販売件数 / 売上）')
+            ->assertSee('仕入件数')
+            ->assertSee('販売原価')
             ->assertSee('データ不足')
             ->assertSee('販売データ不足');
     }
@@ -214,9 +378,10 @@ class FurimaDeckSalesAnalysisTest extends TestCase
         $this->actingAs($user)
             ->get(route('furimadeck-accounting.index', ['year' => 2026]))
             ->assertOk()
-            ->assertSee('確定申告・会計連携')
+            ->assertSee('会計データ')
             ->assertSee('2026年分 準備状況')
-            ->assertSee('会計連携は現在未設定です');
+            ->assertSee('freeeまたはMoney Forwardの勘定科目・税区分を設定すると、会計ソフト用CSVを作成できます。')
+            ->assertSee('仕訳の登録はCSVを会計サービス側で取り込んで行います。');
     }
 
     public function test_premium_user_can_sync_and_download_common_accounting_csv(): void
@@ -227,11 +392,11 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             'subscription_status' => 'active',
         ]);
 
-        $this->actingAs($user)->post(route('furimadeck-accounting.sync'), ['year' => 2026])->assertRedirect(route('furimadeck-accounting.index', ['year' => 2026]));
+        $this->actingAs($user)->post(route('furimadeck-accounting.sync'), ['year' => 2026])->assertRedirect(route('furimadeck-accounting.index', ['year' => 2026, 'section' => 'csv']));
         $this->actingAs($user)->get(route('furimadeck-accounting.csv', ['year' => 2026]))->assertOk()->assertHeader('content-type', 'text/csv; charset=UTF-8')->assertDownload('furimadeck-accounting-2026.csv');
     }
 
-    public function test_vendor_csv_redirects_with_error_when_account_mapping_is_missing(): void
+    public function test_vendor_csv_redirects_with_error_when_no_accounting_entries_exist(): void
     {
         $user = User::factory()->create([
             'email_verified_at' => now(),
@@ -240,11 +405,12 @@ class FurimaDeckSalesAnalysisTest extends TestCase
         ]);
 
         config()->set('furimadeck.accounting.export_accounts', []);
+        config()->set('furimadeck.accounting.vendor_journal_export_enabled', true);
 
         $this->actingAs($user)
-            ->get(route('furimadeck-accounting.freee', ['year' => 2026]))
-            ->assertRedirect(route('furimadeck-accounting.index', ['year' => 2026]))
-            ->assertSessionHas('error', '会計CSVの勘定科目設定が不足しています: settlement, sales, fees, cost, inventory');
+            ->post(route('furimadeck-accounting.freee', ['year' => 2026]), ['year' => 2026])
+            ->assertRedirect(route('furimadeck-accounting.index', ['section' => 'csv', 'year' => 2026]))
+            ->assertSessionHas('error', '対象期間に確認済みの販売・仕入データがありません。');
     }
 
     public function test_premium_user_can_view_marketplace_suitability_analysis(): void
@@ -262,6 +428,40 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             ->assertSee('あなたの販売実績に基づく比較');
     }
 
+    public function test_marketplace_suitability_uses_median_margins_and_explains_comparable_choices(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+        ]);
+        $category = ProductCategory::query()->create(['name' => '比較カテゴリ', 'slug' => 'suitability-category', 'is_active' => true]);
+        $profitMarketplace = Marketplace::query()->create(['code' => 'suitability-profit', 'name' => '利益サイト', 'base_url' => 'https://example.test/profit', 'fee_type' => 'percentage', 'default_fee_rate' => 0, 'is_active' => true]);
+        $speedMarketplace = Marketplace::query()->create(['code' => 'suitability-speed', 'name' => '回転サイト', 'base_url' => 'https://example.test/speed', 'fee_type' => 'percentage', 'default_fee_rate' => 0, 'is_active' => true]);
+
+        foreach ([2000, 0, 2000] as $index => $profit) {
+            $this->createSuitabilitySale($user, $profitMarketplace, $category->id, 'SUIT-PROFIT-'.$index, $profit, '2026-08-15 12:00:00', '2026-09-14 12:00:00');
+            $this->createSuitabilitySale($user, $speedMarketplace, $category->id, 'SUIT-SPEED-'.$index, 1000, '2026-09-01 12:00:00', '2026-09-11 12:00:00');
+        }
+
+        $report = app(FurimaDeckSalesAnalysisService::class)->marketplaceSuitabilityReport($user, CarbonImmutable::parse('2026-09-01'));
+        $profitRow = collect($report['rows'])->firstWhere('marketplace', '利益サイト');
+
+        $this->assertSame(40.0, $profitRow['median_profit_margin']);
+        $this->assertSame(30.0, $profitRow['median_sale_days']);
+        $this->assertTrue($profitRow['comparable']);
+        $this->assertSame('利益サイト', $report['recommendations'][0]['profit_marketplace']);
+        $this->assertSame('回転サイト', $report['recommendations'][0]['speed_marketplace']);
+
+        $this->actingAs($user)
+            ->get(route('furimadeck-analytics.suitability', ['month' => '2026-09']))
+            ->assertOk()
+            ->assertSee('利益重視')
+            ->assertSee('利益サイト')
+            ->assertSee('回転重視')
+            ->assertSee('回転サイト');
+    }
+
     public function test_premium_user_can_view_sales_improvement_details(): void
     {
         $user = User::factory()->create([
@@ -275,10 +475,26 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             ->assertOk()
             ->assertSee('今日の販売改善')
             ->assertSee('滞留在庫')
+            ->assertSee('id="stagnant-stock"', false)
             ->assertSee('価格見直しの参考')
+            ->assertSee('id="price-review"', false)
             ->assertSee('再出品を検討')
+            ->assertSee('id="relist"', false)
             ->assertSee('出品先変更を検討')
-            ->assertSee('再仕入れ候補');
+            ->assertSee('id="marketplace-change"', false)
+            ->assertSee('再仕入れ候補')
+            ->assertSee('id="rebuy"', false)
+            ->assertSee('name="stagnant_days"', false)
+            ->assertSee('value="30"', false);
+
+        $this->actingAs($user)
+            ->get(route('furimadeck-improvement.index', ['stagnant_days' => 45]))
+            ->assertOk()
+            ->assertSee('value="45"', false);
+
+        $this->actingAs($user)
+            ->get(route('furimadeck-improvement.index', ['stagnant_days' => 0]))
+            ->assertSessionHasErrors('stagnant_days');
     }
 
     public function test_free_user_is_redirected_from_sales_analysis(): void
@@ -289,5 +505,38 @@ class FurimaDeckSalesAnalysisTest extends TestCase
             ->get(route('furimadeck-analytics.index'))
             ->assertRedirect(route('furimadeck-billing.index'))
             ->assertSessionHas('error', '売上分析はPremiumプランで利用できます。');
+    }
+
+    private function createSuitabilitySale(User $user, Marketplace $marketplace, int $categoryId, string $sku, int $profit, string $listedAt, string $soldAt): void
+    {
+        $product = $user->products()->create([
+            'internal_sku' => $sku,
+            'product_name' => $sku,
+            'category_id' => $categoryId,
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 0,
+            'inventory_status' => 'out_of_stock',
+        ]);
+        $listing = $user->listings()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $marketplace->id,
+            'listing_title' => $sku,
+            'status' => 'sold',
+            'listed_at' => $listedAt,
+        ]);
+        $user->sales()->create([
+            'product_id' => $product->id,
+            'listing_id' => $listing->id,
+            'marketplace_id' => $marketplace->id,
+            'internal_sku_snapshot' => $sku,
+            'product_name_snapshot' => $sku,
+            'quantity' => 1,
+            'sold_price' => 5000,
+            'sold_at' => $soldAt,
+            'status' => 'completed',
+            'net_profit' => $profit,
+        ]);
     }
 }

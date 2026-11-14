@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Services\EmailVerificationSession;
 use App\Services\LoginSecurityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,7 +14,10 @@ use Illuminate\View\View;
 
 class AuthenticatedSessionController extends Controller
 {
-    public function __construct(private readonly LoginSecurityService $loginSecurity) {}
+    public function __construct(
+        private readonly LoginSecurityService $loginSecurity,
+        private readonly EmailVerificationSession $verificationSession,
+    ) {}
 
     public function create(): View
     {
@@ -24,12 +28,17 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+        if (! $request->user()->hasVerifiedEmail()) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => trans('auth.failed'),
+            ]);
+        }
+
+        $this->verificationSession->clear($request);
         $request->session()->regenerate();
         $this->loginSecurity->recordSuccessfulLogin($request->user(), $request, 'メールログイン');
-
-        if (! $request->user()->hasVerifiedEmail()) {
-            return redirect()->route('verification.notice');
-        }
 
         return redirect()->intended($this->authenticatedDestination());
     }
@@ -51,18 +60,34 @@ class AuthenticatedSessionController extends Controller
             ]);
         }
 
-        if (! Auth::attempt(['email' => $email, 'password' => $password])) {
+        $guard = Auth::guard();
+        $credentials = ['email' => $email, 'password' => $password];
+        $credentialsAreValid = $guard->validate($credentials);
+        $user = $guard->getLastAttempted();
+
+        if (! $credentialsAreValid || ! $user?->hasVerifiedEmail()) {
             throw ValidationException::withMessages([
                 'email' => 'デモユーザーにログインできませんでした。管理者にお問い合わせください。',
             ]);
         }
 
-        $request->session()->regenerate();
-        $this->loginSecurity->recordSuccessfulLogin($request->user(), $request, 'デモログイン');
-
-        if (! $request->user()->hasVerifiedEmail()) {
-            return redirect()->route('verification.notice');
+        if (! Auth::attempt($credentials)) {
+            throw ValidationException::withMessages([
+                'email' => 'デモユーザーにログインできませんでした。管理者にお問い合わせください。',
+            ]);
         }
+
+        if (! $request->user()?->hasVerifiedEmail()) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => trans('auth.failed'),
+            ]);
+        }
+
+        $request->session()->regenerate();
+        $this->verificationSession->clear($request);
+        $this->loginSecurity->recordSuccessfulLogin($request->user(), $request, 'デモログイン');
 
         return redirect()->intended($this->authenticatedDestination());
     }

@@ -1,7 +1,7 @@
 <x-guest-layout>
     <div class="mb-6">
-        <h1 class="text-2xl font-black text-white">新しいパスワードを設定</h1>
-        <p class="mt-3 text-sm font-semibold leading-7 text-cyan-100">
+        <h1 class="text-2xl font-black text-slate-900">新しいパスワードを設定</h1>
+        <p class="mt-3 text-sm font-semibold leading-7 text-slate-700">
             メールで届いたURLから開いた画面です。新しいパスワードを入力して再設定してください。
         </p>
     </div>

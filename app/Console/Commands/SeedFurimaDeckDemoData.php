@@ -5,7 +5,10 @@ namespace App\Console\Commands;
 use App\Models\Marketplace;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\ProductInventoryEvent;
+use App\Models\Sale;
 use App\Models\User;
+use App\Services\ProductInventoryEventService;
 use App\Services\SaleProfitCalculator;
 use Database\Seeders\FurimaDeckMarketplaceSeeder;
 use Illuminate\Console\Command;
@@ -95,6 +98,10 @@ class SeedFurimaDeckDemoData extends Command
                 if ($record === false || $record['product_id'] === '' || $record['product_name'] === '') {
                     throw new RuntimeException('Demo CSV row is invalid.');
                 }
+                if ($this->positiveInteger($record['purchase_quantity']) !== Product::UNITS_PER_PRODUCT_ID
+                    || ! in_array($this->integer($record['quantity_available']), [0, Product::UNITS_PER_PRODUCT_ID], true)) {
+                    throw new RuntimeException('Demo CSV contains a quantity incompatible with one physical item per product ID.');
+                }
                 $records[] = $record;
             }
 
@@ -129,7 +136,7 @@ class SeedFurimaDeckDemoData extends Command
             throw new RuntimeException('Marketplaces are missing.');
         }
 
-        return DB::transaction(function () use ($user, $records, $categories, $marketplaces, $profitCalculator): array {
+        return DB::connection('furimadeck')->transaction(function () use ($user, $records, $categories, $marketplaces, $profitCalculator): array {
             $result = ['products' => 0, 'listings' => 0, 'sales' => 0];
 
             foreach ($records as $index => $record) {
@@ -142,25 +149,49 @@ class SeedFurimaDeckDemoData extends Command
                     'description_base' => $this->nullable($record['description_base']),
                     'purchase_date' => $this->nullable($record['purchase_date']),
                     'purchase_unit_cost' => $this->integer($record['purchase_unit_cost']),
-                    'purchase_quantity' => $this->positiveInteger($record['purchase_quantity']),
-                    'quantity_available' => $this->integer($record['quantity_available']),
+                    'purchase_quantity' => Product::UNITS_PER_PRODUCT_ID,
+                    'quantity_available' => Product::UNITS_PER_PRODUCT_ID,
                     'purchase_shipping_cost' => $this->integer($record['purchase_shipping_cost']),
                     'other_purchase_expense' => $this->integer($record['other_purchase_expense']),
                     'manufacturer_model_number' => $this->nullable($record['manufacturer_model_number']),
                     'storage_location' => $this->nullable($record['storage_location']),
-                    'inventory_status' => $record['inventory_status'],
+                    'inventory_status' => Product::inventoryStatusForQuantity(Product::UNITS_PER_PRODUCT_ID),
                     'memo' => $this->nullable($record['memo']),
                 ]);
                 $result['products'] += $product->wasRecentlyCreated ? 1 : 0;
+
+                if ($product->wasRecentlyCreated) {
+                    app(ProductInventoryEventService::class)->recordOpening(
+                        $product,
+                        $user,
+                        'demo_seed',
+                        (int) $product->id,
+                        now(),
+                        'デモ商品登録時の初期在庫',
+                    );
+                }
 
                 if ($product->category_id === null) {
                     $product->update(['category_id' => $categories[$index % $categories->count()]->id]);
                 }
 
                 $marketplace = $marketplaces->values()[$index % $marketplaces->count()];
-                if ($product->inventory_status === 'out_of_stock') {
+                if ((int) $record['quantity_available'] === 0) {
                     $result['listings'] += $this->createSoldListing($user, $product, $marketplace, $index) ? 1 : 0;
-                    $result['sales'] += $this->createCompletedSale($user, $product, $marketplace, $index, $profitCalculator) ? 1 : 0;
+                    $sale = $this->createCompletedSale($user, $product, $marketplace, $index, $profitCalculator);
+                    if ($sale !== null) {
+                        app(ProductInventoryEventService::class)->applyDelta(
+                            $product,
+                            -Product::UNITS_PER_PRODUCT_ID,
+                            ProductInventoryEvent::TYPE_SALE,
+                            'sale',
+                            (int) $sale->id,
+                            $user,
+                            $sale->sold_at,
+                            'デモ販売の在庫反映',
+                        );
+                        $result['sales']++;
+                    }
                 } elseif ($product->quantity_available > 0) {
                     $result['listings'] += $this->createActiveListing($user, $product, $marketplace, $index) ? 1 : 0;
                 }
@@ -212,10 +243,10 @@ class SeedFurimaDeckDemoData extends Command
         ];
     }
 
-    private function createCompletedSale(User $user, Product $product, Marketplace $marketplace, int $index, SaleProfitCalculator $profitCalculator): bool
+    private function createCompletedSale(User $user, Product $product, Marketplace $marketplace, int $index, SaleProfitCalculator $profitCalculator): ?Sale
     {
         if ($product->sales()->exists()) {
-            return false;
+            return null;
         }
 
         $soldPrice = $this->salePrice($product, $index);
@@ -233,7 +264,7 @@ class SeedFurimaDeckDemoData extends Command
         ];
         $soldAt = $product->purchase_date?->setTime(12, 0) ?? now();
 
-        $user->sales()->create($amounts + [
+        return $user->sales()->create($amounts + [
             'product_id' => $product->id,
             'marketplace_id' => $marketplace->id,
             'internal_sku_snapshot' => $product->internal_sku,
@@ -245,8 +276,6 @@ class SeedFurimaDeckDemoData extends Command
             'shipped_at' => $soldAt->copy()->addDay(),
             'completed_at' => $soldAt->copy()->addDays(3),
         ]);
-
-        return true;
     }
 
     private function salePrice(Product $product, int $index): int

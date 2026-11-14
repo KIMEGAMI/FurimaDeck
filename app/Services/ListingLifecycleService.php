@@ -32,16 +32,17 @@ class ListingLifecycleService
             if (in_array($lockedListing->status, ['sold', 'ended', 'cancelled'], true)) {
                 throw new RuntimeException('終了済みの出品データは変更できません。');
             }
-            if (! in_array($values['status'], Listing::USER_SETTABLE_STATUSES, true)) {
+            $status = $values['status'] ?? $lockedListing->status;
+            if (! in_array($status, Listing::USER_SETTABLE_STATUSES, true)) {
                 throw new RuntimeException('売却済みは販売記録からのみ更新できます。');
             }
-            if ($values['status'] !== $lockedListing->status && ! $this->canTransition($lockedListing->status, $values['status'])) {
+            if ($status !== $lockedListing->status && ! $this->canTransition($lockedListing->status, $status)) {
                 throw new RuntimeException('この出品状態から選択した状態へは変更できません。');
             }
-            if ($values['status'] === 'active' && $lockedListing->listed_at === null) {
+            if ($status === 'active' && $lockedListing->listed_at === null) {
                 $values['listed_at'] = now();
             }
-            if (in_array($values['status'], ['ended', 'cancelled'], true)) {
+            if (in_array($status, ['ended', 'cancelled'], true)) {
                 $values['ended_at'] = now();
             }
 

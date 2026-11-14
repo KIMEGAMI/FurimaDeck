@@ -254,6 +254,9 @@
         const monthlyChartSales = @json($monthlyChartSales);
         const monthlyChartProfit = @json($monthlyChartProfit);
         const monthlySalesProfitLineCanvas = document.getElementById('monthlySalesProfitLineChart');
+        const legacyChartTextColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-muted').trim() || '#cbd5e1';
+        const legacyChartLegendColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-muted').trim() || '#e2e8f0';
+        const legacyChartGridColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-grid').trim() || 'rgba(148, 163, 184, 0.16)';
         const yenTickCallback = function(value) { return '¥' + Number(value).toLocaleString(); };
         const yenTooltipLabel = function(context) { return context.dataset.label + ': ¥' + Number(context.raw).toLocaleString(); };
 
@@ -272,12 +275,12 @@
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { labels: { color: '#e2e8f0', font: { weight: 'bold' } } },
+                        legend: { labels: { color: legacyChartLegendColor, font: { weight: 'bold' } } },
                         tooltip: { callbacks: { label: yenTooltipLabel } }
                     },
                     scales: {
-                        x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(148, 163, 184, 0.16)' } },
-                        y: { beginAtZero: true, ticks: { color: '#cbd5e1', callback: yenTickCallback }, grid: { color: 'rgba(148, 163, 184, 0.16)' } }
+                        x: { ticks: { color: legacyChartTextColor }, grid: { color: legacyChartGridColor } },
+                        y: { beginAtZero: true, ticks: { color: legacyChartTextColor, callback: yenTickCallback }, grid: { color: legacyChartGridColor } }
                     }
                 }
             });

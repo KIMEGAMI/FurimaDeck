@@ -44,16 +44,14 @@ class PasswordResetLinkController extends Controller
                 'error_class' => $exception::class,
             ]);
 
-            return back()
-                ->withInput(['email' => $email])
-                ->withErrors([
-                    'email' => 'メール送信に失敗しました。管理者はメール設定を確認してください。',
-                ]);
+            return back()->with('status', '入力を受け付けました。該当するアカウントがあり、送信可能な場合は再設定用メールを送信します。届かない場合は時間をおいて再度お試しください。');
         }
 
-        return $status === Password::RESET_LINK_SENT
-            ? back()->with('status', __($status))
-            : back()->withInput(['email' => $email])
-                ->withErrors(['email' => __($status)]);
+        if (in_array($status, [Password::RESET_LINK_SENT, Password::INVALID_USER, Password::RESET_THROTTLED], true)) {
+            return back()->with('status', '入力を受け付けました。該当するアカウントがあり、送信可能な場合は再設定用メールを送信します。届かない場合は時間をおいて再度お試しください。');
+        }
+
+        return back()->withInput(['email' => $email])
+            ->withErrors(['email' => __($status)]);
     }
 }

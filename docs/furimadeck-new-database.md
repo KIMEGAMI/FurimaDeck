@@ -2,11 +2,45 @@
 
 FurimaDeck uses a clean database and does not import legacy FURUPRO data.
 
+## Product acquisition data ownership
+
+The existing `products` row is the sole current source for purchase date, unit
+cost, purchase shipping cost, other purchase expense, and supplier. Register or
+edit those values in product management. The accounting screens read and
+aggregate the same values; do not create a second purchase master or keep
+independent accounting-screen copies.
+
+`product_inventory_events` records stock changes and encrypted before/after
+snapshots for purchase-information history. Those snapshots are audit history,
+not a competing source for current purchase values. Inventory balance comes
+from the event history; `products.quantity_available` and `inventory_status`
+are synchronized projection fields. Do not edit stock in the ordinary product
+form; use the reason-required inventory adjustment workflow.
+
+Each product ID represents one physical item: purchase and sale quantities are
+one, and available stock is zero or one. Product update, purchase-history
+recording, and dependent profit/listing recalculation must be atomic. Sale or
+accounting reconciliation locks must reject the whole update rather than save
+unrelated fields partially. Existing sale snapshots and accounting history
+must remain unchanged.
+
+## Product and inventory identity
+
+One FurimaDeck `product_id` identifies one individually tracked physical item.
+Identical models or titles owned as separate physical units use separate
+product IDs. Purchase, listing, and sale quantity for each product ID is one;
+available inventory is either zero or one. Do not aggregate identical items
+under one product ID or implement partial/multi-quantity sales in 1.0. Returns
+and inventory adjustments update the same item's balance within that range.
+
 ## Product image processing requirements
 
 Product images are validated on upload, converted to WebP, and saved at a
 maximum dimension of 2000px. A separate thumbnail at a maximum dimension of
-400px is generated for list views. The uploaded source file is not retained.
+400px is generated for list views. Uploads are limited to 2 MB and 12 million
+source pixels; the thumbnail is derived from the resized main image, and WebP
+output is streamed through a temporary file. The uploaded source file is not
+retained.
 
 The PHP runtime that serves FurimaDeck must have the following extensions
 enabled before product management is turned on:
@@ -14,6 +48,13 @@ enabled before product management is turned on:
 ```text
 gd
 exif
+```
+
+On Debian or Ubuntu, install the matching PHP packages before enabling product
+management:
+
+```bash
+sudo apt install -y php-gd php-exif
 ```
 
 `gd` performs resizing and WebP conversion. `exif` normalizes the orientation
@@ -83,6 +124,19 @@ php artisan migrate --database=furimadeck --path=database/migrations/furimadeck
 php artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckCategorySeeder
 php artisan db:seed --database=furimadeck --class=Database\\Seeders\\FurimaDeckMarketplaceSeeder
 ```
+
+The category seeder installs the versioned 1,686-category Rakuma public catalog
+snapshot bundled with the application, so a new development or production
+database does not depend on a live marketplace request during deployment. To
+refresh the catalog later, first run and verify this command in development:
+
+```bash
+php artisan furimadeck:sync-rakuma-categories
+```
+
+The command reads Rakuma's public category page. It preserves existing category
+rows referenced by products and does not delete product data. Review the
+reported counts before using it in another environment.
 
 This command must be run first in the development environment. Production use
 requires a separately confirmed backup and cutover checklist.

@@ -4,10 +4,23 @@ use App\Models\AuctionItem;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-Artisan::command('furugi:dummy-sales', function () {
+Schedule::command('furimadeck:accounting-recover-stale-sends')->everyMinute()->withoutOverlapping();
+Schedule::command('furimadeck:process-product-image-deletions')->everyMinute()->withoutOverlapping();
+
+$legacyFurugiCommandsAllowed = fn (): bool => app()->environment(['local', 'testing'])
+    && ! (bool) config('furimadeck.cutover_enabled');
+
+Artisan::command('furugi:dummy-sales', function () use ($legacyFurugiCommandsAllowed) {
+    if (! $legacyFurugiCommandsAllowed()) {
+        $this->error('旧Furugiコマンドは本番環境またはFurimaDeck切替後には実行できません。');
+
+        return 1;
+    }
+
     $user = User::query()->first();
 
     if (! $user) {
@@ -108,7 +121,13 @@ Artisan::command('furugi:dummy-sales', function () {
     $this->info($createdCount.'件のダミー売上データを作成しました。');
 })->purpose('furugi用の月別売上確認ダミーデータを作成します');
 
-Artisan::command('furugi:delete-dummy-sales', function () {
+Artisan::command('furugi:delete-dummy-sales', function () use ($legacyFurugiCommandsAllowed) {
+    if (! $legacyFurugiCommandsAllowed()) {
+        $this->error('旧Furugiコマンドは本番環境またはFurimaDeck切替後には実行できません。');
+
+        return 1;
+    }
+
     $deletedCount = AuctionItem::query()
         ->where('management_id', 'like', 'DUMMY-%')
         ->delete();
@@ -116,7 +135,13 @@ Artisan::command('furugi:delete-dummy-sales', function () {
     $this->info($deletedCount.'件のダミー売上データを削除しました。');
 })->purpose('furugi用の月別売上確認ダミーデータを削除します');
 
-Artisan::command('furugi:recalculate-sales', function () {
+Artisan::command('furugi:recalculate-sales', function () use ($legacyFurugiCommandsAllowed) {
+    if (! $legacyFurugiCommandsAllowed()) {
+        $this->error('旧Furugiコマンドは本番環境またはFurimaDeck切替後には実行できません。');
+
+        return 1;
+    }
+
     $updatedCount = 0;
 
     AuctionItem::query()

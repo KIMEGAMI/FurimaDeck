@@ -24,7 +24,7 @@
             <p class="text-sm font-black tracking-[0.24em] text-cyan-200">USE CASES</p>
             <h1 class="mt-4 max-w-4xl text-4xl font-black leading-tight md:text-5xl">複数販路のフリマ販売を、迷わず管理する。</h1>
             <p class="mt-5 max-w-3xl text-base font-semibold leading-8 text-cyan-100">
-                メルカリ、ヤフオク、ラクマ、Yahooフリマなど販売先が増えるほど、商品情報は散らかりやすくなります。FurimaDeckは毎日の販売管理をひとつにまとめます。
+                メルカリ、ヤフオク、ラクマ、Yahooフリマなど販売先が増えるほど、商品情報は散らかりやすくなります。FurimaDeckは商品・出品・売上の記録をひとつにまとめます。
             </p>
         </div>
     </section>
@@ -32,7 +32,7 @@
     <section class="py-14">
         <div class="mx-auto grid max-w-7xl gap-5 px-4 sm:px-6 lg:px-8">
             @foreach ([
-                ['フリマ販売の在庫管理', '出品中の商品、SOLDの商品、仕入れ価格、販売価格を一覧で確認できます。'],
+                ['フリマ販売の在庫管理', '出品中の商品、SOLDの商品、商品ごとの出品価格を一覧で確認できます。仕入日・仕入単価・仕入先は商品管理で登録・確認します。'],
                 ['外部売上CSVの整理', 'ヤフオクやメルカリShopsの売上CSVをFurimaDeck形式CSVへ変換し、一括登録の作業を減らせます。'],
                 ['仕入れ後の商品登録', '撮影した画像と商品タイトルを登録し、ジャンル別に整理できます。'],
                 ['月次の売上確認', '売上、手数料、送料、利益を確認し、販売状況を振り返れます。'],

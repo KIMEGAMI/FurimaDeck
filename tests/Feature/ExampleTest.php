@@ -22,6 +22,8 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/xml; charset=UTF-8');
+        $this->assertStringStartsWith('<?xml version="1.0" encoding="UTF-8"?>', $response->getContent());
+        $this->assertStringNotContainsString('{!!', $response->getContent());
         $response->assertSee('<urlset', false);
         $response->assertSee('/features', false);
         $response->assertSee('/use-cases', false);
@@ -51,6 +53,8 @@ class ExampleTest extends TestCase
         $response->assertOk();
         $response->assertSee(config('legal.updated_at'), false);
         $response->assertSee("Premiumプラン: {$trialDays}日間無料お試し後、月額".number_format($monthlyPrice).'円（税込）', false);
+        $response->assertDontSee('カテゴリ登録数の制限');
+        $response->assertDontSee('カテゴリ数の制限なし');
         foreach ([
             '事業者名',
             '代表者名または運営責任者',
@@ -98,6 +102,26 @@ class ExampleTest extends TestCase
         $response->assertHeader('Content-Type', 'application/manifest+json; charset=UTF-8');
         $response->assertJsonPath('short_name', 'FurimaDeck');
         $response->assertJsonPath('display', 'standalone');
+        $response->assertJsonPath('scope', '/');
+
+        $icons = $response->json('icons');
+        $this->assertCount(2, $icons);
+
+        foreach ($icons as $icon) {
+            $iconPath = parse_url($icon['src'], PHP_URL_PATH);
+            $this->assertIsString($iconPath);
+
+            $imagePath = public_path(ltrim($iconPath, '/'));
+            $this->assertFileExists($imagePath);
+
+            $image = getimagesize($imagePath);
+            $this->assertIsArray($image);
+            $this->assertSame('image/png', $image['mime']);
+
+            [$expectedWidth, $expectedHeight] = array_map('intval', explode('x', $icon['sizes']));
+            $this->assertSame($expectedWidth, $image[0]);
+            $this->assertSame($expectedHeight, $image[1]);
+        }
     }
 
     public function test_service_worker_is_available(): void
@@ -106,8 +130,12 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/javascript; charset=UTF-8');
+        $response->assertHeader('Service-Worker-Allowed', '/');
         $response->assertSee('self.addEventListener', false);
-        $response->assertSee('furimadeck-pwa-v2', false);
+        $response->assertSee("const CACHE_PREFIX = 'furimadeck-pwa-';", false);
+        $response->assertSee('key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME', false);
+        $response->assertSee('event.waitUntil(responsePromise.then(() => cacheWritePromise).catch(() => undefined));', false);
+        $response->assertSee('furimadeck-pwa-v3', false);
         $encodedRetryLabel = json_encode('再接続する');
         $this->assertIsString($encodedRetryLabel);
         $response->assertSee('const OFFLINE_RETRY_LABEL = '.$encodedRetryLabel.';', false);
@@ -123,6 +151,8 @@ class ExampleTest extends TestCase
         $response->assertSee('rel="manifest"', false);
         $response->assertSee('data-pwa-install', false);
         $response->assertSee('FurimaDeckをアプリとして追加', false);
+        $response->assertSee('data-pwa-ios-install-help', false);
+        $response->assertSee('ホーム画面に追加', false);
     }
 
     public function test_marketing_pages_are_available(): void

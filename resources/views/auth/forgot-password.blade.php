@@ -1,12 +1,17 @@
 <x-guest-layout>
     <div class="mb-6">
-        <h1 class="text-2xl font-black text-white">パスワード再設定</h1>
-        <p class="mt-3 text-sm font-semibold leading-7 text-cyan-100">
+        <h1 class="text-2xl font-black text-slate-900">パスワード再設定</h1>
+        <p class="mt-3 text-sm font-semibold leading-7 text-slate-700">
             登録済みのメールアドレスを入力してください。パスワードを再設定するためのURLをメールで送信します。
         </p>
     </div>
 
-    <x-auth-session-status class="mb-4" :status="session('status')" />
+    @if (session('status'))
+        <div class="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold leading-7 text-emerald-900" role="status">
+            <p class="font-black">送信しました</p>
+            <p class="mt-1">{{ session('status') }}</p>
+        </div>
+    @endif
 
     <form method="POST" action="{{ route('password.email') }}" class="space-y-5">
         @csrf
@@ -28,7 +33,7 @@
         </div>
 
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <a href="{{ route('login') }}" class="text-sm font-bold text-cyan-200 hover:text-white">
+            <a href="{{ route('login') }}" class="text-sm font-bold text-blue-800 hover:text-blue-900">
                 ログイン画面へ戻る
             </a>
 

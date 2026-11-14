@@ -7,6 +7,8 @@
                 <p class="mb-4 rounded bg-emerald-50 p-4 font-bold text-emerald-800">アカウント情報を更新しました。</p>
             @endif            @if (session('status') === 'data-deleted')
                 <p class="mb-4 rounded bg-emerald-50 p-4 font-bold text-emerald-800">FurimaDeckのデータを削除しました。アカウント情報は残っています。</p>
+            @elseif (session('status') === 'data-deleted-images-pending')
+                <p class="mb-4 rounded border border-amber-400 bg-amber-50 p-4 font-bold text-amber-950">FurimaDeckのデータを削除しました。画像ファイルの削除は保存先の一時エラーにより自動再試行中です。</p>
             @endif            @if (session('status') === 'monthly-data-deleted')
                 <p class="mb-4 rounded bg-emerald-50 p-4 font-bold text-emerald-800">指定月の売上関連データを削除しました。商品・出品情報は残っています。</p>
             @endif

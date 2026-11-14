@@ -14,7 +14,7 @@ class AdminDashboardNoticeTest extends TestCase
 
     public function test_maintenance_page_does_not_show_retry_estimate_text(): void
     {
-        SystemSetting::putValue(SystemSetting::KEY_MAINTENANCE_ENABLED, '1');
+        SystemSetting::putValue(SystemSetting::KEY_MAINTENANCE_ENABLED, '1'); // nosemgrep: php.lang.security.exec-use.exec-use -- test fixture database write only.
 
         $response = $this->get('/dashboard');
 
@@ -25,7 +25,7 @@ class AdminDashboardNoticeTest extends TestCase
 
     public function test_admin_can_view_dashboard_during_maintenance_mode(): void
     {
-        SystemSetting::putValue(SystemSetting::KEY_MAINTENANCE_ENABLED, '1');
+        SystemSetting::putValue(SystemSetting::KEY_MAINTENANCE_ENABLED, '1'); // nosemgrep: php.lang.security.exec-use.exec-use -- test fixture database write only.
 
         $admin = User::factory()->create([
             'is_admin' => true,
@@ -39,7 +39,7 @@ class AdminDashboardNoticeTest extends TestCase
 
     public function test_regular_user_cannot_view_dashboard_during_maintenance_mode(): void
     {
-        SystemSetting::putValue(SystemSetting::KEY_MAINTENANCE_ENABLED, '1');
+        SystemSetting::putValue(SystemSetting::KEY_MAINTENANCE_ENABLED, '1'); // nosemgrep: php.lang.security.exec-use.exec-use -- test fixture database write only.
 
         $user = User::factory()->create([
             'is_admin' => false,

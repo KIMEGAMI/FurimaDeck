@@ -51,4 +51,41 @@ class SupplierManagementTest extends TestCase
 
         $this->assertSame('ネットショップ', Supplier::query()->firstOrFail()->typeLabel());
     }
+
+    public function test_supplier_listing_and_mutations_are_scoped_to_the_authenticated_user(): void
+    {
+        $owner = User::factory()->create(['email_verified_at' => now()]);
+        $otherUser = User::factory()->create(['email_verified_at' => now()]);
+        $supplier = $owner->suppliers()->create([
+            'name' => '所有者だけに見える仕入先',
+            'type' => 'online_shop',
+            'memo' => '所有者専用メモ',
+        ]);
+
+        $this->actingAs($otherUser)
+            ->get(route('suppliers.index'))
+            ->assertOk()
+            ->assertDontSee('所有者だけに見える仕入先')
+            ->assertDontSee('所有者専用メモ');
+
+        $this->actingAs($otherUser)
+            ->put(route('suppliers.update', $supplier), [
+                'name' => '不正な変更',
+                'type' => 'store',
+                'memo' => '不正なメモ',
+            ])
+            ->assertNotFound();
+
+        $this->actingAs($otherUser)
+            ->delete(route('suppliers.destroy', $supplier), ['confirm_deletion' => '1'])
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('suppliers', [
+            'id' => $supplier->id,
+            'user_id' => $owner->id,
+            'name' => '所有者だけに見える仕入先',
+            'type' => 'online_shop',
+            'memo' => '所有者専用メモ',
+        ]);
+    }
 }

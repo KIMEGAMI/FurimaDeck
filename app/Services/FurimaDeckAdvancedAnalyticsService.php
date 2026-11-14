@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\ProductInventoryEvent;
 use App\Models\Sale;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class FurimaDeckAdvancedAnalyticsService
 {
@@ -22,18 +24,24 @@ class FurimaDeckAdvancedAnalyticsService
             'sale_days' => $this->saleDays($sales),
             'profit_velocity' => $this->profitVelocity($sales),
             'price_bands' => $this->priceBands($sales),
+            'brand' => $this->brandAnalysis($sales),
             'weekday' => $this->groupSales($sales, fn (Sale $sale): string => $sale->sold_at->isoFormat('dddd')),
-            'seasonality' => $this->groupSales($sales, fn (Sale $sale): string => $sale->sold_at->format('Y-m')),
+            'seasonality' => $this->seasonalityAnalysis($sales),
             'inventory' => $this->inventory($user),
             'supplier' => $this->supplierAnalysis($user, $sales),
-            'matrix' => $this->profitMatrix($sales),
+            'matrix' => $this->profitMatrix($user, $sales),
         ];
     }
 
     /** @return Collection<int, Sale> */
     private function sales(User $user, CarbonImmutable $from, CarbonImmutable $to): Collection
     {
-        return $user->sales()->with(['listing:id,listed_at', 'product.supplier'])
+        return $user->sales()->with([
+            'listing:id,listed_at',
+            'product.supplier',
+            'product.attributeValues.categoryAttribute',
+            'product.category.parent.parent',
+        ])
             ->whereNotIn('status', self::EXCLUDED_SALE_STATUSES)
             ->where('sold_at', '>=', $from)->where('sold_at', '<', $to)->get();
     }
@@ -89,30 +97,152 @@ class FurimaDeckAdvancedAnalyticsService
         })->values()->all();
     }
 
-    /** @param Collection<int, Sale> $sales @return array<int, array<string, int|float|string|null>> */
-    /** @param Collection<int, Sale> $sales @return array<string, mixed> */
-    private function profitMatrix(Collection $sales): array
+    /** @param Collection<int, Sale> $sales */
+    private function brandAnalysis(Collection $sales): array
     {
-        $groups = $sales->groupBy('product_id')->map(function (Collection $items): ?array {
-            $amount = (int) $items->sum('sold_price');
-            $days = $items->map(fn (Sale $sale): ?int => $this->saleDaysFor($sale))->filter()->values();
-            if ($days->isEmpty()) {
-                return null;
+        return $sales->groupBy(fn (Sale $sale): string => $this->brandFor($sale))
+            ->map(function (Collection $items, string $brand): array {
+                $amount = (int) $items->sum('sold_price');
+
+                return [
+                    'name' => $brand,
+                    'sales_amount' => $amount,
+                    'sale_count' => $items->count(),
+                    'profit' => (int) $items->sum('net_profit'),
+                    'profit_margin' => $amount === 0 ? 0.0 : round($items->sum('net_profit') / $amount * 100, 1),
+                    'median_sale_days' => $this->median($items->map(fn (Sale $sale): ?int => $this->saleDaysFor($sale))->filter()->values()),
+                    'average_sold_price' => $items->isEmpty() ? 0 : (int) round($amount / $items->count()),
+                ];
+            })
+            ->sortByDesc('sales_amount')
+            ->values()
+            ->all();
+    }
+
+    private function brandFor(Sale $sale): string
+    {
+        foreach ($sale->product?->attributeValues ?? [] as $attributeValue) {
+            $attribute = $attributeValue->categoryAttribute;
+            if (strtolower((string) $attribute?->key) !== 'brand') {
+                continue;
             }
 
-            $profit = (int) $items->sum('net_profit');
-            $margin = $amount === 0 ? 0.0 : round($profit / $amount * 100, 1);
-            $velocity = round($profit / max(1, (float) $days->median()), 1);
+            $value = trim((string) $attributeValue->value_text);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '未設定';
+    }
+
+    /** @param Collection<int, Sale> $sales */
+    private function seasonalityAnalysis(Collection $sales): array
+    {
+        $months = $sales->groupBy(fn (Sale $sale): string => $sale->sold_at->format('Y-m'));
+        $isReference = $months->count() < 12;
+
+        return $months->map(function (Collection $items, string $month) use ($isReference): array {
+            $amount = (int) $items->sum('sold_price');
+            $genres = $items->groupBy(fn (Sale $sale): string => $this->genreFor($sale))
+                ->map(fn (Collection $genreSales, string $genre): array => [
+                    'name' => $genre,
+                    'sale_count' => $genreSales->count(),
+                    'sales_amount' => (int) $genreSales->sum('sold_price'),
+                    'profit' => (int) $genreSales->sum('net_profit'),
+                ])
+                ->sortByDesc('sales_amount')
+                ->values()
+                ->all();
 
             return [
-                'product_id' => $items->first()->product_id,
-                'product_name' => $items->first()->product?->product_name ?? $items->first()->product_name_snapshot,
-                'profit_margin' => $margin,
-                'profit_velocity' => $velocity,
-                'sample_count' => $items->count(),
+                'label' => $month,
+                'sale_count' => $items->count(),
+                'sales_amount' => $amount,
+                'profit' => (int) $items->sum('net_profit'),
+                'profit_margin' => $amount === 0 ? 0.0 : round($items->sum('net_profit') / $amount * 100, 1),
+                'genres' => $genres,
+                'is_reference' => $isReference,
             ];
+        })->values()->all();
+    }
+
+    private function genreFor(Sale $sale): string
+    {
+        $category = $sale->product?->category;
+        if ($category === null) {
+            return '未設定';
+        }
+
+        $path = collect([$category->parent?->parent?->name, $category->parent?->name, $category->name])
+            ->filter(fn (?string $name): bool => filled($name))
+            ->values();
+
+        return $path->isEmpty() ? '未設定' : $path->implode(' > ');
+    }
+
+    /** @param Collection<int, Sale> $sales @return array<string, mixed> */
+    private function profitMatrix(User $user, Collection $sales): array
+    {
+        $productGroups = $sales->groupBy(fn (Sale $sale): string => $sale->product_id === null
+            ? 'sale:'.$sale->id
+            : 'product:'.$sale->product_id);
+        $productRows = $productGroups->map(function (Collection $items): ?array {
+            $sale = $items->first();
+            $name = $sale->product?->product_name ?? $sale->product_name_snapshot ?? '商品名未設定';
+
+            return $this->matrixGroupRow($items, $name, $sale->product_id === null ? null : (int) $sale->product_id);
+        })->filter()->values();
+        $productMatrix = $this->classifyMatrixGroups($productRows);
+
+        $supplierSnapshots = $this->saleSupplierSnapshots($user, $sales);
+        $supplierKey = fn (Sale $sale): string => $this->supplierKey($this->supplierForSale($sale, $supplierSnapshots)['supplier_id']);
+        $supplierName = fn (Sale $sale): string => $this->supplierForSale($sale, $supplierSnapshots)['supplier_name'] ?? '未設定';
+
+        $productMatrix['dimensions'] = [
+            'genre' => $this->profitMatrixForDimension($sales, fn (Sale $sale): string => $this->genreFor($sale)),
+            'brand' => $this->profitMatrixForDimension($sales, fn (Sale $sale): string => $this->brandFor($sale)),
+            'supplier' => $this->profitMatrixForDimension($sales, $supplierKey, $supplierName),
+        ];
+
+        return $productMatrix;
+    }
+
+    /** @param Collection<int, Sale> $sales @return array<string, mixed> */
+    private function profitMatrixForDimension(Collection $sales, callable $key, ?callable $label = null): array
+    {
+        $groups = $sales->groupBy($key)->map(function (Collection $items) use ($key, $label): ?array {
+            $name = $label === null ? (string) $key($items->first()) : (string) $label($items->first());
+
+            return $this->matrixGroupRow($items, $name, null);
         })->filter()->values();
 
+        return $this->classifyMatrixGroups($groups);
+    }
+
+    /** @param Collection<int, Sale> $items @return array<string, mixed>|null */
+    private function matrixGroupRow(Collection $items, string $name, ?int $productId): ?array
+    {
+        $days = $items->map(fn (Sale $sale): ?int => $this->saleDaysFor($sale))->filter()->values();
+        if ($days->isEmpty()) {
+            return null;
+        }
+
+        $amount = (int) $items->sum('sold_price');
+        $profit = (int) $items->sum('net_profit');
+
+        return [
+            'product_id' => $productId,
+            'product_name' => $name,
+            'profit_margin' => $amount === 0 ? 0.0 : round($profit / $amount * 100, 1),
+            'profit_velocity' => round($profit / max(1, (float) $days->median()), 1),
+            'sample_count' => $items->count(),
+        ];
+    }
+
+    /** @param Collection<int, array<string, mixed>> $groups @return array<string, mixed> */
+    private function classifyMatrixGroups(Collection $groups): array
+    {
         if ($groups->count() < 3) {
             return ['available' => false, 'reason' => 'データ不足', 'margin_median' => null, 'velocity_median' => null, 'rows' => []];
         }
@@ -135,35 +265,108 @@ class FurimaDeckAdvancedAnalyticsService
         return ['available' => true, 'reason' => null, 'margin_median' => $marginMedian, 'velocity_median' => $velocityMedian, 'rows' => $rows];
     }
 
+    /** @param array<int, array<string, mixed>> $snapshots @return array{supplier_id: int|null, supplier_name: string|null} */
+    private function supplierForSale(Sale $sale, array $snapshots): array
+    {
+        $snapshot = $snapshots[(int) $sale->id] ?? null;
+
+        return [
+            'supplier_id' => is_array($snapshot) && array_key_exists('supplier_id', $snapshot)
+                ? ($snapshot['supplier_id'] === null ? null : (int) $snapshot['supplier_id'])
+                : ($sale->product?->supplier_id === null ? null : (int) $sale->product?->supplier_id),
+            'supplier_name' => is_array($snapshot) && array_key_exists('supplier_name', $snapshot)
+                ? ($snapshot['supplier_name'] === null ? null : (string) $snapshot['supplier_name'])
+                : $sale->product?->supplier?->name,
+        ];
+    }
+
     private function supplierAnalysis(User $user, Collection $sales): array
     {
         $inventory = $user->products()
             ->with('supplier:id,name')
-            ->where('quantity_available', '>', 0)
-            ->where('inventory_status', 'in_stock')
-            ->get(['supplier_id', 'purchase_unit_cost', 'quantity_available']);
-        $inventoryBySupplier = $inventory->groupBy(fn ($product): string => (string) ($product->supplier?->name ?? '未設定'))
-            ->map(fn (Collection $items): int => (int) $items->sum(fn ($product): int => (int) $product->purchase_unit_cost * (int) $product->quantity_available));
+            ->get(['id', 'supplier_id', 'purchase_unit_cost', 'quantity_available']);
+        $rows = [];
+        foreach ($inventory as $product) {
+            $supplierId = $product->supplier_id === null ? null : (int) $product->supplier_id;
+            $key = $this->supplierKey($supplierId);
+            $rows[$key] ??= $this->emptySupplierRow($supplierId, $product->supplier?->name);
+            $rows[$key]['purchase_count']++;
+            if ((int) $product->quantity_available > 0) {
+                $rows[$key]['inventory_capital'] += (int) $product->purchase_unit_cost * (int) $product->quantity_available;
+            }
+        }
 
-        return $sales->groupBy(fn (Sale $sale): string => (string) ($sale->product?->supplier?->name ?? '未設定'))
-            ->map(function (Collection $items, string $name) use ($inventoryBySupplier): array {
-                $amount = (int) $items->sum('sold_price');
-                $days = $items->map(fn (Sale $sale): ?int => $this->saleDaysFor($sale))->filter()->values();
+        $saleSupplierSnapshots = $this->saleSupplierSnapshots($user, $sales);
+        foreach ($sales as $sale) {
+            $snapshot = $saleSupplierSnapshots[(int) $sale->id] ?? null;
+            $supplierId = is_array($snapshot) && array_key_exists('supplier_id', $snapshot)
+                ? ($snapshot['supplier_id'] === null ? null : (int) $snapshot['supplier_id'])
+                : ($sale->product?->supplier_id === null ? null : (int) $sale->product->supplier_id);
+            $supplierName = is_array($snapshot) && array_key_exists('supplier_name', $snapshot)
+                ? ($snapshot['supplier_name'] === null ? null : (string) $snapshot['supplier_name'])
+                : $sale->product?->supplier?->name;
+            $key = $this->supplierKey($supplierId);
+            $rows[$key] ??= $this->emptySupplierRow($supplierId, $supplierName);
+            if ($supplierName !== null && $supplierName !== '') {
+                $rows[$key]['name'] = $supplierName;
+            }
+            $rows[$key]['sales_amount'] += (int) $sale->sold_price;
+            $rows[$key]['sales_fee'] += (int) $sale->sales_fee;
+            $rows[$key]['sale_cost'] += (int) $sale->cost_basis;
+            $rows[$key]['profit'] += (int) $sale->net_profit;
+            $rows[$key]['sale_count']++;
+            $rows[$key]['sale_days'][] = $this->saleDaysFor($sale);
+        }
 
-                return [
-                    'name' => $name,
-                    'sales_amount' => $amount,
-                    'sales_fee' => (int) $items->sum('sales_fee'),
-                    'profit' => (int) $items->sum('net_profit'),
-                    'sale_count' => $items->count(),
-                    'profit_margin' => $amount === 0 ? 0.0 : round($items->sum('net_profit') / $amount * 100, 1),
-                    'median_sale_days' => $this->median($days),
-                    'inventory_capital' => (int) ($inventoryBySupplier[$name] ?? 0),
-                ];
-            })
-            ->sortByDesc('sales_amount')
-            ->values()
+        foreach ($rows as &$row) {
+            $row['profit_margin'] = $row['sales_amount'] === 0 ? 0.0 : round($row['profit'] / $row['sales_amount'] * 100, 1);
+            $row['median_sale_days'] = $this->median(collect($row['sale_days'])->filter()->values());
+            unset($row['sale_days']);
+        }
+        unset($row);
+
+        return collect($rows)->sortByDesc('sales_amount')->values()->all();
+    }
+
+    /** @param Collection<int, Sale> $sales @return array<int, array<string, mixed>> */
+    private function saleSupplierSnapshots(User $user, Collection $sales): array
+    {
+        if ($sales->isEmpty() || ! Schema::connection('furimadeck')->hasTable('product_inventory_events')) {
+            return [];
+        }
+
+        return ProductInventoryEvent::query()
+            ->where('user_id', $user->id)
+            ->where('event_type', ProductInventoryEvent::TYPE_SALE)
+            ->where('source_type', 'sale')
+            ->whereIn('source_id', $sales->pluck('id')->map(fn ($id): int => (int) $id)->all())
+            ->get(['source_id', 'before_state'])
+            ->mapWithKeys(fn (ProductInventoryEvent $event): array => [(int) $event->source_id => (array) $event->before_state])
             ->all();
+    }
+
+    private function supplierKey(?int $supplierId): string
+    {
+        return $supplierId === null ? 'unset' : 'supplier:'.$supplierId;
+    }
+
+    /** @return array<string, mixed> */
+    private function emptySupplierRow(?int $supplierId, ?string $name): array
+    {
+        return [
+            'supplier_id' => $supplierId,
+            'name' => filled($name) ? $name : '未設定',
+            'purchase_count' => 0,
+            'sales_amount' => 0,
+            'sales_fee' => 0,
+            'sale_cost' => 0,
+            'profit' => 0,
+            'sale_count' => 0,
+            'profit_margin' => 0.0,
+            'median_sale_days' => null,
+            'inventory_capital' => 0,
+            'sale_days' => [],
+        ];
     }
 
     private function inventory(User $user): array

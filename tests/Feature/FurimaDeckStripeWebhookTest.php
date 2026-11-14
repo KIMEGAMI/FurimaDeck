@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -26,6 +27,9 @@ class FurimaDeckStripeWebhookTest extends TestCase
         ])->assertSuccessful();
         config()->set('furimadeck.cutover_enabled', true);
         config()->set('furimadeck.billing.stripe_webhook_secret', 'whsec_test_example');
+        config()->set('furimadeck.billing.stripe_secret', 'sk_test_furimadeck_webhook');
+        config()->set('furimadeck.billing.stripe_api_base', 'https://stripe.test/v1');
+        config()->set('furimadeck.billing.stripe_price_id', 'price_furimadeck_980');
     }
 
     protected function tearDown(): void
@@ -62,10 +66,108 @@ class FurimaDeckStripeWebhookTest extends TestCase
             'stripe_customer_id' => 'cus_furimadeck',
         ]);
         $newEventTime = time();
-        $this->postWebhook($this->subscriptionEvent('evt_newer', $newEventTime, 'active', $newEventTime + 604800))->assertOk();
-        $this->postWebhook($this->subscriptionEvent('evt_older', $newEventTime - 60, 'canceled', $newEventTime - 1))->assertOk();
+        $currentSubscription = $this->subscriptionEvent('evt_current', $newEventTime, 'active', $newEventTime + 604800)['data']['object'];
+        $this->postWebhook($this->subscriptionEvent('evt_newer', $newEventTime, 'active', $newEventTime + 604800), null, [$currentSubscription])->assertOk();
+        $this->postWebhook($this->subscriptionEvent('evt_older', $newEventTime, 'canceled', $newEventTime - 1), null, [$currentSubscription])->assertOk();
 
         $this->assertSame('active', $user->fresh()->subscription_status);
+    }
+
+    public function test_current_stripe_state_overrides_an_event_snapshot_with_the_same_created_timestamp(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'stripe_customer_id' => 'cus_furimadeck',
+        ]);
+        $sameTimestamp = time();
+        $currentCanceledSubscription = $this->subscriptionEvent('evt_current', $sameTimestamp, 'canceled', $sameTimestamp - 1)['data']['object'];
+
+        $this->postWebhook(
+            $this->subscriptionEvent('evt_delayed_active_snapshot', $sameTimestamp, 'active', $sameTimestamp + 604800),
+            null,
+            [$currentCanceledSubscription],
+        )->assertOk();
+
+        $this->assertSame(User::SUBSCRIPTION_INACTIVE, $user->fresh()->subscription_plan);
+        $this->assertSame('canceled', $user->fresh()->subscription_status);
+    }
+
+    public function test_subscription_lookup_uses_later_pages_to_find_the_current_plan(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'stripe_customer_id' => 'cus_furimadeck',
+        ]);
+        $createdAt = time();
+        $olderSubscription = $this->subscriptionEvent('evt_old', $createdAt - 1000, 'canceled', $createdAt - 10)['data']['object'];
+        $olderSubscription['id'] = 'sub_old';
+        $currentSubscription = $this->subscriptionEvent('evt_current', $createdAt, 'active', $createdAt + 604800)['data']['object'];
+        $currentSubscription['id'] = 'sub_current';
+
+        $this->postWebhook(
+            $this->subscriptionEvent('evt_subscription_second_page', $createdAt, 'active', $createdAt + 604800),
+            null,
+            null,
+            200,
+            [
+                ['data' => [$olderSubscription], 'has_more' => true],
+                ['data' => [$currentSubscription], 'has_more' => false],
+            ],
+        )->assertOk();
+
+        $this->assertSame('active', $user->fresh()->subscription_status);
+        $this->assertSame('sub_current', $user->fresh()->stripe_subscription_id);
+        Http::assertSentCount(2);
+    }
+
+    public function test_stripe_state_lookup_failure_does_not_grant_access_and_allows_retry(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+        ]);
+        $event = $this->subscriptionEvent('evt_stripe_unavailable', time(), 'active', time() + 604800);
+        $event['data']['object']['metadata']['user_id'] = (string) $user->id;
+
+        $this->postWebhook(
+            $event,
+            null,
+            [],
+            503,
+        )->assertStatus(500);
+
+        $this->assertSame(User::SUBSCRIPTION_INACTIVE, $user->fresh()->subscription_plan);
+        $this->assertNull($user->fresh()->stripe_customer_id);
+        $this->assertSame(0, DB::table('furimadeck_stripe_webhook_events')->count());
+    }
+
+    public function test_subscription_for_another_price_cannot_grant_premium(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'stripe_customer_id' => 'cus_furimadeck',
+        ]);
+
+        $this->postWebhook($this->subscriptionEvent('evt_wrong_price', time(), 'active', time() + 604800, 'price_another_product'))->assertOk();
+
+        $this->assertSame(User::SUBSCRIPTION_INACTIVE, $user->fresh()->subscription_plan);
+        $this->assertNull($user->fresh()->stripe_subscription_id);
+    }
+
+    public function test_subscription_event_for_another_price_revokes_stale_access_for_the_tracked_subscription(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'stripe_customer_id' => 'cus_furimadeck',
+            'stripe_subscription_id' => 'sub_furimadeck',
+            'subscription_plan' => User::SUBSCRIPTION_ACTIVE,
+            'subscription_status' => 'active',
+            'premium_ends_at' => now()->addMonth(),
+        ]);
+
+        $this->postWebhook($this->subscriptionEvent('evt_changed_to_wrong_price', time(), 'active', time() + 604800, 'price_another_product'))->assertOk();
+
+        $this->assertSame(User::SUBSCRIPTION_INACTIVE, $user->fresh()->subscription_plan);
+        $this->assertFalse($user->fresh()->hasActiveSubscription());
     }
 
     public function test_invalid_signature_is_rejected_without_recording_an_event(): void
@@ -104,7 +206,7 @@ class FurimaDeckStripeWebhookTest extends TestCase
     }
 
     /** @return array<string, mixed> */
-    private function subscriptionEvent(string $eventId, int $createdAt, string $status, int $periodEnd): array
+    private function subscriptionEvent(string $eventId, int $createdAt, string $status, int $periodEnd, string $priceId = 'price_furimadeck_980'): array
     {
         return [
             'id' => $eventId,
@@ -114,6 +216,7 @@ class FurimaDeckStripeWebhookTest extends TestCase
                 'id' => 'sub_furimadeck',
                 'customer' => 'cus_furimadeck',
                 'status' => $status,
+                'items' => ['data' => [['price' => ['id' => $priceId]]]],
                 'current_period_end' => $periodEnd,
                 'trial_start' => $status === 'trialing' ? $createdAt : null,
                 'trial_end' => $status === 'trialing' ? $periodEnd : null,
@@ -122,8 +225,31 @@ class FurimaDeckStripeWebhookTest extends TestCase
     }
 
     /** @param array<string, mixed> $event */
-    private function postWebhook(array $event, ?int $timestamp = null): TestResponse
-    {
+    private function postWebhook(
+        array $event,
+        ?int $timestamp = null,
+        ?array $currentSubscriptions = null,
+        int $stripeStatus = 200,
+        array $stripePages = [],
+    ): TestResponse {
+        if (str_starts_with((string) data_get($event, 'type'), 'customer.subscription.')) {
+            if ($stripePages !== []) {
+                $sequence = Http::sequence();
+                foreach ($stripePages as $stripePage) {
+                    $sequence->push($stripePage, $stripeStatus);
+                }
+                Http::fake(['https://stripe.test/v1/subscriptions*' => $sequence]);
+            } else {
+                $currentSubscriptions ??= [data_get($event, 'data.object')];
+                Http::fake([
+                    'https://stripe.test/v1/subscriptions*' => Http::response([
+                        'data' => $currentSubscriptions,
+                        'has_more' => false,
+                    ], $stripeStatus),
+                ]);
+            }
+        }
+
         $payload = json_encode($event, JSON_THROW_ON_ERROR);
         $timestamp = (string) ($timestamp ?? time());
         $signature = hash_hmac('sha256', $timestamp.'.'.$payload, 'whsec_test_example');

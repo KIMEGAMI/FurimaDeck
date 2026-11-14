@@ -57,12 +57,15 @@ class FurimaDeckAnalyticsServiceTest extends TestCase
             'default_fee_rate' => 0,
             'is_active' => true,
         ]);
-        $product = $this->createProduct($user, 'ANALYTICS-001', 3, 1200);
-        $this->createSale($user, $product, $marketplace, 'completed', self::INCLUDED_SALE_PRICE, self::INCLUDED_SALE_PROFIT);
-        $this->createSale($user, $product, $marketplace, 'cancelled', self::EXCLUDED_SALE_PRICE, self::EXCLUDED_SALE_PROFIT);
-        $this->createSale($user, $product, $marketplace, 'returned', self::EXCLUDED_SALE_PRICE, self::EXCLUDED_SALE_PROFIT);
+        $soldProduct = $this->createProduct($user, 'ANALYTICS-SOLD-001', 0, 1200);
+        $cancelledProduct = $this->createProduct($user, 'ANALYTICS-CANCELLED-001', 1, 1200);
+        $returnedProduct = $this->createProduct($user, 'ANALYTICS-RETURNED-001', 1, 1200);
+        $this->createSale($user, $soldProduct, $marketplace, 'completed', self::INCLUDED_SALE_PRICE, self::INCLUDED_SALE_PROFIT);
+        $this->createSale($user, $cancelledProduct, $marketplace, 'cancelled', self::EXCLUDED_SALE_PRICE, self::EXCLUDED_SALE_PROFIT);
+        $this->createSale($user, $returnedProduct, $marketplace, 'returned', self::EXCLUDED_SALE_PRICE, self::EXCLUDED_SALE_PROFIT);
 
-        $otherProduct = $this->createProduct($otherUser, 'ANALYTICS-OTHER-001', 7, 5000);
+        $this->createProduct($user, 'ANALYTICS-STOCK-001', 1, 1200);
+        $otherProduct = $this->createProduct($otherUser, 'ANALYTICS-OTHER-001', 1, 5000);
         $this->createSale($otherUser, $otherProduct, $marketplace, 'completed', self::EXCLUDED_SALE_PRICE, self::EXCLUDED_SALE_PROFIT);
 
         $summary = app(FurimaDeckAnalyticsService::class)->summary($user);
@@ -73,6 +76,7 @@ class FurimaDeckAnalyticsServiceTest extends TestCase
         $this->assertSame(33.3, $summary['profit_margin']);
         $this->assertSame(3, $summary['inventory_quantity']);
         $this->assertSame(3600, $summary['inventory_cost']);
+        $this->assertSame(1, $summary['zero_stock_product_count']);
     }
 
     public function test_dashboard_monthly_graph_uses_only_valid_sales_for_the_user(): void
@@ -87,11 +91,13 @@ class FurimaDeckAnalyticsServiceTest extends TestCase
             'default_fee_rate' => 0,
             'is_active' => true,
         ]);
-        $product = $this->createProduct($user, 'CALENDAR-001', 1, 2000);
-        $this->createSaleAt($user, $product, $marketplace, 'completed', 6000, 2000, '2025-10-15 12:00:00');
-        $this->createSaleAt($user, $product, $marketplace, 'completed', 12000, 5000, '2026-09-10 12:00:00');
-        $this->createSaleAt($user, $product, $marketplace, 'cancelled', 9000, 4000, '2026-09-10 14:00:00');
-        $otherProduct = $this->createProduct($otherUser, 'CALENDAR-OTHER-001', 1, 2000);
+        $octoberProduct = $this->createProduct($user, 'CALENDAR-OCTOBER-001', 0, 2000);
+        $septemberProduct = $this->createProduct($user, 'CALENDAR-SEPTEMBER-001', 0, 2000);
+        $cancelledProduct = $this->createProduct($user, 'CALENDAR-CANCELLED-001', 1, 2000);
+        $this->createSaleAt($user, $octoberProduct, $marketplace, 'completed', 6000, 2000, '2025-10-15 12:00:00');
+        $this->createSaleAt($user, $septemberProduct, $marketplace, 'completed', 12000, 5000, '2026-09-10 12:00:00');
+        $this->createSaleAt($user, $cancelledProduct, $marketplace, 'cancelled', 9000, 4000, '2026-09-10 14:00:00');
+        $otherProduct = $this->createProduct($otherUser, 'CALENDAR-OTHER-001', 0, 2000);
         $this->createSaleAt($otherUser, $otherProduct, $marketplace, 'completed', 8000, 3000, '2026-09-10 16:00:00');
 
         $dashboard = app(FurimaDeckAnalyticsService::class)->dashboard(
@@ -116,9 +122,9 @@ class FurimaDeckAnalyticsServiceTest extends TestCase
             'product_name' => $sku,
             'condition' => 'used',
             'purchase_unit_cost' => $unitCost,
-            'purchase_quantity' => $quantityAvailable,
+            'purchase_quantity' => Product::UNITS_PER_PRODUCT_ID,
             'quantity_available' => $quantityAvailable,
-            'inventory_status' => 'in_stock',
+            'inventory_status' => Product::inventoryStatusForQuantity($quantityAvailable),
         ]);
     }
 

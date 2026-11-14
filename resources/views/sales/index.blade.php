@@ -194,8 +194,8 @@
         const platformSales = @json($platformChartSales);
         const monthlyCanvas = document.getElementById('monthlySalesChart');
         const platformCanvas = document.getElementById('platformSalesChart');
-        const chartTextColor = '#f8fafc';
-        const chartGridColor = 'rgba(148, 163, 184, 0.22)';
+        const chartTextColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-muted').trim() || '#f8fafc';
+        const chartGridColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-grid').trim() || 'rgba(148, 163, 184, 0.22)';
         const yen = function(value) { return '¥' + Number(value).toLocaleString(); };
         const percentage = function(value, data) {
             const total = data.reduce((sum, current) => sum + Number(current), 0);

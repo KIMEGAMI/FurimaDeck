@@ -29,6 +29,13 @@ class EnsureFuruproLegacyDisabled
             return null;
         }
 
+        // Legacy item IDs belong to a different table than FurimaDeck product IDs.
+        // Send stale detail/edit links to the new list instead of showing the old form
+        // or guessing that both IDs refer to the same product.
+        if (preg_match('/\Aauction-items\/\d+(?:\/edit)?\z/', $request->path()) === 1) {
+            return redirect()->route('products.index');
+        }
+
         return match ($request->path()) {
             'dashboard' => redirect()->route('furimadeck-dashboard', $request->query()),
             'auction-items' => redirect()->route('products.index', $request->query()),

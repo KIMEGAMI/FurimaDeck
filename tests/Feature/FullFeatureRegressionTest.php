@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class FullFeatureRegressionTest extends TestCase
@@ -73,6 +74,30 @@ class FullFeatureRegressionTest extends TestCase
         $this->assertSame(431, $item->profit);
         $this->assertSame('2026-08-24', $item->sold_at?->format('Y-m-d'));
         $this->assertNull($item->sold_image_path);
+    }
+
+    public function test_sold_image_generation_skips_source_images_over_the_configured_pixel_limit(): void
+    {
+        $user = $this->premiumUser();
+        Storage::fake('public');
+        $source = imagecreatetruecolor(20, 20);
+        ob_start();
+        imagepng($source);
+        $png = ob_get_clean();
+        imagedestroy($source);
+
+        $imagePath = 'auction-items/oversized-source.png';
+        Storage::disk('public')->put($imagePath, $png);
+        $item = $this->createItem($user, ['image_path' => $imagePath]);
+        config(['furimadeck.product_images.max_source_pixels' => 100]);
+
+        $this->actingAs($user)
+            ->patch(route('auction-items.sold', $item))
+            ->assertRedirect(route('auction-items.index'))
+            ->assertSessionHas('success');
+
+        $this->assertSame(AuctionItem::STATUS_SOLD, $item->fresh()->status);
+        $this->assertNull($item->fresh()->sold_image_path);
     }
 
     public function test_product_list_search_filters_status_platform_keyword_category_and_unsold_date(): void
@@ -294,7 +319,9 @@ class FullFeatureRegressionTest extends TestCase
             ->actingAs($user)
             ->get(route('sales.index', ['month' => '2026-07']));
 
-        $sales->assertOk();
+        $sales->assertOk()
+            ->assertSee("getPropertyValue('--color-fd-muted').trim() || '#f8fafc'", false)
+            ->assertSee("getPropertyValue('--color-fd-grid').trim() || 'rgba(148, 163, 184, 0.22)'", false);
         $this->assertSame(3999, $sales->viewData('totalSales'));
         $this->assertSame(1233, $sales->viewData('totalPurchase'));
         $this->assertSame(261, $sales->viewData('totalSalesFee'));
@@ -318,7 +345,9 @@ class FullFeatureRegressionTest extends TestCase
             ->actingAs($user)
             ->get(route('category-sales.index', ['month' => '2026-07']));
 
-        $categorySales->assertOk();
+        $categorySales->assertOk()
+            ->assertSee("getPropertyValue('--color-fd-muted').trim() || '#f8fafc'", false)
+            ->assertSee("getPropertyValue('--color-fd-grid').trim() || 'rgba(148, 163, 184, 0.22)'", false);
         $this->assertSame([
             'sales' => 1999,
             'profit' => 1011,

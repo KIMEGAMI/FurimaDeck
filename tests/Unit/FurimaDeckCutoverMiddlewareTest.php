@@ -43,4 +43,15 @@ class FurimaDeckCutoverMiddlewareTest extends TestCase
 
         $this->assertSame(route('products.index', ['keyword' => 'lamp']), $response->getTargetUrl());
     }
+
+    public function test_legacy_product_detail_and_edit_links_redirect_to_the_new_product_list_after_cutover(): void
+    {
+        config()->set('furimadeck.cutover_enabled', true);
+
+        foreach (['/auction-items/2406', '/auction-items/2406/edit'] as $path) {
+            $response = app(EnsureFuruproLegacyDisabled::class)->handle(Request::create($path), fn () => response('old form'));
+
+            $this->assertSame(route('products.index'), $response->getTargetUrl());
+        }
+    }
 }

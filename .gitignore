@@ -15,6 +15,11 @@
 /auth.json
 /node_modules
 /scripts/node_modules
+/chrome-extension/dist/
+/chrome-extension/release/
+/chrome-extension/node_modules/
+/chrome-extension/tests/.chrome-smoke-profile-*/
+/.playwright-mcp/
 /public/build
 /public/fonts-manifest.dev.json
 /public/hot
@@ -28,4 +33,15 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /test-results/
+/.playwright-browsers/
 /storage/framework/testing/
+/storage/framework/views-testing/
+/storage/framework/views-testing-*/
+/storage/framework/phpunit-cache/
+/storage/framework/**
+!/storage/framework/.gitignore
+/.cache/composer/
+/.cache/npm/
+/.cache/tailwind-check/
+/.agents/skills/
+/chrome-extension/storage/framework/tmp/npm-audit-cache/
