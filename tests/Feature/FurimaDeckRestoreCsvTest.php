@@ -265,4 +265,75 @@ class FurimaDeckRestoreCsvTest extends TestCase
         $this->assertDatabaseHas('products', ['user_id' => $user->id, 'internal_sku' => 'DUP-001', 'product_name' => '既存商品'], 'furimadeck');
         $this->assertSame(1, $batch->fresh()->skipped_rows);
     }
+
+    public function test_restore_round_trip_keeps_completed_sale_when_another_marketplace_listing_remains_active(): void
+    {
+        $user = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
+        $soldMarketplace = Marketplace::query()->where('code', 'yahoo_auctions')->firstOrFail();
+        $activeMarketplace = Marketplace::query()->where('code', 'mercari')->firstOrFail();
+        $product = $user->products()->create([
+            'internal_sku' => 'ROUND-SOLD-ACTIVE',
+            'product_name' => '別サイト出品中に売れた商品',
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 0,
+            'inventory_status' => 'out_of_stock',
+        ]);
+        $soldListing = $user->listings()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $soldMarketplace->id,
+            'listing_title' => $product->product_name,
+            'listing_price' => 2500,
+            'expected_fee_rate' => 10,
+            'shipping_fee' => 210,
+            'status' => 'sold',
+        ]);
+        $user->listings()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $activeMarketplace->id,
+            'listing_title' => $product->product_name,
+            'listing_price' => 2600,
+            'expected_fee_rate' => 10,
+            'shipping_fee' => 750,
+            'status' => 'active',
+        ]);
+        $user->sales()->create([
+            'product_id' => $product->id,
+            'listing_id' => $soldListing->id,
+            'marketplace_id' => $soldMarketplace->id,
+            'internal_sku_snapshot' => $product->internal_sku,
+            'product_name_snapshot' => $product->product_name,
+            'quantity' => 1,
+            'sold_price' => 2500,
+            'sold_at' => '2026-10-24 10:00:00',
+            'status' => 'completed',
+            'cost_basis' => 1000,
+            'sales_fee' => 250,
+            'sales_fee_rate' => 10,
+            'shipping_fee' => 210,
+            'net_profit' => 1040,
+        ]);
+
+        $csv = $this->actingAs($user)->get(route('furimadeck-export.restore-spec'))->streamedContent();
+        $this->assertSame(2, preg_match_all('/^ROUND-SOLD-ACTIVE,/m', $csv));
+        $this->assertStringContainsString(',sold,2026-10-24', $csv);
+        $this->assertStringContainsString(',selling,', $csv);
+
+        $restoringUser = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
+        $this->actingAs($restoringUser)->post(route('products.imports.restore-preview'), [
+            'csv_file' => UploadedFile::fake()->createWithContent('sold-active-round-trip.csv', $csv),
+        ])->assertRedirect();
+        $batch = ImportBatch::query()->latest('id')->firstOrFail();
+        $this->assertSame(2, $batch->success_rows);
+        $this->assertSame(0, $batch->failed_rows);
+        $this->actingAs($restoringUser)->post(route('products.imports.commit', $batch))->assertRedirect(route('products.index'));
+
+        $restoredProduct = $restoringUser->products()->where('internal_sku', 'ROUND-SOLD-ACTIVE')->firstOrFail();
+        $this->assertSame(0, (int) $restoredProduct->quantity_available);
+        $this->assertSame(2, $restoredProduct->listings()->count());
+        $this->assertSame(1, $restoringUser->sales()->where('product_id', $restoredProduct->id)->where('status', 'completed')->count());
+        $this->assertDatabaseHas('listings', ['user_id' => $restoringUser->id, 'product_id' => $restoredProduct->id, 'marketplace_id' => $activeMarketplace->id, 'status' => 'active'], 'furimadeck');
+        $this->assertDatabaseHas('sales', ['user_id' => $restoringUser->id, 'product_id' => $restoredProduct->id, 'sold_price' => 2500, 'status' => 'completed'], 'furimadeck');
+    }
 }

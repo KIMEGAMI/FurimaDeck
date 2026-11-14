@@ -218,7 +218,7 @@ class FurimaDeckRestoreCsvService
         }
 
         $errors = [];
-        $productFields = ['management_id', 'title', 'comment', 'parent_category', 'category', 'purchase_price', 'status'];
+        $productFields = ['management_id', 'title', 'comment', 'parent_category', 'category', 'purchase_price'];
         $first = $rows[0];
         $soldRows = 0;
         foreach (array_slice($rows, 1) as $row) {
@@ -230,7 +230,8 @@ class FurimaDeckRestoreCsvService
             }
         }
         foreach ($rows as $row) {
-            if ($this->status((string) ($row['status'] ?? '')) === 'sold') {
+            $status = $this->status((string) ($row['status'] ?? ''));
+            if ($status === 'sold') {
                 $soldRows++;
             }
         }

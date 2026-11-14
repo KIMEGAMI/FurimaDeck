@@ -130,7 +130,7 @@ class FurimaDeckExportController extends Controller
                     ->sortBy('id');
 
                 if ($activeListings->isNotEmpty()) {
-                    return $activeListings->map(fn ($listing): array => [
+                    $listingRows = $activeListings->map(fn ($listing): array => [
                         $product->internal_sku,
                         $listing->listing_title ?: $product->product_name,
                         $listing->listing_description ?: ($product->memo ?? $product->description_base ?? ''),
@@ -144,6 +144,30 @@ class FurimaDeckExportController extends Controller
                         'selling',
                         '',
                     ])->values()->all();
+
+                    $sale = $product->sales->sortByDesc('sold_at')->first(fn ($sale) => $sale->status === 'completed');
+                    if ($sale === null) {
+                        return $listingRows;
+                    }
+
+                    $marketplace = $sale->marketplace;
+                    $rate = $sale->sales_fee_rate ?? $sale->listing?->expected_fee_rate ?? $marketplace?->default_fee_rate ?? 0;
+                    $listingRows[] = [
+                        $product->internal_sku,
+                        $product->product_name,
+                        $product->memo ?? $product->description_base ?? '',
+                        $this->marketplaceLabel($marketplace?->name),
+                        $product->category?->parent?->name ?? '',
+                        $product->category?->name ?? '',
+                        (int) $product->purchase_unit_cost,
+                        (int) $sale->sold_price,
+                        $this->formatRate($rate),
+                        (int) $sale->shipping_fee,
+                        'sold',
+                        $sale->sold_at?->format('Y-m-d') ?? '',
+                    ];
+
+                    return $listingRows;
                 }
 
                 $sale = $product->sales->sortByDesc('sold_at')->first(fn ($sale) => $sale->status === 'completed');
