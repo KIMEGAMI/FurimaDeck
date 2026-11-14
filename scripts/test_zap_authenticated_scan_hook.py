@@ -60,7 +60,6 @@ class FakeContext:
         self.poll_headers = None
         self.poll_frequency = ""
         self.poll_frequency_units = ""
-        self.auth_type = ""
         self.logged_in = ""
         self.logged_out = ""
 
@@ -122,7 +121,6 @@ class FakeContext:
             "pollUrl": self.poll_url if self.apply_poll_readback else "",
             "pollFrequency": self.poll_frequency if self.apply_poll_readback else "",
             "pollFrequencyUnits": self.poll_frequency_units if self.apply_poll_readback else "",
-            "authType": self.auth_type,
             "loggedInPattern": self.logged_in,
             "loggedOutPattern": self.logged_out,
         }
@@ -201,8 +199,6 @@ class FakeAuthentication:
         fields = dict(part.split("=", 1) for part in parameters.split("&"))
         self.login_url = unquote(fields["loginUrl"])
         self.login_data = unquote(fields["loginRequestData"])
-        if hasattr(self, "context"):
-            self.context.auth_type = method
         return "OK"
 
     def get_authentication_method(self, context_id):

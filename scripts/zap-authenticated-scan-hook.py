@@ -250,7 +250,6 @@ def zap_import_context_wrap(context_id):
         context_state = _ZAP.context.context(CONTEXT_NAME)
         _require_value(context_state, "true", "inScope")
         _require_value(context_state, "POLL_URL", "checkingStrategy")
-        _require_value(context_state, "formBasedAuthentication", "authType")
         _require_value(context_state, logged_in_indicator, "loggedInPattern")
         _require_value(context_state, logged_out_indicator, "loggedOutPattern")
         if _mapping_value(context_state, "pollUrl") != f"{origin}/furimadeck-dashboard":

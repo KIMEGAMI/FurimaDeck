@@ -99,7 +99,7 @@ CIでは、PHP構文、フロントエンドビルド、Pint、PHPUnit、PHP/Nod
 | 1.0で意図的に作らない機能 | フリマ自動出品・Chrome拡張による自動入力、AIによる出品情報生成、e-Tax送信・申告書作成、会計サービスへの仕訳API送信・同期、弥生API、市場データのない相場推定 | 1.0対象外。画面・案内から誤認を招く導線を出さない。これらを足すことは1.0の完了条件ではない。 |
 | コードとローカル自動テストの確認あり | 商品・画像・出品・販売と返品等の状態遷移、分析・CSV、PWAの画面とService Worker、モバイルのカメラ入力から一覧表示、Stripe Webhook順不同処理 | 2026-11-14の現行ツリー全PHPUnitは1,088件中1,079成功・9スキップ、7,411 assertions。商品IDごとの現物1点・在庫入力制約テストを追加して再実行済み。MariaDB 11.4とMySQL 8.4の専用ゲートは各8 tests / 72 assertions成功。Browser E2Eは現行Laravel実行コードで29件成功。すべてローカルの隔離データ検証で、本番環境や実機カメラの証明ではない。 |
 | 1.0機能だが実サービスで未確認 | Google OAuth本番Callback、Stripe Live Checkout/Webhook/Portal、freee/Money ForwardのOAuthと手数料・送料・梱包費を含む各CSV取込、VPS本番環境へのR2設定適用と画像保存、本番DBバックアップ復元 | 開発用R2のPut/Get・認可付き配信・Deleteは専用テストで成功済みで、再試験不要。未確認なのはVPS本番環境への設定適用とそこでの画像保存。今回のResend認証メールは2026-11-13にResend上でDelivered、ユーザーの受信トレイへの到達、およびローカルで認証リンクからダッシュボードへの遷移を確認済み。本番メール設定の動作を示す証拠ではない。通常販売CSVの一部取込成功を、他の費用パターンの取込成功とは扱わない。 |
-| 環境・安全性のリリースゲート | 現行変更を対象にしたCI、OWASP ZAP完了、変更をレビュー可能な単位へ統合 | Gitleaks v8.30.1でHEAD差分・未追跡440 pathsを走査し検出0件（`.env`除外）。一方、既存のGitHub CI/Security成功runはコミット済みHEAD `4734b6109774c302d2db8ac5707f476d30fd50ac`に対する結果で、現在の共有作業ツリー441 status entriesを検証しない。前回ZAPはHost header拒否でレポート未生成。候補SHAのCI/SecurityとZAPは未確認。別スレッドの担当を尊重し、CIを起動・再実行していない。 |
+| 環境・安全性のリリースゲート | NO-GO | PR #38 head c4d5f7f62717665e9cb5089e5c9c4815fd0c4a3eのCI run #336は全ジョブ成功。Security run #324はSecret scan、Semgrep、Dependency review成功、OWASP ZAP active DAST失敗。ZAPは実スキャン前の認証設定検証で停止した。pollDataとpollHeadersの不足を補った次の原因はcontext応答に存在しないauthTypeの誤確認。対応を修正し、再検証が必要。 |
 | 端末固有の確認 | 実機のカメラ撮影、PC表示の変更前後比較 | 未確認。ブラウザーのモバイル幅と写真選択テストは成功済み。 |
 
 この表で「ローカル自動テストの確認あり」は、対象機能が全仕様どおり完成したという意味ではない。各ゲートの根拠・制約は下表の個別記録を優先する。
@@ -117,7 +117,7 @@ CIでは、PHP構文、フロントエンドビルド、Pint、PHPUnit、PHP/Nod
 | MySQL 8.4 | PASS（現行ツリー） | 2026-11-14、隔離MySQL 8.4で全migrationと専用8 tests / 72 assertions成功。Dockerはtmpfs・loopback限定で、終了後に専用コンテナ0件を確認。開発DB`furimadeck_local`には接続・変更していない。本番DBの同等性・復元を証明しない。 |
 | 開発用Cloudflare R2 | PASS（専用接続テスト） | 既存のR2開発用テスト1件・20 assertionsでPut/Get・認可付き配信・Delete成功を確認済み。現行リリースのブロッカーではなく、再試験・再設定は不要。本番用キーでのローカル接続試験は行わない。 |
 | VPS本番R2 | 未確認 | 開発用R2の試験結果とは別に、VPS本番環境の実設定と本番画像の保存・表示はこのローカル証跡から確認できない。 |
-| CI / Security | NO-GO | GitHubを読み取り専用で確認した既存runはコミット済みHEAD `4734b6109774c302d2db8ac5707f476d30fd50ac`のみで、共有作業ツリー差分を検証しない。Securityの既存結果にはOWASP ZAP active DASTとsecurity regressionが含まれず、前回ZAPはHost header拒否でレポート未生成。Gitleaksの現行差分scanは別途同日PASSだが、共有変更をレビュー可能な単位へ統合した候補SHAのCI/Security結果は未確認。別スレッドの担当を尊重し、CIは起動・再実行していない。 |
+| CI / Security | NO-GO | Draft PR #38 head c4d5f7f62717665e9cb5089e5c9c4815fd0c4a3eのCI run #336（Test and build、MariaDB CSV gate）は成功。Security run #324のSecret scan、Semgrep、Dependency reviewも成功。OWASP ZAPは認証設定の過剰なread-back検証で失敗し、DASTレポート未生成。修正後のCI/Securityは未実行。 |
 | 本番Scheduler / queue | 未確認 | Schedulerのsystemd timer/serviceとインストーラは存在し、ローカル`php artisan schedule:list`と回帰テストで画像削除・古い会計送信の毎分実行を確認。VPS上のtimer有効状態、queue worker稼働状態、実R2削除は未確認。 |
 | 外部サービス・本番 | 一部PASS、主要ゲート未確認 | 2026-11-14に本番公開URLの`/`と`/login`を読み取り専用HTTPS GETで確認し、両方HTTP 200・TLS検証成功。これは公開ページの到達性のみで、Apache/VPS内部設定や認証後の動作は証明しない。今回のResend認証メールはResend上のDeliveredとユーザーの受信トレイへの到達を確認し、ローカルでは認証後のダッシュボード遷移を確認。Google OAuth本番Callback、Stripe Live Checkout/Portal/Webhook、VPS本番R2、DBバックアップ/復元は未確認。ローカル確認は本番環境を証明しないため、GOにはできない。 |
 | 共有変更の統合 | NO-GO | 2026-11-14再確認時、ブランチ`codex/chrome-extension-release`、HEAD `4734b61`。ローカル`origin/main`との比較は0 commit先行・23 commit遅れ（remote-tracking refの最新性は未確認）。`git status --porcelain --untracked-files=all`は441 status entries（54 staged、249 unstaged、173 untracked）。共有変更を1.0対象範囲に分けたレビュー可能な候補SHAは未作成。共有作業のstage/commit/push、変更削除、CI操作は行っていない。既存HEADのCI成功は現在の作業ツリー差分を検証しない。 |
@@ -715,7 +715,7 @@ Money Forwardサポートの2026/10/23回答では、免税設定で税区分・
 | 本番DBバックアップ・復元 | 今回のリリース対象に紐づくバックアップと復元確認が未提示 | 未確認 |
 | 開発DB inventory / image outbox migration | `furimadeck_local`へ承認済みmigrationを適用。outbox 0件、商品・売上・ユーザー・画像・在庫イベント件数は適用前後で一致 | PASS（開発DBのみ。本番未適用） |
 | 本番VPS・本番R2 | 本番設定と画像CRUDの実地確認は未確認 | 未確認 |
-| CI / Security | 別スレッドの担当。ここでは実行・変更していない | 未確認 |
+| CI / Security | NO-GO | Draft PR #38 head c4d5f7f62717665e9cb5089e5c9c4815fd0c4a3eのCI run #336（Test and build、MariaDB CSV gate）は成功。Security run #324のSecret scan、Semgrep、Dependency reviewも成功。OWASP ZAPは認証設定の過剰なread-back検証で失敗し、DASTレポート未生成。修正後のCI/Securityは未実行。 |
 | Chrome拡張 | FurimaDeck 1.0の範囲外として凍結 | リリース阻害条件にしない |
 
 ローカルPHPUnitはPHP 8.5.12・隔離SQLiteで実行し、実Stripe、Resend、Google OAuth、本番DB/R2、CIへ接続していない。Docker Engineの現在状態はこの実行環境からの`docker ps`がpipe permission deniedで取得できず、ユーザーPC側の起動状態について結論しない。
@@ -998,3 +998,23 @@ Money Forwardサポートの2026/10/23回答では、免税設定で税区分・
 ### ZAP失敗の追加切り分け
 
 PR #37のworkflowがZAPへ渡す`api.addrs.addr.name`正規表現はlocalhostとloopback表記のみを許可し、`zap`を含まない。一方、失敗ログの拒否対象Hostは`zap`。ZAP公式仕様は、API接続元の許可設定に加え、Host headerも許可リストに含まれる必要があると説明している。これにより、現状のworkflow許可値と失敗Hostの不一致が直接確認できた。`.*`への拡大は行わない。安全な修正候補は、スキャンツールのAPI接続先をloopbackに揃えること、または`zap`が同じ隔離コンテナ内でloopbackへ確実に解決されることを検証したうえで、その名前だけを限定許可すること。後者の名前解決・bind条件は現時点で未検証であり、修正・再実行も未実施。ローカルDocker APIはpermission deniedで、該当image上の再現試験ができなかった。一次資料: https://www.zaproxy.org/docs/desktop/ui/dialogs/options/api/ , https://github.com/zaproxy/zaproxy/blob/main/docker/zap-full-scan.py
+
+## 2026-11-14 PR #38 最新検証
+
+- PR #38はDraftのまま。head SHAは c4d5f7f62717665e9cb5089e5c9c4815fd0c4a3e。マージ・本番デプロイはしていない。
+- GitHub CI run #336 (43595504541) は Test and build と MariaDB CSV gate の全ジョブが成功。Test and buildにはBrowser E2E、PHPUnit、lint、Composer/npm監査を含む。
+- Security run #324 (43595504542) は Secret scan、Semgrep SAST、Dependency reviewが成功。OWASP ZAP active DASTは2026-11-14 12:40 UTC時点で実行中のため未判定。
+- ZAP run #322 (43594790432) は未認証スキャン後の認証確認設定で pollHeaders が不足し、アプリのDAST開始前に失敗。ZAP公式API仕様と失敗ログを確認し、pollDataの空値とpollHeadersの空値を明示する修正をPRに追加。公式API参照: https://www.zaproxy.org/docs/api/
+- python -m unittest scripts.test_zap_authenticated_scan_hook は20 tests成功。これはZAP実行環境全体やアプリ脆弱性の合格を証明しない。
+- 本番DBバックアップ復元、Stripe Live、Google OAuth本番、freee/Money Forward OAuth・対象費目CSVの実取込、本番VPS R2画像CRUDなどの外部環境ゲートは未確認。したがって1.0全体は引き続きNO-GO。
+- 別スレッドが動いているとの前提は誤り。現在の実行根拠はPR #38のGitHub Actionsだけである。
+
+## 2026-11-14 PR #38 ZAP再確認
+
+- PR #38はDraftのまま。検証済みhead c4d5f7f62717665e9cb5089e5c9c4815fd0c4a3eのCI run #336 (43595504541) は全ジョブ成功。
+- Security run #324 (43595504542) はSecret scan、Semgrep SAST、Dependency review成功。OWASP ZAP active DASTは失敗し、DASTレポートは生成されていない。
+- ログではZAPが認証設定APIを受け付け、フォーム認証も少なくとも一度成功した後、context view応答にauthTypeがないため、誤った追加read-back検査で停止している。認証方式は専用のget_authentication_method APIで既に照合しているため、context viewに対する重複authType検査を削除。専用APIでの確認は維持。
+- pollData、pollHeadersは空値を明示しており、ZAPの必須入力エラーは解消した。最新コードのCI/Security確認は未実行。
+- scripts.test_zap_authenticated_scan_hookの単体テスト20件は最新変更後も成功。
+- 本番DBバックアップ復元、Stripe Live、Google OAuth本番、freee/Money Forward OAuth・対象費目CSVの実取込、本番VPS R2画像CRUDなどは未確認のため、1.0全体はNO-GO。
+- 別スレッドが動いているとの前提は誤り。PR #38のGitHub Actionsだけを確認している。
