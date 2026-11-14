@@ -121,6 +121,19 @@ jobs:
         run: vendor/bin/pint --test
 
       - name: Run PHP tests
+        env:
+          # E2E setup writes these app-specific values to GITHUB_ENV. Restore the
+          # isolated PHPUnit environment instead of sharing browser-test state.
+          APP_URL: http://localhost
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+          MAIL_MAILER: array
+          FURIMADECK_CUTOVER_ENABLED: false
+          FURIMADECK_PRODUCT_MANAGEMENT_ENABLED: false
+          FURIMADECK_DEMO_USER_ENABLED: false
+          FURIMADECK_DEMO_USER_EMAIL: ""
+          FURIMADECK_DEMO_USER_PASSWORD: ""
         run: composer test
 
       - name: Audit PHP dependencies
