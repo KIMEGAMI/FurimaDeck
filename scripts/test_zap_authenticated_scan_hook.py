@@ -56,6 +56,7 @@ class FakeContext:
         self.in_scope = "false"
         self.strategy = "EACH_REQ"
         self.poll_url = ""
+        self.poll_data = None
         self.poll_frequency = ""
         self.poll_frequency_units = ""
         self.auth_type = ""
@@ -94,12 +95,14 @@ class FakeContext:
         strategy,
         *,
         pollurl=None,
+        polldata=None,
         pollfrequency=None,
         pollfrequencyunits=None,
     ):
         if self.apply_strategy:
             self.strategy = strategy
             self.poll_url = pollurl or ""
+            self.poll_data = polldata
             self.poll_frequency = str(pollfrequency or "")
             self.poll_frequency_units = pollfrequencyunits or ""
         return "OK"
@@ -327,6 +330,7 @@ class AuthenticatedZapHookTest(unittest.TestCase):
         self.assertTrue(zap.users.authenticated)
         self.assertEqual(zap.context.strategy, "POLL_URL")
         self.assertEqual(zap.context.poll_url, "https://127.0.0.1:8443/furimadeck-dashboard")
+        self.assertEqual(zap.context.poll_data, "")
         self.assertEqual(zap.context.poll_frequency, "1")
         self.assertEqual(zap.context.poll_frequency_units, "REQUESTS")
         self.assertEqual(zap.acsrf.option_tokens_names, ["_token"])
