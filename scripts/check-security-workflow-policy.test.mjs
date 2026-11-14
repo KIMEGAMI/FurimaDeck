@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const workflowPath = new URL('../.github/workflows/security.yml', import.meta.url);
 const workflow = readFileSync(workflowPath, 'utf8');
+const ciWorkflowPath = new URL('../.github/workflows/ci.yml', import.meta.url);
+const ciWorkflow = readFileSync(ciWorkflowPath, 'utf8');
 
 test('both ZAP scans restrict the API to the exact scanner and loopback hosts', () => {
   const scanCommands = workflow.match(/zap-full-scan\.py[^\r\n]*/g) ?? [];
@@ -43,4 +45,17 @@ test('failed authenticated ZAP scans emit only aggregate access-log diagnostics 
   assert.ok(workflow.includes('node scripts/check-authenticated-zap-access-log.mjs "$auth_log" "$auth_log_offset" || true'));
   assert.ok(workflow.includes('trap cleanup_security_scan EXIT'));
   assert.ok(workflow.includes('auth_log_reported=true'));
+});
+
+test('CI and Security run on PR updates and main pushes without duplicate PR-branch push runs', () => {
+  for (const [name, source] of [['CI', ciWorkflow], ['Security', workflow]]) {
+    assert.match(source, /^  pull_request:\r?$/m, `${name} must validate pull requests`);
+    const pushBranches = source.match(/^  push:\r?\n    branches:\r?\n((?:      - .+\r?\n)+)/m);
+    assert.ok(pushBranches, `${name} must retain a push trigger`);
+    assert.deepEqual(
+      pushBranches[1].split(/\r?\n/).filter(Boolean).map((line) => line.trim()),
+      ['- main'],
+      `${name} must avoid a second run for PR branch pushes`,
+    );
+  }
 });
