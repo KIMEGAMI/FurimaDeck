@@ -151,7 +151,9 @@ def _is_api_true(value):
     return value is True or (isinstance(value, str) and value.casefold() == "true")
 
 
-def _auth_failure_diagnostic(response, logged_in_indicator, logged_out_indicator):
+def _auth_failure_diagnostic(
+    response, logged_in_indicator, logged_out_indicator, poll_response=None
+):
     """Return bounded auth metadata without exposing headers, bodies, or credentials."""
     response_mapping = _auth_result_mapping(response)
     if response_mapping is None:
@@ -163,7 +165,22 @@ def _auth_failure_diagnostic(response, logged_in_indicator, logged_out_indicator
             int: "integer",
             type(None): "none",
         }.get(type(response), "other")
-        return f"response=unexpected; response_type={response_type}"
+        summary = f"login_response=unexpected; login_response_type={response_type}"
+        if poll_response is not None:
+            poll_mapping = _auth_result_mapping(poll_response)
+            poll_success = (
+                _mapping_value(poll_mapping, "pollSuccessful")
+                if poll_mapping is not None
+                else None
+            )
+            poll_kind = (
+                "boolean" if isinstance(poll_success, bool)
+                else "string" if isinstance(poll_success, str)
+                else "missing" if poll_success is None
+                else "other"
+            )
+            summary += f"; poll_success_flag_type={poll_kind}"
+        return summary
 
     success = _mapping_value(response_mapping, "authSuccessful")
     if success is None:
@@ -360,12 +377,24 @@ def zap_import_context_wrap(context_id):
         # indicator against its response. Do not treat configuration alone as proof.
         auth_result = _ZAP.users.authenticate_as_user(context_id, user_id)
         auth_result_mapping = _auth_result_mapping(auth_result)
-        if (
-            auth_result_mapping is None
-            or not _is_api_true(_mapping_value(auth_result_mapping, "authSuccessful"))
-        ):
+        auth_successful = auth_result_mapping is not None and _is_api_true(
+            _mapping_value(auth_result_mapping, "authSuccessful")
+        )
+        poll_result = None
+        poll_successful = False
+        if not auth_successful:
+            # ZAP 2.17 returns ApiResponseElement.OK when it cannot find a
+            # persisted auth request. Poll the configured protected URL before
+            # failing; only its explicit pollSuccessful flag can verify the session.
+            poll_result = _ZAP.users.poll_as_user(context_id, user_id)
+            poll_mapping = _auth_result_mapping(poll_result)
+            poll_successful = poll_mapping is not None and _is_api_true(
+                _mapping_value(poll_mapping, "pollSuccessful")
+            )
+
+        if not auth_successful and not poll_successful:
             diagnostic = _auth_failure_diagnostic(
-                auth_result, logged_in_indicator, logged_out_indicator
+                auth_result, logged_in_indicator, logged_out_indicator, poll_result
             )
             raise RuntimeError(
                 f"ZAP could not authenticate the disposable scan user ({diagnostic})."

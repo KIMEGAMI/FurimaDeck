@@ -127,7 +127,7 @@ class FakeContext:
 
 
 class FakeUsers:
-    def __init__(self, *, imported=True, auth_result=None):
+    def __init__(self, *, imported=True, auth_result=None, poll_result=None):
         self.imported = imported
         self.auth_result = auth_result or {
             "id": "41",
@@ -142,6 +142,8 @@ class FakeUsers:
         self.enabled = False
         self.credentials = None
         self.authenticated = False
+        self.poll_result = poll_result if poll_result is not None else {"pollSuccessful": "false"}
+        self.poll_called = False
 
     def new_user(self, context_id, name):
         return "0"
@@ -162,6 +164,10 @@ class FakeUsers:
     def authenticate_as_user(self, context_id, user_id):
         self.authenticated = True
         return self.auth_result
+
+    def poll_as_user(self, context_id, user_id):
+        self.poll_called = True
+        return self.poll_result
 
 
 class FakeSessionManagement:
@@ -583,7 +589,7 @@ class AuthenticatedZapHookTest(unittest.TestCase):
 
         self.assertEqual(
             diagnostic,
-            "response=unexpected; response_type=string",
+            "login_response=unexpected; login_response_type=string",
         )
         self.assertNotIn("private-response-placeholder", diagnostic)
 
@@ -602,6 +608,35 @@ class AuthenticatedZapHookTest(unittest.TestCase):
 
         self.assertTrue(zap.users.authenticated)
         self.assertNotIn("private-response-placeholder", output.getvalue())
+
+    def test_verifies_ok_authentication_response_with_protected_url_poll(self):
+        zap = FakeZap(users=FakeUsers(auth_result="OK", poll_result={"pollSuccessful": "true"}))
+        self._run_full_setup(zap)
+
+        self.assertTrue(zap.users.authenticated)
+        self.assertTrue(zap.users.poll_called)
+
+    def test_fails_closed_when_ok_authentication_response_poll_fails(self):
+        zap = FakeZap(
+            users=FakeUsers(
+                auth_result="OK",
+                poll_result={
+                    "pollSuccessful": "false",
+                    "responseBody": "private-response-placeholder",
+                },
+            )
+        )
+        HOOK.zap_started(zap, "https://127.0.0.1:8443")
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            with self.assertRaisesRegex(RuntimeError, "could not authenticate") as raised:
+                HOOK.zap_import_context_wrap("3")
+
+        self.assertTrue(zap.users.poll_called)
+        self.assertNotIn("private-response-placeholder", str(raised.exception))
+        self.assertNotIn("private-response-placeholder", output.getvalue())
+        self.assertFalse(self.context_file.exists())
 
     def test_fails_closed_when_authentication_response_is_ambiguous(self):
         for response in (
