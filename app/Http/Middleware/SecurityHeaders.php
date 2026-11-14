@@ -21,6 +21,12 @@ class SecurityHeaders
             $response->setContent('');
         }
 
+        foreach ($response->headers->getCookies() as $cookie) {
+            if ($cookie->getName() === 'XSRF-TOKEN' && ! $cookie->isHttpOnly()) {
+                $response->headers->setCookie($cookie->withHttpOnly());
+            }
+        }
+
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
