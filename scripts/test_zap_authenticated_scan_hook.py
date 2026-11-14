@@ -574,6 +574,19 @@ class AuthenticatedZapHookTest(unittest.TestCase):
         self.assertNotIn("private-cookie", diagnostic)
         self.assertNotIn("private-response-placeholder", diagnostic)
 
+    def test_authentication_failure_diagnostic_reports_only_unexpected_response_type(self):
+        diagnostic = HOOK._auth_failure_diagnostic(
+            "private-response-placeholder",
+            HOOK._auth_indicator("https://127.0.0.1:8443"),
+            HOOK._logged_out_indicator("https://127.0.0.1:8443"),
+        )
+
+        self.assertEqual(
+            diagnostic,
+            "response=unexpected; response_type=string",
+        )
+        self.assertNotIn("private-response-placeholder", diagnostic)
+
     def test_fails_closed_when_authentication_response_is_ambiguous(self):
         for response in (
             "not-confirmed",

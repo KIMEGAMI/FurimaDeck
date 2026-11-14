@@ -137,7 +137,15 @@ def _mapping_value(response, name):
 def _auth_failure_diagnostic(response, logged_in_indicator, logged_out_indicator):
     """Return bounded auth metadata without exposing headers, bodies, or credentials."""
     if not isinstance(response, dict):
-        return "response=unexpected"
+        response_type = {
+            str: "string",
+            list: "list",
+            tuple: "tuple",
+            bool: "boolean",
+            int: "integer",
+            type(None): "none",
+        }.get(type(response), "other")
+        return f"response=unexpected; response_type={response_type}"
 
     success = _mapping_value(response, "authSuccessful")
     if success is None:
