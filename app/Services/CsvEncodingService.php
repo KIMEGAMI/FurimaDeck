@@ -34,20 +34,52 @@ class CsvEncodingService
 
     private function assertWellFormedCsv(string $contents): void
     {
-        $inQuotes = false;
         $length = strlen($contents);
+        $state = 'field_start';
         for ($index = 0; $index < $length; $index++) {
-            if ($contents[$index] !== '"') {
-                continue;
-            }
-            if ($inQuotes && $index + 1 < $length && $contents[$index + 1] === '"') {
-                $index++;
+            $character = $contents[$index];
+            if ($state === 'field_start') {
+                if ($character === '"') {
+                    $state = 'quoted';
+                } elseif ($character !== ',' && $character !== "\r" && $character !== "\n") {
+                    $state = 'unquoted';
+                }
 
                 continue;
             }
-            $inQuotes = ! $inQuotes;
+
+            if ($state === 'unquoted') {
+                if ($character === '"') {
+                    throw new RuntimeException('CSVの引用符の位置が不正です。ファイル形式を確認してください。');
+                }
+                if ($character === ',' || $character === "\r" || $character === "\n") {
+                    $state = 'field_start';
+                }
+
+                continue;
+            }
+
+            if ($state === 'quoted') {
+                if ($character === '"') {
+                    if ($index + 1 < $length && $contents[$index + 1] === '"') {
+                        $index++;
+                    } else {
+                        $state = 'after_quote';
+                    }
+                }
+
+                continue;
+            }
+
+            if ($character === ',') {
+                $state = 'field_start';
+            } elseif ($character === "\r" || $character === "\n") {
+                $state = 'field_start';
+            } else {
+                throw new RuntimeException('閉じ引用符の後に不要な文字があります。CSV形式を確認してください。');
+            }
         }
-        if ($inQuotes) {
+        if ($state === 'quoted') {
             throw new RuntimeException('CSVの引用符が閉じられていません。ファイル形式を確認してください。');
         }
     }

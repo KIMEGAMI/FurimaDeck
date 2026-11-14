@@ -41,4 +41,24 @@ class FurimaDeckEntitlementsTest extends TestCase
         $this->assertTrue($demo->hasComplimentaryPremiumAccess());
         $this->assertTrue($demo->hasActiveSubscription());
     }
+
+    public function test_configured_demo_user_email_matches_case_insensitively_without_upgrading_other_free_users(): void
+    {
+        config()->set('demo.user_enabled', true);
+        config()->set('demo.user_email', 'Demo.User@example.com');
+
+        $demo = new User([
+            'email' => 'demo.user@example.com',
+            'subscription_plan' => User::SUBSCRIPTION_INACTIVE,
+        ]);
+        $free = new User([
+            'email' => 'another.user@example.com',
+            'subscription_plan' => User::SUBSCRIPTION_INACTIVE,
+        ]);
+
+        $this->assertTrue($demo->isDemoUser());
+        $this->assertTrue($demo->hasActiveSubscription());
+        $this->assertFalse($free->isDemoUser());
+        $this->assertFalse($free->hasActiveSubscription());
+    }
 }

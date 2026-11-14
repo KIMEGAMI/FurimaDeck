@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <x-pwa-head />
     @php
         $pageSeo = config('seo.pages.register');
         $siteName = config('seo.site_name', 'FurimaDeck');
@@ -22,12 +23,12 @@
     <meta name="twitter:card" content="{{ config('seo.twitter_card', 'summary_large_image') }}">
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script nonce="{{ Vite::cspNonce() }}" src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
 </head>
 
-<body class="min-h-screen bg-slate-100">
-    <main class="flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none" style="background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('{{ asset('images/furimadeck-hero.png') }}');">
-        <div class="grid min-h-[720px] w-full max-w-7xl grid-cols-1 overflow-hidden rounded-[2rem] bg-white shadow-2xl lg:grid-cols-2">
+<body class="min-h-screen bg-slate-50 text-slate-900">
+    <main class="flex min-h-screen items-start justify-center bg-slate-50 p-4 sm:p-6 lg:items-center lg:p-8">
+        <div class="grid min-h-0 w-full max-w-6xl grid-cols-1 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl lg:min-h-[680px] lg:grid-cols-2">
             <section class="relative hidden bg-blue-900 lg:block">
                 <img
                     src="{{ asset('images/furimadeck-hero.png') }}"
@@ -50,7 +51,7 @@
                 </div>
             </section>
 
-            <section class="flex items-center justify-center px-6 py-10 lg:px-16">
+            <section class="flex items-center justify-center px-5 py-8 sm:px-8 sm:py-10 lg:px-14">
                 <div class="w-full max-w-xl">
                     <div class="mb-8 text-center">
                         <a href="{{ route('home') }}" class="mb-6 inline-flex text-3xl font-black tracking-[0.22em] text-cyan-700">
@@ -86,7 +87,7 @@
                         </div>
                     </div>
 
-                    <form method="POST" action="{{ route('register') }}" class="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl">
+                    <form method="POST" action="{{ route('register') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
                         @csrf
 
                         <div>
@@ -218,7 +219,7 @@
         </div>
     </main>
 
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}">
         $(function () {
             const $password = $('#password')
             const $passwordConfirmation = $('#password_confirmation')

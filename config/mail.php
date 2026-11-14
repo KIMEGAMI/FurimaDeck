@@ -1,6 +1,11 @@
 <?php
 
 $mailFromFallback = 'no-reply@'.(parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST) ?: 'localhost');
+$mailScheme = env('MAIL_SCHEME');
+
+if (! in_array($mailScheme, ['smtp', 'smtps'], true)) {
+    $mailScheme = in_array(env('MAIL_ENCRYPTION'), ['ssl', 'smtps'], true) ? 'smtps' : null;
+}
 
 return [
 
@@ -41,7 +46,8 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
+            // Port 587 uses SMTP with automatic STARTTLS; port 465 uses SMTPS.
+            'scheme' => $mailScheme,
             'url' => env('MAIL_URL'),
             'host' => env('MAIL_HOST', '127.0.0.1'),
             'port' => env('MAIL_PORT', 2525),

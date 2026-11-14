@@ -1,12 +1,14 @@
 const CACHE_NAME = @json($cacheName);
+const CACHE_PREFIX = 'furimadeck-pwa-';
 const OFFLINE_TITLE = @json($offlineTitle);
 const OFFLINE_MESSAGE = @json($offlineMessage);
 const OFFLINE_RETRY_LABEL = @json($offlineRetryLabel);
+const OFFLINE_CSP_NONCE = @json(Vite::cspNonce());
 const CORE_ASSETS = [
-    '/favicon.ico',
+    '/favicon.ico?v=3',
     '/images/logo.png',
-    '/images/icons/icon-192.png',
-    '/images/icons/icon-512.png'
+    '/images/icons/icon-192.png?v=3',
+    '/images/icons/icon-512.png?v=3'
 ];
 
 self.addEventListener('install', (event) => {
@@ -22,7 +24,7 @@ self.addEventListener('activate', (event) => {
         caches.keys()
             .then((keys) => Promise.all(
                 keys
-                    .filter((key) => key !== CACHE_NAME)
+                    .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
                     .map((key) => caches.delete(key))
             ))
             .then(() => self.clients.claim())
@@ -40,8 +42,11 @@ self.addEventListener('fetch', (event) => {
     if (request.mode === 'navigate') {
         event.respondWith(
             fetch(request).catch(() => new Response(
-                `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${OFFLINE_TITLE}</title></head><body style="font-family:sans-serif;padding:32px;background:#0f172a;color:#f8fafc"><h1>${OFFLINE_TITLE}</h1><p>${OFFLINE_MESSAGE}</p><button type="button" id="offline-retry">${OFFLINE_RETRY_LABEL}</button><script>const retry=document.getElementById('offline-retry');retry.addEventListener('click',()=>window.location.reload());window.addEventListener('online',()=>window.location.reload());</script></body></html>`,
-                { headers: { 'Content-Type': 'text/html; charset=UTF-8' } }
+                `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${OFFLINE_TITLE}</title><style nonce="${OFFLINE_CSP_NONCE}">body{font-family:sans-serif;padding:32px;background:#0f172a;color:#f8fafc}</style></head><body><main><h1>${OFFLINE_TITLE}</h1><p>${OFFLINE_MESSAGE}</p><button type="button" id="offline-retry">${OFFLINE_RETRY_LABEL}</button></main><script nonce="${OFFLINE_CSP_NONCE}">const retry=document.getElementById('offline-retry');retry.addEventListener('click',()=>window.location.reload());window.addEventListener('online',()=>window.location.reload());</script></body></html>`,
+                { headers: {
+                    'Content-Type': 'text/html; charset=UTF-8',
+                    'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${OFFLINE_CSP_NONCE}'; style-src 'nonce-${OFFLINE_CSP_NONCE}'; style-src-attr 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+                } }
             ))
         );
         return;
@@ -57,22 +62,24 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    event.respondWith(
-        caches.match(request).then((cachedResponse) => {
-            if (cachedResponse) {
-                return cachedResponse;
+    let cacheWritePromise = Promise.resolve();
+    const responsePromise = caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) {
+            return cachedResponse;
+        }
+
+        return fetch(request).then((networkResponse) => {
+            if (! networkResponse || networkResponse.status !== 200) {
+                return networkResponse;
             }
 
-            return fetch(request).then((networkResponse) => {
-                if (! networkResponse || networkResponse.status !== 200) {
-                    return networkResponse;
-                }
+            const responseToCache = networkResponse.clone();
+            cacheWritePromise = caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
 
-                const responseToCache = networkResponse.clone();
-                caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
+            return networkResponse;
+        });
+    });
 
-                return networkResponse;
-            });
-        })
-    );
+    event.respondWith(responsePromise);
+    event.waitUntil(responsePromise.then(() => cacheWritePromise).catch(() => undefined));
 });

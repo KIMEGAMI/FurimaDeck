@@ -65,4 +65,26 @@ class FurimaDeckDeploymentWorkflowSafetyTest extends TestCase
         $this->assertStringContainsString('  workflow_dispatch:', $matches['triggers']);
         $this->assertDoesNotMatchRegularExpression('/^  (push|pull_request):/m', $matches['triggers']);
     }
+
+    public function test_startup_service_installer_installs_and_starts_the_scheduler_timer(): void
+    {
+        $installer = file_get_contents(base_path('deploy/scripts/install-startup-services.sh'));
+
+        $this->assertIsString($installer);
+        $this->assertStringContainsString('SCHEDULER_SERVICE_NAME="furimadeck-scheduler.service"', $installer);
+        $this->assertStringContainsString('SCHEDULER_TIMER_NAME="furimadeck-scheduler.timer"', $installer);
+        $this->assertStringContainsString('install -m 0644 "${SCHEDULER_TIMER_SOURCE}" "${SCHEDULER_TIMER_TARGET}"', $installer);
+        $this->assertStringContainsString('systemctl enable "${SCHEDULER_TIMER_NAME}"', $installer);
+        $this->assertStringContainsString('systemctl start "${SCHEDULER_TIMER_NAME}"', $installer);
+
+        $daemonReloadPosition = strpos($installer, 'systemctl daemon-reload');
+        $enableTimerPosition = strpos($installer, 'systemctl enable "${SCHEDULER_TIMER_NAME}"');
+        $startTimerPosition = strpos($installer, 'systemctl start "${SCHEDULER_TIMER_NAME}"');
+
+        $this->assertNotFalse($daemonReloadPosition);
+        $this->assertNotFalse($enableTimerPosition);
+        $this->assertNotFalse($startTimerPosition);
+        $this->assertLessThan($enableTimerPosition, $daemonReloadPosition);
+        $this->assertLessThan($startTimerPosition, $enableTimerPosition);
+    }
 }

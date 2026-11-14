@@ -7,13 +7,16 @@ use App\Models\Listing;
 use App\Models\Marketplace;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\ProductInventoryEvent;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\FurimaDeckAccountingEntryService;
 use App\Services\FurimaDeckExternalSalesImportService;
 use App\Services\FurimaDeckRestoreCsvService;
 use App\Services\MarketplaceFeeService;
 use App\Services\ProductCsvPreviewService;
+use App\Services\ProductInventoryEventService;
 use App\Services\SaleProfitCalculator;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
@@ -22,6 +25,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use InvalidArgumentException;
 use RuntimeException;
 
 class ProductCsvImportController extends Controller
@@ -139,6 +143,12 @@ class ProductCsvImportController extends Controller
         abort_unless($importBatch->status === 'preview' && $importBatch->failed_rows === 0, 422);
 
         $rows = $importBatch->rowResults()->where('is_valid', true)->orderBy('row_number')->get();
+        if ($importBatch->format === 'furimadeck_product_csv' && $rows->contains(
+            fn ($row): bool => ($row->row_json['sale_state'] ?? 'stock') === 'sold'
+                && ($row->row_json['__purchase_unit_cost_supplied'] ?? '0') !== '1',
+        )) {
+            return back()->withErrors(['csv_file' => 'このプレビューでは売却商品の仕入単価が明示されたことを確認できません。CSVを再アップロードしてプレビューし直してください。']);
+        }
         if (str_starts_with($importBatch->format, 'furimadeck_external_')) {
             $format = str_replace('furimadeck_external_', '', $importBatch->format);
             try {
@@ -168,7 +178,7 @@ class ProductCsvImportController extends Controller
             }
             $auditLogger->log($request->user(), ImportBatch::class, $importBatch->id, 'external_sales.completed', null, $result, $request->ip());
 
-            return redirect()->route('furimadeck-sales.index')->with('success', '外部売上CSVを確定しました。登録 '.$result['imported'].'件 / 要確認 '.$result['provisional'].'件 / スキップ '.$result['skipped'].'件');
+            return redirect()->route('products.imports.create')->with('success', '外部売上CSVを確定しました。登録 '.$result['imported'].'件 / 要確認 '.$result['provisional'].'件 / スキップ '.$result['skipped'].'件');
         }
         if ($importBatch->format === 'furimadeck_restore_csv') {
             try {
@@ -178,8 +188,9 @@ class ProductCsvImportController extends Controller
                     $imported = 0;
                     $skipped = 0;
                     $restoreService = app(FurimaDeckRestoreCsvService::class);
-                    foreach ($rows as $row) {
-                        if ($restoreService->commit($request->user(), $row->row_json) === 'skipped') {
+                    foreach ($rows->groupBy(fn ($row): string => (string) $row->row_json['management_id']) as $group) {
+                        $restoreRows = $group->map(fn ($row): array => $row->row_json)->all();
+                        if ($restoreService->commitGroup($request->user(), $restoreRows) === 'skipped') {
                             $skipped++;
                         } else {
                             $imported++;
@@ -215,7 +226,7 @@ class ProductCsvImportController extends Controller
         }
 
         try {
-            $result = DB::transaction(function () use ($request, $importBatch, $rows): array {
+            $result = DB::connection('furimadeck')->transaction(function () use ($request, $importBatch, $rows): array {
                 $batch = ImportBatch::query()->whereKey($importBatch->id)->lockForUpdate()->firstOrFail();
                 abort_unless($batch->user_id === $request->user()->id && $batch->status === 'preview' && $batch->failed_rows === 0, 422);
 
@@ -224,7 +235,20 @@ class ProductCsvImportController extends Controller
                 foreach ($rows as $row) {
                     $values = $row->row_json;
                     $values['category_id'] = $this->categoryId($values);
-                    $product = $request->user()->products()->create($this->productValues($values));
+                    $productValues = $this->productValues($values);
+                    if (($values['sale_state'] ?? 'stock') === 'sold') {
+                        $productValues['quantity_available'] = Product::UNITS_PER_PRODUCT_ID;
+                        $productValues['inventory_status'] = 'in_stock';
+                    }
+                    $product = $request->user()->products()->create($productValues);
+                    app(ProductInventoryEventService::class)->recordOpening(
+                        $product,
+                        $request->user(),
+                        'product_csv_import',
+                        (int) $product->id,
+                        now(),
+                        '商品CSV取込による初期在庫登録',
+                    );
                     if (($values['listed_at'] ?? '') !== '') {
                         $listing = $this->createListingFromCsv($request->user(), $product, $values);
                         $createdListings++;
@@ -243,7 +267,7 @@ class ProductCsvImportController extends Controller
                     'created_sales' => $createdSales,
                 ];
             });
-        } catch (RuntimeException $exception) {
+        } catch (RuntimeException|InvalidArgumentException $exception) {
             return back()->withErrors(['csv_file' => $exception->getMessage()]);
         } catch (QueryException) {
             return back()->withErrors(['csv_file' => 'CSVの登録に失敗しました。商品IDの重複がないか確認して、もう一度お試しください。']);
@@ -281,12 +305,15 @@ class ProductCsvImportController extends Controller
     {
         $marketplace = $listing->marketplace;
         $quantity = (int) $values['sale_quantity'];
+        if ($quantity !== Product::UNITS_PER_PRODUCT_ID) {
+            throw new RuntimeException('1つの商品IDにつき販売数量は1点です。');
+        }
         $soldAt = CarbonImmutable::parse((string) $values['sold_at'])->startOfDay();
         $feeService = app(MarketplaceFeeService::class);
         $salesFee = ($values['sales_fee'] ?? '') !== ''
             ? (int) $values['sales_fee']
             : (($values['sales_fee_rate'] ?? '') !== ''
-                ? (int) floor((int) ($values['sold_price'] ?? 0) * ((float) $values['sales_fee_rate'] / 100))
+                ? $feeService->amountAtRate((int) ($values['sold_price'] ?? 0), (float) $values['sales_fee_rate'])
                 : $feeService->amount((int) ($values['sold_price'] ?? 0), $marketplace));
         $amounts = [
             'sold_price' => (int) ($values['sold_price'] ?? 0),
@@ -299,7 +326,7 @@ class ProductCsvImportController extends Controller
             'cleaning_cost' => (int) ($values['cleaning_cost'] ?? 0),
             'other_expense' => (int) ($values['sale_other_expense'] ?? 0),
         ];
-        $user->sales()->create([
+        $sale = $user->sales()->create([
             ...$amounts,
             'product_id' => $product->id,
             'listing_id' => $listing->id,
@@ -312,6 +339,17 @@ class ProductCsvImportController extends Controller
             'completed_at' => $soldAt,
             'net_profit' => app(SaleProfitCalculator::class)->calculate($amounts),
         ]);
+        app(ProductInventoryEventService::class)->applyDelta(
+            $product,
+            -$quantity,
+            ProductInventoryEvent::TYPE_SALE,
+            'product_csv_sale',
+            (int) $sale->id,
+            $user,
+            $soldAt,
+            '商品CSVのSOLD情報に基づく在庫払出',
+        );
+        app(FurimaDeckAccountingEntryService::class)->recordSale($user, $sale);
     }
 
     private function marketplaceFromCsv(string $marketplaceCode): Marketplace
@@ -383,6 +421,7 @@ class ProductCsvImportController extends Controller
             'product_name' => $values['product_name'],
             'condition' => $values['condition'],
             'purchase_unit_cost' => (int) $values['purchase_unit_cost'],
+            'purchase_info_confirmed' => ($values['__purchase_unit_cost_supplied'] ?? '0') === '1',
             'purchase_quantity' => (int) $values['purchase_quantity'],
             'quantity_available' => (int) $values['quantity_available'],
             'purchase_shipping_cost' => (int) ($values['purchase_shipping_cost'] ?? 0),

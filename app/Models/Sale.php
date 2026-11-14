@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Sale extends Model
 {
@@ -32,6 +34,28 @@ class Sale extends Model
         return self::STATUS_LABELS[$status] ?? $status;
     }
 
+    public function recordVersionToken(): string
+    {
+        $attributes = $this->getRawOriginal();
+        ksort($attributes);
+
+        return hash('sha256', json_encode($attributes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    }
+
+    public function setSoldAtAttribute(mixed $value): void
+    {
+        if ($value === null || $value === '') {
+            $this->attributes['sold_at'] = $value;
+
+            return;
+        }
+
+        $timezone = (string) config('app.timezone', 'UTC');
+        $this->attributes['sold_at'] = CarbonImmutable::parse($value, $timezone)
+            ->setTimezone($timezone)
+            ->format($this->getDateFormat());
+    }
+
     protected $fillable = [
         'user_id',
         'product_id',
@@ -52,11 +76,13 @@ class Sale extends Model
         'repair_cost',
         'cleaning_cost',
         'other_expense',
+        'accounting_expense_details',
         'net_profit',
         'shipped_at',
         'completed_at',
         'cancelled_at',
         'cancellation_reason',
+        'cancelled_from_pending',
         'returned_at',
         'return_reason',
         'refund_amount',
@@ -79,10 +105,12 @@ class Sale extends Model
             'repair_cost' => 'integer',
             'cleaning_cost' => 'integer',
             'other_expense' => 'integer',
+            'accounting_expense_details' => 'array',
             'net_profit' => 'integer',
             'shipped_at' => 'datetime',
             'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'cancelled_from_pending' => 'boolean',
             'returned_at' => 'datetime',
             'refund_amount' => 'integer',
             'return_shipping_fee' => 'integer',
@@ -108,5 +136,10 @@ class Sale extends Model
     public function marketplace(): BelongsTo
     {
         return $this->belongsTo(Marketplace::class);
+    }
+
+    public function accountingEntry(): HasOne
+    {
+        return $this->hasOne(AccountingEntry::class, 'sale_id');
     }
 }

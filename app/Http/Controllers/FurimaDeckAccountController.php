@@ -7,6 +7,7 @@ use App\Models\ProductImage;
 use App\Models\Sale;
 use App\Models\User;
 use App\Services\EmailVerificationDelivery;
+use App\Services\ProductImageDeletionOutbox;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -119,7 +120,7 @@ class FurimaDeckAccountController extends Controller
         return redirect()->route('furimadeck-account.edit')->with('status', 'monthly-data-deleted');
     }
 
-    public function destroyData(Request $request): RedirectResponse
+    public function destroyData(Request $request, ProductImageDeletionOutbox $deletions): RedirectResponse
     {
         $user = $request->user();
 
@@ -132,9 +133,18 @@ class FurimaDeckAccountController extends Controller
         $auctionImages = $this->auctionImages($user->id);
         $importBatchIds = DB::table('import_batches')->where('user_id', $user->id)->pluck('id');
 
-        DB::transaction(function () use ($user, $importBatchIds): void {
+        $outboxIds = DB::transaction(function () use ($user, $importBatchIds, $productImages, $deletions): array {
+            $outboxIds = $deletions->enqueueImages($productImages, (int) $user->id);
+            $this->deleteRowsForUser('accounting_sync_batches', $user->id);
             $this->deleteRowsForUser('accounting_entries', $user->id);
             $this->deleteRowsForUser('accounting_connections', $user->id);
+            $this->deleteRowsForUser('accounting_purchase_cap_reviews', $user->id);
+            $this->deleteRowsForUser('extension_devices', $user->id);
+            $this->deleteRowsForUser('extension_message_templates', $user->id);
+            $this->deleteRowsForUser('notices', $user->id);
+            if (Schema::hasTable('extension_pairings')) {
+                DB::table('extension_pairings')->where('approved_user_id', $user->id)->delete();
+            }
             $this->deleteRowsForUser('ai_usage_logs', $user->id);
             $this->deleteRowsForUser('ai_response_caches', $user->id);
             $this->deleteRowsForUser('audit_logs', $user->id);
@@ -148,15 +158,20 @@ class FurimaDeckAccountController extends Controller
             }
             $this->deleteRowsForUser('products', $user->id);
             $this->deleteRowsForUser('suppliers', $user->id);
+
+            return $outboxIds;
         });
 
-        $this->deleteProductImages($productImages, $user->id);
+        $cleanup = $deletions->process($outboxIds);
         $this->deleteAuctionImages($auctionImages);
 
-        return redirect()->route('furimadeck-account.edit')->with('status', 'data-deleted');
+        return redirect()->route('furimadeck-account.edit')->with(
+            'status',
+            $cleanup['pending'] > 0 ? 'data-deleted-images-pending' : 'data-deleted',
+        );
     }
 
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request, ProductImageDeletionOutbox $deletions): RedirectResponse
     {
         $user = $request->user();
         abort_if($user->isAdmin() || $user->isDemoUser(), 403);
@@ -173,12 +188,15 @@ class FurimaDeckAccountController extends Controller
 
         $images = $this->productImages($user->id);
         Auth::logout();
-        DB::transaction(function () use ($user): void {
+        $outboxIds = DB::transaction(function () use ($user, $images, $deletions): array {
+            $outboxIds = $deletions->enqueueImages($images, (int) $user->id);
             DB::table('sessions')->where('user_id', $user->id)->delete();
             DB::table('password_reset_tokens')->where('email', $user->email)->delete();
             $user->delete();
+
+            return $outboxIds;
         });
-        $this->deleteProductImages($images, $user->id);
+        $deletions->process($outboxIds);
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
@@ -276,19 +294,5 @@ class FurimaDeckAccountController extends Controller
         return ProductImage::query()
             ->whereHas('product', fn ($query) => $query->where('user_id', $userId))
             ->get(['original_path', 'derived_path', 'storage_disk']);
-    }
-
-    /** @param Collection<int, ProductImage> $images */
-    private function deleteProductImages(Collection $images, int $userId): void
-    {
-        $images->groupBy(fn (ProductImage $image) => $image->storageDisk())
-            ->each(function (Collection $images, string $disk) use ($userId): void {
-                $paths = $images->flatMap(fn (ProductImage $image) => [$image->original_path, $image->derived_path])
-                    ->filter(fn (?string $path) => is_string($path) && str_starts_with($path, 'products/'.$userId.'/') && ! str_contains($path, '..'))
-                    ->unique()
-                    ->values()
-                    ->all();
-                Storage::disk($disk)->delete($paths);
-            });
     }
 }

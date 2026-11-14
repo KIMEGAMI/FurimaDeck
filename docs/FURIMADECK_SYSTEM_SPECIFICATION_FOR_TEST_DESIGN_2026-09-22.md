@@ -1,11 +1,17 @@
 # FurimaDeck システム詳細仕様書
 
+> 2026-11-06のユーザー明示決定: FurimaDeck 1.0のfreee/Money Forward連携はOAuth・読取系マスタ取得・CSV出力および利用者による取込までとする。会計仕訳API送信・外部仕訳API読戻し・自動同期は1.1以降で検討し、1.0では停止する。この後続決定を1.0のリリース判定に適用する。2026-09-19最終仕様原本は `docs/FurimaDeck_1.0_FINAL_SPEC_2026-09-19.md` に保管し、同原本のAPI送信・同期記述は本決定により置き換える。
+
+> 2026-11-11のユーザー明示決定: FurimaDeck 1.0の会計CSVには、販売手数料、販売送料、梱包費など販売に伴う費用、および仕入CSVを含める。販売送料は会計サービスごとに実際の支払元が売上入金控除か別口座払いかを確認し、梱包費などは実際に使った別口座を確認する。支払元・証憑・税区分等を確認できない費用はCSV出力を停止する。実取込確認は別途リリースゲートとする。
+
+> 2026-11-12までの仕入・在庫正式決定: 商品IDはユニークな現物1点を表し、同じ型番の別個体には別の商品IDを付ける。現在の仕入日・単価・費用・仕入先は既存`products`レコードを唯一の正本とし、商品管理画面から登録・編集する。会計画面は同じ値を参照・集計し、独立した仕入情報を保存しない。`product_inventory_events`は在庫残高の履歴と仕入情報の変更前後を記録する監査履歴であり、現在値の別正本ではない。通常の商品編集では現在庫を直接変更せず、理由付きの在庫調整イベントを使う。仕入変更履歴を保持し、販売・会計照合の保護対象はサーバー側で編集をロックする。仕入数量・販売数量は各商品IDにつき1、現在庫は0または1とし、個体間の原価平均・FIFO配賦や複数数量・部分販売を行わない。DB変更時は、変更内容・既存データへの影響・移行・切り戻しを実装前に提示する。
+
 ## 1. 文書情報
 
 - 文書名: FurimaDeck システム詳細仕様書（テスト仕様書作成用）
 - 作成日: 2026-09-22
 - 対象システム: FurimaDeck
-- 対象リポジトリ: `C:\MyDeveloper\FurimaDeck`
+- 対象リポジトリ: `D:\MyDeveloper\FurimaDeck`
 - 技術: Laravel 13 / PHP 8.4 / Blade / MySQL または MariaDB / Stripe / Google OAuth
 - 主目的: 本書を入力として、別のChatGPTが詳細なテスト仕様書、テストデータ、期待結果、回帰試験表を作成できるようにする
 - 本書の優先順位: 現行ソースコード、現行DBスキーマ、最新正式仕様書、画面表示の順に確認する。矛盾は勝手に補完せず、差分として記録する。
@@ -13,14 +19,14 @@
 
 ## 2. システムの目的
 
-FurimaDeckは、個人・小規模事業者がフリマ販売の商品、在庫、出品、販売、利益、分析、確定申告準備データを一元管理するSaaSである。
+FurimaDeckは、個人・小規模事業者がフリマ販売の商品、在庫、出品、販売、利益、分析を管理し、会計サービスへCSVで登録する会計データを整理・出力するSaaSである。確定申告書の作成・提出は対象外であり、利用者がfreeeやMoney Forwardなどの会計サービスで行う。
 
 業務の基本経路は次のとおり。
 
 ```text
 仕入れ -> 商品登録 -> 在庫管理 -> 出品情報登録 -> 販売記録
        -> Sale確定 -> 手数料・送料・費用計算 -> 分析
-       -> 販売改善 -> 会計・確定申告用データ出力または連携
+       -> 販売改善 -> 会計サービス用データの確認・CSV出力
 ```
 
 重要な設計原則:
@@ -31,7 +37,7 @@ FurimaDeckは、個人・小規模事業者がフリマ販売の商品、在庫�
 4. 利益計算は整数の日本円で行い、画面・CSV・会計データで差が出ないようにする。
 5. ユーザー所有データは、すべての画面、URL、検索、集計、更新、削除で分離する。
 6. 外部フリマサイトへの自動出品は1.0の基本機能ではない。出品管理と出品情報の保存を行う。
-7. FurimaDeckは税額確定、確定申告書作成、e-Tax送信を行わない。申告準備データの整理と出力・会計連携を行う。
+7. FurimaDeckは税額確定、確定申告書作成、e-Tax送信を行わない。会計サービスへ登録するデータの整理とCSV登録用出力を行い、API仕訳送信と外部仕訳のAPI読戻しは1.0では停止する。
 
 ## 3. 対象範囲と対象外
 
@@ -46,7 +52,7 @@ FurimaDeckは、個人・小規模事業者がフリマ販売の商品、在庫�
 - CSVプレビュー、ページ分割、確定取込、バックアップ、復元、外部売上CSV
 - 売上分析、利益分析、カテゴリ分析、出品先分析、クロス分析、高度分析
 - 滞留在庫、販売改善、出品先適性、利益速度、確定申告準備状況
-- freee、Money ForwardのOAuth・マスタ取得・CSV・API連携
+- freee、Money ForwardのOAuth・マスタ取得・CSV連携。API仕訳送信・読戻しはコードを保持するが1.0の機能対象外
 - Stripe Checkout、Webhook、Customer Portal、解約、決済失敗、3-Dセキュア
 - 管理者、メンテナンス、通知、問い合わせ管理、メール送信
 - PWAマニフェスト、Service Worker、SEO用エンドポイント
@@ -65,7 +71,7 @@ FurimaDeckは、個人・小規模事業者がフリマ販売の商品、在庫�
 
 ### 4.1 ローカル開発
 
-- 作業ディレクトリ: `C:\MyDeveloper\FurimaDeck`
+- 作業ディレクトリ: `D:\MyDeveloper\FurimaDeck`
 - ローカルURL例: `http://127.0.0.1:8001`
 - ローカルDBは本番DBと分離する。
 - 本番の`.env`、Stripe Live秘密鍵、OAuth秘密情報をローカルへコピーしない。
@@ -203,18 +209,15 @@ FurimaDeckは、個人・小規模事業者がフリマ販売の商品、在庫�
 - `category_id`:カテゴリ
 - `condition`: `new`, `unused`, `like_new`, `used_good`, `used`, `damaged`, `junk`
 - `description_base`: 商品登録の基本説明
-- `purchase_date`: 仕入日
-- `purchase_unit_cost`: 仕入単価、0以上の整数円
-- `purchase_quantity`: 仕入数量、1以上の整数
-- `quantity_available`: 現在庫数量、0以上の整数
-- `purchase_shipping_cost`: 仕入送料
-- `other_purchase_expense`: その他仕入費用
-- `supplier_id`: 仕入先
+- 仕入現在値: `products`レコードの`purchase_date`, `purchase_unit_cost`, `purchase_quantity`, `purchase_shipping_cost`, `other_purchase_expense`, `supplier_id`。商品管理画面の更新を唯一の編集経路とし、商品と会計で別々の仕入値を保持しない。確定販売・保護対象の会計照合がある場合は変更を拒否する。
+- 在庫残高: `product_inventory_events`を基準に記録・照合し、`products.quantity_available`と`inventory_status`を同じトランザクション内で同期する。通常の仕入情報フォームから現在庫を直接更新しない。
+- 仕入変更履歴: `product_inventory_events.before_state` / `after_state` の暗号化スナップショットに変更前後を保持する。履歴スナップショットは監査用であり、仕入現在値の独立した正本にしない。
+- 商品IDごとの仕入数量・販売数量は1、現在庫は0または1とする。
 - `jan_ean`, `isbn`, `manufacturer_model_number`, `serial_number`
 - `storage_location`, `memo`
 - `inventory_status`: `in_stock` または `out_of_stock`
 
-`inventory_status`は保存時に数量から同期される。数量が1以上なら`in_stock`、0以下なら`out_of_stock`。
+現在庫は現物単位のイベント残高から求める。`inventory_status`は`quantity_available`から同期し、在庫ありなら`in_stock`、なしなら`out_of_stock`とする。商品登録・仕入情報変更・販売・取消・返品・在庫調整は、商品現在値・在庫イベント・関連する利益/会計状態の更新を同一トランザクションで行う。仕入変更時の暗号化イベントスナップショットは過去状態の記録であり、`products`の仕入現在値を置き換えない。商品IDに複数個体をまとめない。現在庫が0または1以外、仕入数量または販売数量が1以外の既存データは移行前検査で検出し、自動分割・書換えをしない。
 
 ### 7.3 ProductCategory
 
@@ -317,40 +320,40 @@ quantity_available = 0
 - Listingが終了した
 - 仕入数量が0になった
 
-### 8.2 部分販売
+### 8.2 現物1点の販売
 
-仕入数量3、販売数量2、在庫1の場合:
+商品IDはユニークな現物1点を表す。販売数量は1、販売後の在庫は0とする。同じ型番を複数仕入れた場合も、現物ごとに別の商品IDを登録する。1つの商品IDの数量2以上や部分販売は扱わない。
 
-- Saleは作成する。
-- `quantity_available=1`。
-- 在庫状態は`in_stock`。
-- SOLD表示はしない。
+- Saleは対象商品ID・現在の仕入イベントに紐付けて作成する。
+- 台帳にSale参照付きの販売イベントを記録し、残高を0にする。
+- 在庫状態は`out_of_stock`、有効SaleがあればSOLD表示する。
+- 販売原価は、対象現物に紐づく取得原価をSaleへスナップショット保存する。別個体の原価と平均・配賦しない。
 
-### 8.3 完売
-
-仕入数量1、販売数量1、在庫0、有効Saleありの場合:
-
-- `inventory_status=out_of_stock`。
-- SOLD表示する。
-- Listingがあれば`sold`へ更新する。
-
-### 8.4 キャンセル
+### 8.3 キャンセル
 
 - Sale状態を`cancelled`へ変更する。
-- 販売数量を在庫へ戻す。
+- 元Saleを参照する取消イベントを台帳に追加し、販売数量を在庫へ戻す。既存のSale行・販売原価スナップショットは保持する。
 - 在庫状態を数量から再計算する。
 - SOLD表示を消す。
 - 通常売上・通常利益・会計送信対象から除外する。
 - 二重キャンセルはエラーにする。
 
-### 8.5 返品
+### 8.4 返品
 
 - Sale状態を`returned`へ変更する。
 - 返金額、返品送料、返品理由を保持する。
-- 再入庫する場合は`quantity_available`を増やす。
+- 再入庫する場合は元Saleを参照する返品イベントを台帳へ追加し、その商品IDの現物1点を戻す。
 - 再入庫しない場合は数量を増やさない。
 - どちらの場合も`returned`は通常のSOLD判定から除外する。
 - 返品後の損失を分析・会計へどう含めるかは、画面定義とAccountingEntry定義を一致させる。
+
+### 8.5 追加仕入・在庫調整
+
+- 追加で現物を仕入れる場合は、その現物ごとに別の商品IDを作る。同じ商品IDに数量を積み増さない。
+- 既存商品の仕入情報を訂正・変更する場合は、商品管理から変更履歴を記録し、過去の仕入単価・仕入先を上書きしない。数量変化のない訂正・変更と、新しい現物の仕入を区別する。
+- 通常の商品編集では現在庫を直接変更しない。
+- 在庫調整は現物1点の有無と理由を記録し、調整前後の状態を監査できるようにする。
+- 販売原価は販売対象の商品IDに記録された仕入原価を使う。異なる商品IDの原価を平均・配賦しない。
 
 ## 9. 金額計算
 
@@ -570,10 +573,9 @@ sale_status
 
 - `stock`: 商品だけを作成する。売上列は空欄であること。
 - `sold`: 商品、Listing、Saleを必要に応じて作成する。
-- `sold`の場合、marketplace_code、listed_at、listing_price、sale_quantity、sold_price、sold_atを必須とする。
-- `sale_quantity`は1以上、purchase_quantity以下。
-- `quantity_available + sale_quantity <= purchase_quantity`。
-- `sold`行では`quantity_available = purchase_quantity - sale_quantity`。
+- すべての商品CSV行で`purchase_quantity = 1`とし、`quantity_available`は`0`または`1`にする。数量2以上は商品IDを分ける。
+- `sold`の場合、marketplace_code、listed_at、listing_price、sale_quantity、sold_price、sold_atを必須とし、`sale_quantity = 1`、`quantity_available = 0`とする。
+- 部分販売や、1つの商品IDへ複数個体を合算する行は拒否する。
 - 出品先コードは有効なMarketplaceマスタに存在しなければならない。
 - 未知の出品先は推測登録せず、エラーにする。
 
@@ -646,7 +648,7 @@ sale_status
 - 自動値下げ・自動再出品はしない。
 - すべての候補に理由、対象件数、基準値、比較値を表示する。
 
-## 15. 会計・確定申告準備
+## 15. 会計データ出力
 
 ### 15.1 FurimaDeckの責任範囲
 
@@ -656,14 +658,16 @@ sale_status
 - 期間指定
 - 不足データ確認
 - 会計CSV出力
-- freee、Money ForwardのOAuth・マスタ取得・送信
-- 同期状態、外部ID、エラー表示
+- CSV用のfreee・Money Forward勘定科目・税区分マスタ取得
+- CSV取込状態の記録と表示
+- 既存のAPI送信履歴・外部ID・エラーの参照（新規のAPI送信・自動読戻しは行わない）
 
 行わない:
 
 - 税額の最終確定
 - 申告書の作成・提出
 - 税務判断の断定
+- 会計仕訳のAPI送信・外部仕訳のAPI読戻し
 
 ### 15.2 準備状況チェック
 
@@ -679,7 +683,9 @@ sale_status
 - 商品の仕入日
 - 仕入先
 - 管理ID
-- 会計同期状態
+- 会計サービス別のCSV取込状態・過去履歴
+
+仕入日・仕入先・仕入原価は商品に紐づく台帳から参照する。商品画面と会計画面で別々の仕入値を保持・更新しない。新しい現物の仕入支出は、その現物の商品IDに対応する初回仕入イベントの日付・金額を基準に集計する。同型商品の複数個体は別商品IDの仕入イベントとして集計する。
 
 0円と未入力は区別する。確認対象件数と理由を表示する。
 
@@ -696,23 +702,27 @@ sale_status
 - 金額
 - 税区分
 - 商品・Sale参照
-- 同期状態
+- 会計サービス別の処理状態（CSV取込状態および保持する過去API履歴）
 - 外部ID
 - エラー
 
-同じ期間・同じフィルタで、UI合計 = CSV合計 = API送信額となること。差額は0円であること。
+同じ期間・同じフィルタで、UI合計とCSV合計が一致すること。1.0では会計API送信を行わないためAPI送信額との比較はしない。
 
-### 15.4 ワークフロー
+### 15.4 1.0のCSVワークフロー
 
 ```text
-未確認 -> 確認対象抽出 -> Review -> Confirm -> Send -> 同期済み
+未確認 -> 対象抽出 -> 内容確認 -> Confirm -> 対応CSV出力 -> 会計サービスで手動取込 -> 取込結果を記録
 ```
 
-- 確認前に送信しない。
-- 送信済みの二重送信を防止する。
-- 外部送信失敗時はエラーを保持し、再送可能にする。
-- トークンは暗号化保存する。
-- OAuth解除時にローカル接続状態を安全に更新する。
+- Confirm前にCSVを出力しない。
+- CSV出力後は取込結果を確認するまで再出力を止め、二重登録を防止する。
+- CSVの取込失敗・結果不明時は会計サービス側を確認し、APIによる自動送信・自動読戻しは行わない。
+- OAuth接続はCSV用の勘定科目・税区分候補の取得に使い、仕訳送信には使わない。トークンは暗号化して保存する。
+- OAuth解除時はローカル接続状態を安全に更新し、会計データと過去の取込記録は保持する。
+- 1.0対象の販売CSVは販売手数料を含み、販売送料・梱包費・修理費・清掃費・その他経費がある場合は費目別に含める。仕入CSVも対象とする。
+- 費用ごとにfreeeまたはMoney Forwardで実際に使った支払元を確認する。販売送料は「売上入金から控除」または設定済みの別口座を選べる。梱包費など販売送料以外の販売費用は、設定済みの別口座を支払元として選ぶ。
+- 費用の金額、支払元、証憑、税区分、発行者区分、証憑日と取引日の確認、会計サービス側の科目設定が不足・不一致なら、そのCSVを出力しない。金額だけから支払元を推定しない。
+- 実装テストの成功と、freee/Money Forwardへの実取込および仕訳帳表示の確認を区別する。各費用パターンの実取込確認はリリース前ゲートとする。
 
 ### 15.5 freee
 
@@ -865,7 +875,9 @@ sale_status
 
 - 通常在庫1件
 - 在庫0だがSaleなし
-- 部分販売で在庫あり
+- 1商品IDに現物1点、販売前
+- 同じ型番の別個体を別商品IDで登録
+- 1商品IDに数量2以上または部分販売を指定した場合は拒否
 - 完売で有効Saleあり
 - cancelled Saleだけ
 - returned Saleだけ、再入庫あり
@@ -984,7 +996,7 @@ sale_status
 - ラクマの段階手数料を固定10%で扱う範囲
 - 返品損失の実利益への反映方法
 - 月別削除対象の厳密な範囲
-- freeeとMoney ForwardのAPI送信可能なプラン・権限
+- freeeとMoney ForwardのCSV取込プラン・権限。API仕訳送信権限は1.0の必須条件ではない
 - Money Forward税区分マスタが空の場合の利用者向け案内
 - `APP_URL`、本番ドメイン、OAuth Redirect URIの環境別値
 - 現行のローカルDB migration適用状況
@@ -993,11 +1005,11 @@ sale_status
 
 ## 26. 参照資料
 
-- 対象コード: `C:\MyDeveloper\FurimaDeck\app`
-- ルート: `C:\MyDeveloper\FurimaDeck\routes\web.php`
-- 設定: `C:\MyDeveloper\FurimaDeck\config\furimadeck.php`
-- 既存正式仕様: `C:\Users\Administrator\Downloads\FurimaDeck_1.0_FINAL_SPEC_2026-09-19.md`
-- CSV正式仕様: `C:\Users\Administrator\Downloads\FurimaDeck_1.0_CSV_FINAL_SPEC_2026-09-19.md`
+- 対象コード: `D:\MyDeveloper\FurimaDeck\app`
+- ルート: `D:\MyDeveloper\FurimaDeck\routes\web.php`
+- 設定: `D:\MyDeveloper\FurimaDeck\config\furimadeck.php`
+- 既存正式仕様: `docs/FurimaDeck_1.0_FINAL_SPEC_2026-09-19.md`
+- CSV正式仕様: `docs/FurimaDeck_1.0_CSV_FINAL_SPEC_2026-09-19.md`
 - Money Forward公式API: https://developers.api-accounting.moneyforward.com/
 - Money Forward OAuth公式: https://developers.biz.moneyforward.com/docs/common/oauth/overview/
 - Money Forward API利用案内: https://biz.moneyforward.com/support/account/guide/others/ot09.html

@@ -2,5 +2,10 @@
     "preset": "laravel",
     "exclude": [
         "storage_codex_test"
-    ]
+    ],
+    "rules": {
+        "unary_operator_spaces": {
+            "only_dec_inc": true
+        }
+    }
 }

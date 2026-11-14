@@ -98,20 +98,20 @@
     <meta name="twitter:image:alt" content="{{ $siteName }}">
 
     <x-pwa-head />
-    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
     @foreach ($schemas as $schemaItem)
-        <script type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
+        <script nonce="{{ Vite::cspNonce() }}" type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
     @endforeach
 </head>
 <body class="bg-white text-slate-950 antialiased">
     <header class="border-b border-slate-200 bg-white">
-        <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+        <div class="mx-auto flex max-w-7xl flex-col items-start gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
             <a href="{{ route('home') }}" class="flex items-center gap-3 font-black" aria-label="FurimaDeck トップページ">
                 <span>FurimaDeck</span>
             </a>
-            <nav class="flex flex-wrap justify-end gap-x-4 gap-y-2 text-sm font-bold text-slate-700" aria-label="公開ページ">
+            <nav class="fd-public-nav flex w-full flex-wrap justify-start gap-x-3 gap-y-2 text-sm font-bold text-slate-700 sm:w-auto sm:justify-end sm:gap-x-4" aria-label="公開ページ">
                 <a href="{{ route('marketing.features') }}" class="hover:text-slate-950">機能</a>
                 <a href="{{ route('marketing.use-cases') }}" class="hover:text-slate-950">活用例</a>
                 <a href="{{ route('marketing.pricing') }}" class="hover:text-slate-950">料金</a>
@@ -125,7 +125,7 @@
 
     <footer class="border-t border-slate-200 bg-slate-50 py-8">
         <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 text-sm font-semibold text-slate-700 sm:px-6 lg:px-8">
-            <nav class="flex flex-wrap gap-x-5 gap-y-2" aria-label="フッター">
+            <nav class="fd-footer-nav flex flex-wrap gap-x-5 gap-y-2" aria-label="フッター">
                 <a href="{{ route('marketing.features') }}" class="hover:text-slate-950">機能</a>
                 <a href="{{ route('marketing.use-cases') }}" class="hover:text-slate-950">活用例</a>
                 <a href="{{ route('marketing.pricing') }}" class="hover:text-slate-950">料金</a>

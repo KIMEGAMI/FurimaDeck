@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\Marketplace;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use Illuminate\Http\UploadedFile;
+use InvalidArgumentException;
 use RuntimeException;
 
 class ProductCsvPreviewService
@@ -110,6 +112,7 @@ class ProductCsvPreviewService
                 if ($legacyProductCsv) {
                     $values['__legacy_product_csv'] = '1';
                 }
+                $values['__purchase_unit_cost_supplied'] = ($values['purchase_unit_cost'] ?? '') !== '' ? '1' : '0';
                 $values = $this->withDefaults($values);
                 $errors = $this->errors($values);
                 $rows[] = ['row_number' => $rowNumber, 'values' => $values, 'errors' => $errors];
@@ -139,11 +142,11 @@ class ProductCsvPreviewService
     {
         $values['condition'] = $values['condition'] ?? 'used';
         $values['purchase_unit_cost'] = $values['purchase_unit_cost'] ?? '0';
-        $values['purchase_quantity'] = $values['purchase_quantity'] ?? '1';
+        $values['purchase_quantity'] = $values['purchase_quantity'] ?? (string) Product::UNITS_PER_PRODUCT_ID;
         $explicitSaleState = trim((string) ($values['sale_state'] ?? ''));
         $values['sale_state'] = strtolower($explicitSaleState !== '' ? $explicitSaleState : 'stock');
         $values['marketplace_code'] = trim((string) ($values['marketplace_code'] ?? ''));
-        $values['quantity_available'] = $values['quantity_available'] ?? '1';
+        $values['quantity_available'] = $values['quantity_available'] ?? (string) Product::UNITS_PER_PRODUCT_ID;
         $inventoryStatus = strtolower(trim((string) ($values['inventory_status'] ?? '')));
         if (($values['__legacy_product_csv'] ?? '') === '1' && in_array($inventoryStatus, ['draft', 'listing_ready', 'listed', 'reserved', 'sold', 'archived'], true)) {
             $values['inventory_status'] = Product::inventoryStatusForQuantity((int) $values['quantity_available']);
@@ -151,7 +154,7 @@ class ProductCsvPreviewService
             $values['inventory_status'] = Product::inventoryStatusForQuantity((int) $values['quantity_available']);
         }
         if ($values['sale_state'] === 'sold' && ($values['sale_quantity'] ?? '') === '') {
-            $values['sale_quantity'] = (string) max(1, (int) $values['purchase_quantity'] - (int) $values['quantity_available']);
+            $values['sale_quantity'] = (string) max(Product::UNITS_PER_PRODUCT_ID, (int) $values['purchase_quantity'] - (int) $values['quantity_available']);
         }
 
         return $values;
@@ -170,6 +173,19 @@ class ProductCsvPreviewService
                 $errors[] = $key.'が長すぎます。';
             }
         }
+        foreach ([
+            'internal_sku' => '商品ID',
+            'product_name' => '商品名',
+            'jan_ean' => 'JAN/EAN',
+            'isbn' => 'ISBN',
+            'manufacturer_model_number' => 'メーカー型番',
+            'serial_number' => 'シリアル番号',
+            'storage_location' => '保管場所',
+        ] as $key => $label) {
+            if (mb_strlen($values[$key] ?? '') > 255) {
+                $errors[] = $label.'は255文字以内にしてください。';
+            }
+        }
         foreach (['internal_sku' => '商品ID', 'product_name' => '商品名'] as $key => $label) {
             if (trim($values[$key] ?? '') === '') {
                 $errors[] = $label.'は必須です。';
@@ -183,13 +199,24 @@ class ProductCsvPreviewService
         } elseif ($values['inventory_status'] !== Product::inventoryStatusForQuantity((int) ($values['quantity_available'] ?? 0))) {
             $errors[] = 'quantity_availableとinventory_statusが一致していません。';
         }
-        foreach (['purchase_unit_cost', 'quantity_available'] as $key) {
-            if (filter_var($values[$key] ?? null, FILTER_VALIDATE_INT) === false || (int) $values[$key] < 0) {
-                $errors[] = $key.'は0以上の整数にしてください。';
+        $validPurchaseUnitCost = $this->isUnsignedInteger($values['purchase_unit_cost'] ?? null);
+        $validQuantityAvailable = $this->isUnsignedInteger($values['quantity_available'] ?? null);
+        $validPurchaseQuantity = $this->isUnsignedInteger($values['purchase_quantity'] ?? null, Product::UNITS_PER_PRODUCT_ID);
+        foreach ([
+            'purchase_unit_cost' => $validPurchaseUnitCost,
+            'quantity_available' => $validQuantityAvailable,
+        ] as $key => $isValid) {
+            if (! $isValid) {
+                $errors[] = $key.'は0以上'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.'以下の整数にしてください。';
             }
         }
-        if (filter_var($values['purchase_quantity'] ?? null, FILTER_VALIDATE_INT) === false || (int) $values['purchase_quantity'] < 1) {
-            $errors[] = 'purchase_quantityは1以上の整数にしてください。';
+        if (! $validPurchaseQuantity) {
+            $errors[] = 'purchase_quantityは1以上'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.'以下の整数にしてください。';
+        } elseif ((int) $values['purchase_quantity'] !== Product::UNITS_PER_PRODUCT_ID) {
+            $errors[] = '1つの商品IDに登録できる現物は1点です。同じ種類の複数商品は商品IDを分けて登録してください。';
+        }
+        if ($validQuantityAvailable && (int) $values['quantity_available'] > Product::UNITS_PER_PRODUCT_ID) {
+            $errors[] = '1つの商品IDの在庫は0点または1点です。複数商品は商品IDを分けて登録してください。';
         }
         if (trim($values['parent_category'] ?? '') !== '' || trim($values['category'] ?? '') !== '') {
             if ($this->categoryId($values) === null) {
@@ -202,8 +229,8 @@ class ProductCsvPreviewService
             }
         }
         foreach (['purchase_shipping_cost', 'other_purchase_expense', 'listing_price'] as $key) {
-            if (($values[$key] ?? '') !== '' && (filter_var($values[$key], FILTER_VALIDATE_INT) === false || (int) $values[$key] < 0)) {
-                $errors[] = $key.'は0以上の整数にしてください。';
+            if (($values[$key] ?? '') !== '' && ! $this->isUnsignedInteger($values[$key])) {
+                $errors[] = $key.'は0以上'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.'以下の整数にしてください。';
             }
         }
         if (($values['purchase_date'] ?? '') !== '' && ! $this->isIsoDate($values['purchase_date'])) {
@@ -213,16 +240,21 @@ class ProductCsvPreviewService
             $errors[] = 'sale_stateはstockまたはsoldにしてください。';
         }
         if (($values['sale_state'] ?? 'stock') === 'sold') {
+            if (($values['__purchase_unit_cost_supplied'] ?? '0') !== '1') {
+                $errors[] = 'sale_state=soldではpurchase_unit_costが必須です。原価不明の売却履歴は利益を正しく計算できないため登録できません。';
+            }
             foreach (['marketplace_code', 'listed_at', 'listing_price', 'sale_quantity', 'sold_price', 'sold_at'] as $key) {
                 if (trim((string) ($values[$key] ?? '')) === '') {
                     $errors[] = $key.'はsale_state=soldの場合に必須です。';
                 }
             }
-            if (filter_var($values['sale_quantity'] ?? null, FILTER_VALIDATE_INT) === false || (int) $values['sale_quantity'] < 1) {
-                $errors[] = 'sale_quantityは1以上の整数にしてください。';
+            if (! $this->isUnsignedInteger($values['sale_quantity'] ?? null, Product::UNITS_PER_PRODUCT_ID)) {
+                $errors[] = 'sale_quantityは1以上'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.'以下の整数にしてください。';
+            } elseif ((int) $values['sale_quantity'] !== Product::UNITS_PER_PRODUCT_ID) {
+                $errors[] = '1つの商品IDにつき販売数量は1点です。';
             }
-            if (filter_var($values['sold_price'] ?? null, FILTER_VALIDATE_INT) === false || (int) $values['sold_price'] < 0) {
-                $errors[] = 'sold_priceは0以上の整数にしてください。';
+            if (! $this->isUnsignedInteger($values['sold_price'] ?? null)) {
+                $errors[] = 'sold_priceは0以上'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.'以下の整数にしてください。';
             }
             if (($values['sold_at'] ?? '') === '' || ! $this->isIsoDate($values['sold_at'])) {
                 $errors[] = 'sold_atはYYYY-MM-DD形式で必須です。';
@@ -237,10 +269,22 @@ class ProductCsvPreviewService
                 }
             }
         }
-        foreach (['sale_quantity', 'sold_price', 'sales_fee', 'shipping_fee', 'sale_purchase_shipping_cost', 'packing_cost', 'repair_cost', 'cleaning_cost', 'sale_other_expense'] as $key) {
-            if (($values[$key] ?? '') !== '' && (filter_var($values[$key], FILTER_VALIDATE_INT) === false || (int) $values[$key] < 0)) {
-                $errors[] = $key.'は0以上の整数にしてください。';
+        foreach (['sales_fee', 'shipping_fee', 'sale_purchase_shipping_cost', 'packing_cost', 'repair_cost', 'cleaning_cost', 'sale_other_expense'] as $key) {
+            if (($values[$key] ?? '') !== '' && ! $this->isUnsignedInteger($values[$key])) {
+                $errors[] = $key.'は0以上'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.'以下の整数にしてください。';
             }
+        }
+        if (($values['sale_quantity'] ?? '') !== '' && ! $this->isUnsignedInteger($values['sale_quantity'], Product::UNITS_PER_PRODUCT_ID)) {
+            $errors[] = 'sale_quantityは1以上'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.'以下の整数にしてください。';
+        } elseif (($values['sale_quantity'] ?? '') !== '' && (int) $values['sale_quantity'] !== Product::UNITS_PER_PRODUCT_ID) {
+            $errors[] = '1つの商品IDにつき販売数量は1点です。';
+        }
+        $values['sales_fee_rate'] = trim((string) ($values['sales_fee_rate'] ?? ''));
+        $validSalesFeeRate = $values['sales_fee_rate'] === ''
+            || (preg_match('/\A\d+(?:\.\d{1,2})?\z/', $values['sales_fee_rate']) === 1
+                && (float) $values['sales_fee_rate'] <= 100);
+        if (! $validSalesFeeRate) {
+            $errors[] = 'sales_fee_rateは0以上100以下、小数点以下2桁までの数値にしてください。';
         }
         if (($values['sale_quantity'] ?? '') !== '' && (int) $values['sale_quantity'] > (int) $values['purchase_quantity']) {
             $errors[] = 'sale_quantityはpurchase_quantityを超えられません。';
@@ -282,7 +326,56 @@ class ProductCsvPreviewService
             $errors[] = 'sold行ではquantity_availableがpurchase_quantity-sale_quantityと一致しなければなりません。';
         }
 
+        if (($values['sale_state'] ?? 'stock') === 'sold'
+            && $validPurchaseUnitCost && $validPurchaseQuantity && $validQuantityAvailable
+            && $this->isUnsignedInteger($values['sale_quantity'] ?? null, Product::UNITS_PER_PRODUCT_ID)
+            && $this->isUnsignedInteger($values['sold_price'] ?? null)
+            && $validSalesFeeRate
+            && collect(['sales_fee', 'shipping_fee', 'sale_purchase_shipping_cost', 'packing_cost', 'repair_cost', 'cleaning_cost', 'sale_other_expense'])
+                ->every(fn (string $key): bool => ($values[$key] ?? '') === '' || $this->isUnsignedInteger($values[$key]))) {
+            $unitCost = (int) $values['purchase_unit_cost'];
+            $saleQuantity = (int) $values['sale_quantity'];
+            if ($unitCost > intdiv(SaleProfitCalculator::MAX_UNSIGNED_AMOUNT, $saleQuantity)) {
+                $errors[] = '仕入単価×販売数量が会計データの保存可能範囲を超えています。';
+            } else {
+                $soldPrice = (int) $values['sold_price'];
+                $marketplace = Marketplace::query()->where('code', $values['marketplace_code'])->first()
+                    ?? new Marketplace(['code' => $values['marketplace_code'], 'default_fee_rate' => 0]);
+                $feeService = app(MarketplaceFeeService::class);
+                $salesFee = ($values['sales_fee'] ?? '') !== ''
+                    ? (int) $values['sales_fee']
+                    : (($values['sales_fee_rate'] ?? '') !== ''
+                        ? $feeService->amountAtRate($soldPrice, (float) $values['sales_fee_rate'])
+                        : $feeService->amount($soldPrice, $marketplace));
+                $amounts = [
+                    'sold_price' => $soldPrice,
+                    'cost_basis' => $unitCost * $saleQuantity,
+                    'sales_fee' => $salesFee,
+                    'shipping_fee' => (int) ($values['shipping_fee'] ?? 0),
+                    'purchase_shipping_cost' => (int) ($values['sale_purchase_shipping_cost'] ?? 0),
+                    'packing_cost' => (int) ($values['packing_cost'] ?? 0),
+                    'repair_cost' => (int) ($values['repair_cost'] ?? 0),
+                    'cleaning_cost' => (int) ($values['cleaning_cost'] ?? 0),
+                    'other_expense' => (int) ($values['sale_other_expense'] ?? 0),
+                ];
+                try {
+                    app(SaleProfitCalculator::class)->calculate($amounts);
+                } catch (InvalidArgumentException) {
+                    $errors[] = '売上または実利益がデータベースの保存可能範囲を超えています。金額を確認してください。';
+                }
+            }
+        }
+
         return $errors;
+    }
+
+    private function isUnsignedInteger(mixed $value, int $minimum = 0): bool
+    {
+        $integer = filter_var($value, FILTER_VALIDATE_INT);
+
+        return $integer !== false
+            && $integer >= $minimum
+            && $integer <= SaleProfitCalculator::MAX_UNSIGNED_AMOUNT;
     }
 
     /** @param array<string,string> $values */

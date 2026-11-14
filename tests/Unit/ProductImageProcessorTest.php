@@ -52,6 +52,55 @@ class ProductImageProcessorTest extends TestCase
         Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->assertMissing('products/123/source.png');
     }
 
+    public function test_it_processes_an_image_at_the_configured_source_pixel_limit(): void
+    {
+        config()->set('furimadeck.product_images.max_source_pixels', 12_000_000);
+
+        $file = UploadedFile::fake()->image('smartphone-photo.jpg', 4000, 3000);
+
+        $image = app(ProductImageProcessor::class)->process($file, 789);
+
+        Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->assertExists($image['original_path']);
+        Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->assertExists($image['derived_path']);
+        $this->assertSame([2000, 1500], array_slice(
+            getimagesize(Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->path($image['original_path'])),
+            0,
+            2,
+        ));
+        $this->assertSame([400, 300], array_slice(
+            getimagesize(Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->path($image['derived_path'])),
+            0,
+            2,
+        ));
+    }
+
+    public function test_it_applies_exif_orientation_to_a_12mp_smartphone_photo(): void
+    {
+        $this->assertTrue(function_exists('exif_read_data'));
+
+        $source = UploadedFile::fake()->image('oriented-smartphone-photo.jpg', 4000, 3000);
+        $sourceContents = file_get_contents($source->getRealPath());
+        $this->assertNotFalse($sourceContents);
+
+        $exif = "Exif\0\0II*\0".pack('V', 8).pack('v', 1)
+            .pack('v', 0x0112).pack('v', 3).pack('V', 1).pack('v', 6)."\0\0".pack('V', 0);
+        $jpeg = substr($sourceContents, 0, 2)."\xFF\xE1".pack('n', strlen($exif) + 2)
+            .$exif.substr($sourceContents, 2);
+        $this->assertNotFalse(file_put_contents($source->getRealPath(), $jpeg));
+        $image = app(ProductImageProcessor::class)->process($source, 790);
+
+        $this->assertSame([1500, 2000], array_slice(
+            getimagesize(Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->path($image['original_path'])),
+            0,
+            2,
+        ));
+        $this->assertSame([300, 400], array_slice(
+            getimagesize(Storage::disk(ProductImage::PRIVATE_STORAGE_DISK)->path($image['derived_path'])),
+            0,
+            2,
+        ));
+    }
+
     public function test_it_rejects_images_above_configured_source_pixel_limit(): void
     {
         config()->set('furimadeck.product_images.max_source_pixels', 1);
@@ -62,5 +111,18 @@ class ProductImageProcessorTest extends TestCase
         $this->expectExceptionMessage('画像の画素数が上限を超えています。');
 
         app(ProductImageProcessor::class)->process($file, 123);
+    }
+
+    public function test_it_writes_processed_images_to_the_configured_s3_compatible_disk(): void
+    {
+        Storage::fake('furimadeck_r2');
+        config()->set('furimadeck.product_images.disk', 'furimadeck_r2');
+
+        $image = app(ProductImageProcessor::class)->process(UploadedFile::fake()->image('source.png', 800, 600), 456);
+
+        $this->assertSame('furimadeck_r2', ProductImage::privateStorageDisk());
+        Storage::disk('furimadeck_r2')->assertExists($image['original_path']);
+        Storage::disk('furimadeck_r2')->assertExists($image['derived_path']);
+        $this->assertSame('image/webp', $image['mime_type']);
     }
 }

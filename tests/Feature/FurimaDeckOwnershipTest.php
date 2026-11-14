@@ -38,7 +38,101 @@ class FurimaDeckOwnershipTest extends TestCase
         $listing = $owner->listings()->create(['product_id' => $product->id, 'marketplace_id' => $marketplace->id, 'listing_title' => '所有者出品', 'status' => 'ready']);
 
         $this->actingAs($visitor)->get(route('products.edit', $product))->assertNotFound();
+        $this->actingAs($visitor)->get(route('products.show', $product))->assertNotFound();
         $this->actingAs($visitor)->get(route('listings.edit', $listing))->assertNotFound();
+    }
+
+    public function test_product_detail_allows_owner_to_delete_product_and_linked_listing(): void
+    {
+        $owner = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
+        $product = $owner->products()->create([
+            'internal_sku' => 'DELETE-001',
+            'product_name' => '削除確認の商品',
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 1,
+            'inventory_status' => 'in_stock',
+        ]);
+        $marketplace = Marketplace::query()->create([
+            'code' => 'delete-test',
+            'name' => '削除確認用販売先',
+            'base_url' => 'https://example.test',
+            'fee_type' => 'percentage',
+            'default_fee_rate' => 0,
+            'is_active' => true,
+        ]);
+        $listing = $owner->listings()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $marketplace->id,
+            'listing_title' => '削除確認用出品',
+            'status' => 'draft',
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('products.index'))
+            ->assertOk()
+            ->assertSee(route('products.show', $product), false)
+            ->assertSee('商品詳細・編集');
+
+        $this->actingAs($owner)
+            ->get(route('products.edit', $product))
+            ->assertOk()
+            ->assertSeeInOrder(['商品ID', '商品を削除'])
+            ->assertSee('商品詳細・編集')
+            ->assertSee('value="DELETE-001"', false)
+            ->assertSee('value="削除確認の商品"', false)
+            ->assertDontSee('メーカー・型番')
+            ->assertDontSee('JAN / EAN')
+            ->assertDontSee('ISBN')
+            ->assertDontSee('製造番号')
+            ->assertSee('登録画像およびFurimaDeck内の出品情報を削除');
+
+        $this->actingAs($owner)
+            ->get(route('products.show', $product))
+            ->assertOk()
+            ->assertSee('商品詳細・編集')
+            ->assertSee('value="DELETE-001"', false)
+            ->assertSee('value="削除確認の商品"', false)
+            ->assertSee('name="product_name"', false)
+            ->assertSee('商品を削除');
+
+        $this->actingAs($owner)
+            ->delete(route('products.destroy', $product), ['confirm_deletion' => '1'])
+            ->assertRedirect(route('products.index'))
+            ->assertSessionHas('success', '商品を削除しました。');
+
+        $this->assertDatabaseMissing('products', ['id' => $product->id], 'furimadeck');
+        $this->assertDatabaseMissing('listings', ['id' => $listing->id], 'furimadeck');
+    }
+
+    public function test_user_cannot_update_or_delete_another_users_product(): void
+    {
+        $owner = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
+        $visitor = User::factory()->create(['email_verified_at' => now(), 'subscription_plan' => User::SUBSCRIPTION_ACTIVE, 'subscription_status' => 'active']);
+        $product = $owner->products()->create([
+            'internal_sku' => 'OWNER-MUTATION-001',
+            'product_name' => '所有者の商品',
+            'condition' => 'used',
+            'purchase_unit_cost' => 1000,
+            'purchase_quantity' => 1,
+            'quantity_available' => 1,
+            'inventory_status' => 'in_stock',
+        ]);
+
+        $this->actingAs($visitor)->put(route('products.update', $product), [
+            'internal_sku' => 'ATTACK-001',
+            'product_name' => '不正更新',
+            'condition' => 'used',
+            'purchase_unit_cost' => 1,
+        ])->assertNotFound();
+
+        $this->actingAs($visitor)->delete(route('products.destroy', $product), [
+            'confirm_deletion' => '1',
+        ])->assertNotFound();
+
+        $this->assertSame('所有者の商品', $product->fresh()->product_name);
+        $this->assertSame($owner->id, $product->fresh()->user_id);
     }
 
     public function test_sales_index_is_scoped_to_the_authenticated_user(): void

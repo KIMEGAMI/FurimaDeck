@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\ProductCsvPreviewService;
+use App\Services\SaleProfitCalculator;
 use Illuminate\Http\UploadedFile;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
@@ -77,7 +78,10 @@ class ProductCsvPreviewServiceTest extends TestCase
         $preview = app(ProductCsvPreviewService::class)->preview($file);
 
         $this->assertContains('purchase_dateはYYYY-MM-DD形式にしてください。', $preview['rows'][0]['errors']);
-        $this->assertContains('purchase_shipping_costは0以上の整数にしてください。', $preview['rows'][0]['errors']);
+        $this->assertContains(
+            'purchase_shipping_costは0以上'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT.'以下の整数にしてください。',
+            $preview['rows'][0]['errors'],
+        );
     }
 
     #[Test]
@@ -104,5 +108,47 @@ class ProductCsvPreviewServiceTest extends TestCase
         $this->assertSame([], $preview['rows'][0]['errors']);
         $this->assertSame('FD-002', $preview['rows'][0]['values']['internal_sku']);
         $this->assertSame('1200', $preview['rows'][0]['values']['purchase_unit_cost']);
+    }
+
+    #[Test]
+    public function it_rejects_more_than_one_physical_item_under_a_product_id(): void
+    {
+        $file = UploadedFile::fake()->createWithContent('products.csv', implode("\n", [
+            'internal_sku,product_name,condition,purchase_unit_cost,purchase_quantity,quantity_available,inventory_status',
+            'SKU-2,同型商品の1点目,used,1000,2,2,in_stock',
+        ]));
+
+        $preview = app(ProductCsvPreviewService::class)->preview($file);
+
+        $this->assertContains('1つの商品IDに登録できる現物は1点です。同じ種類の複数商品は商品IDを分けて登録してください。', $preview['rows'][0]['errors']);
+        $this->assertContains('1つの商品IDの在庫は0点または1点です。複数商品は商品IDを分けて登録してください。', $preview['rows'][0]['errors']);
+    }
+
+    #[Test]
+    public function it_rejects_product_fields_that_exceed_database_string_columns(): void
+    {
+        $file = UploadedFile::fake()->createWithContent('products.csv', implode("\n", [
+            'internal_sku,product_name,condition,purchase_unit_cost,purchase_quantity,quantity_available,inventory_status',
+            str_repeat('S', 256).',商品ID超過,used,1000,1,1,in_stock',
+            'SKU-TITLE-OVERFLOW,'.str_repeat('商', 256).',used,1000,1,1,in_stock',
+        ]));
+
+        $preview = app(ProductCsvPreviewService::class)->preview($file);
+
+        $this->assertContains('商品IDは255文字以内にしてください。', $preview['rows'][0]['errors']);
+        $this->assertContains('商品名は255文字以内にしてください。', $preview['rows'][1]['errors']);
+    }
+
+    #[Test]
+    public function it_rejects_a_product_csv_sale_quantity_above_one(): void
+    {
+        $file = UploadedFile::fake()->createWithContent('products.csv', implode("\n", [
+            'internal_sku,product_name,condition,purchase_unit_cost,purchase_quantity,quantity_available,inventory_status,sale_quantity',
+            'SKU-3,販売商品,used,1000,1,1,in_stock,2',
+        ]));
+
+        $preview = app(ProductCsvPreviewService::class)->preview($file);
+
+        $this->assertContains('1つの商品IDにつき販売数量は1点です。', $preview['rows'][0]['errors']);
     }
 }

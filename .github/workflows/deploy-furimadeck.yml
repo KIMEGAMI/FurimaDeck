@@ -7,6 +7,10 @@ on:
         description: Verified production database backup reference. Do not include credentials.
         required: true
         type: string
+      production_restore_tested:
+        description: Confirm the verified backup has passed a restore test.
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -31,16 +35,21 @@ jobs:
       contents: read
 
     steps:
-      - name: Require verified production backup reference
+      - name: Require verified production backup and restore-test attestation
         env:
           BACKUP_REFERENCE: ${{ inputs.production_backup_reference }}
+          RESTORE_TESTED: ${{ inputs.production_restore_tested }}
         run: |
           set -euo pipefail
           if [[ -z "$BACKUP_REFERENCE" ]]; then
             echo "A verified production backup reference is required." >&2
             exit 1
           fi
-          echo "Required production backup reference is present."
+          if [[ "$RESTORE_TESTED" != "true" ]]; then
+            echo "A successful backup restore test must be confirmed before deployment." >&2
+            exit 1
+          fi
+          echo "Required production backup attestation is present."
 
       - name: Require successful push checks for the exact commit
         env:
@@ -158,6 +167,13 @@ jobs:
             exit 1
           fi
           "$PHP_BIN" -r "if (version_compare(PHP_VERSION, '$MIN_PHP_VERSION', '<')) { fwrite(STDERR, 'PHP $MIN_PHP_VERSION or newer is required. Current: '.PHP_VERSION.PHP_EOL); exit(1); }"
+          "$PHP_BIN" -r '
+          $gdInfo = function_exists("gd_info") ? gd_info() : [];
+          if (! extension_loaded("exif") || ! function_exists("exif_read_data") || ! function_exists("imagewebp") || empty($gdInfo["WebP Support"])) {
+              fwrite(STDERR, "Required PHP image runtime is unavailable (GD WebP + EXIF).\n");
+              exit(1);
+          }
+          '
           git fetch origin main
           REMOTE_MAIN_SHA="$(git rev-parse origin/main)"
           if [[ "$REMOTE_MAIN_SHA" != "$DEPLOY_SHA" ]]; then
@@ -180,6 +196,7 @@ jobs:
           test -x "$NPM_BIN"
           test -x "$PHP_BIN"
           sudo -u www-data "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress
+          sudo -u www-data "$COMPOSER_BIN" check-platform-reqs --no-dev --no-interaction
           sudo -u www-data "$NPM_BIN" ci --ignore-scripts
           sudo -u www-data "$NPM_BIN" run build
           sudo -u www-data "$PHP_BIN" artisan optimize:clear

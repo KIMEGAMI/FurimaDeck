@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Listing;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\ProductInventoryEvent;
 use App\Models\Sale;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -64,6 +65,17 @@ class DemoDataSeedCommandTest extends TestCase
         $this->assertSame(244, Product::query()->where('user_id', $user->id)->count());
         $this->assertGreaterThan(0, Listing::query()->where('user_id', $user->id)->count());
         $this->assertGreaterThan(0, Sale::query()->where('user_id', $user->id)->count());
+        $this->assertSame(244, ProductInventoryEvent::query()
+            ->where('user_id', $user->id)
+            ->where('event_type', ProductInventoryEvent::TYPE_INITIAL_PURCHASE)
+            ->count());
+        $this->assertSame(157, ProductInventoryEvent::query()
+            ->where('user_id', $user->id)
+            ->where('event_type', ProductInventoryEvent::TYPE_SALE)
+            ->count());
+        $this->assertSame(0, Product::query()->where('user_id', $user->id)
+            ->where('purchase_quantity', '!=', Product::UNITS_PER_PRODUCT_ID)
+            ->count());
         $this->assertSame(0, Product::query()->where('user_id', $user->id)->whereNull('category_id')->count());
 
         $this->artisan('furimadeck:seed-demo-data')
@@ -72,5 +84,9 @@ class DemoDataSeedCommandTest extends TestCase
 
         $this->assertSame(244, Product::query()->where('user_id', $user->id)->count());
         $this->assertSame(157, Sale::query()->where('user_id', $user->id)->count());
+        $this->assertSame(244, ProductInventoryEvent::query()
+            ->where('user_id', $user->id)
+            ->where('event_type', ProductInventoryEvent::TYPE_INITIAL_PURCHASE)
+            ->count());
     }
 }

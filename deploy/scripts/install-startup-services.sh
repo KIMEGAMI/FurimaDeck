@@ -76,4 +76,3 @@ systemctl --no-pager --full status "${QUEUE_SERVICE_NAME}" || true
 systemctl --no-pager --full status "${SCHEDULER_TIMER_NAME}" || true
 
 echo "Done: Apache2, ${QUEUE_SERVICE_NAME}, and ${SCHEDULER_TIMER_NAME} are enabled."
-

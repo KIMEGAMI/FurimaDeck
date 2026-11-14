@@ -45,7 +45,7 @@
                     </div>
                 </div>
 
-                <form method="POST" action="{{ route('admin.bulk-mail.store') }}" class="mt-6 space-y-5" onsubmit="return confirm('登録ユーザー全員へ一斉メールを送信します。実行しますか？');">
+                <form method="POST" action="{{ route('admin.bulk-mail.store') }}" class="mt-6 space-y-5" data-confirm="登録ユーザー全員へ一斉メールを送信します。実行しますか？">
                     @csrf
 
                     <div>

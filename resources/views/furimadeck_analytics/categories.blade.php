@@ -16,8 +16,8 @@
     <x-slot name="header">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <h2 class="text-2xl font-black text-cyan-200">ジャンル別分析</h2>
-                <p class="mt-1 text-sm font-bold text-cyan-100">大分類・中分類・小分類ごとに、売上上位{{ $categoryRankingLimit }}ジャンルを売上・実利益・販売数で比較します。</p>
+                <h2 class="text-2xl font-black text-slate-900">ジャンル別分析</h2>
+                <p class="mt-1 text-sm font-bold text-slate-700">大分類・中分類・小分類ごとに、売上上位{{ $categoryRankingLimit }}ジャンルを売上・実利益・販売数で比較します。</p>
             </div>
             <a href="{{ route('furimadeck-analytics.index', ['month' => $month->format('Y-m')]) }}" class="rounded-lg border border-cyan-300 bg-cyan-50 px-4 py-2 text-sm font-black text-cyan-900 hover:bg-cyan-100">売上分析へ</a>
         </div>
@@ -77,8 +77,8 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script nonce="{{ Vite::cspNonce() }}">
         const yen = value => `¥${Number(value).toLocaleString()}`;
         const renderCategoryChart = (elementId, config) => {
             const canvas = document.getElementById(elementId);

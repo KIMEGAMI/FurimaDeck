@@ -93,19 +93,19 @@
     <meta name="twitter:image" content="{{ $image }}">
     <meta name="twitter:image:alt" content="{{ $siteName }}">
     <x-pwa-head />
-    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @foreach ($schemas as $schemaItem)
-        <script type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
+        <script nonce="{{ Vite::cspNonce() }}" type="application/ld+json">@json($schemaItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)</script>
     @endforeach
 </head>
 <body class="bg-slate-100 text-slate-900 antialiased">
     <header class="border-b border-slate-200 bg-white">
-        <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+        <div class="mx-auto flex max-w-5xl flex-col items-start gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
             <a href="{{ route('home') }}" class="flex items-center gap-3 font-black text-slate-950" aria-label="FurimaDeck トップページ">
                 <span>FurimaDeck</span>
             </a>
-            <nav class="flex flex-wrap justify-end gap-x-4 gap-y-2 text-sm font-bold text-slate-700" aria-label="公開ページ">
+            <nav class="fd-public-nav flex w-full flex-wrap justify-start gap-x-3 gap-y-2 text-sm font-bold text-slate-700 sm:w-auto sm:justify-end sm:gap-x-4" aria-label="公開ページ">
                 <a href="{{ route('home') }}" class="hover:text-slate-950">トップ</a>
                 <a href="{{ route('marketing.features') }}" class="hover:text-slate-950">機能</a>
                 <a href="{{ route('marketing.pricing') }}" class="hover:text-slate-950">料金</a>
@@ -129,7 +129,7 @@
             </div>
         </article>
     </main>
-    <style>
+    <style nonce="{{ Vite::cspNonce() }}">
         .legal-content { color: #334155; font-size: 1rem; line-height: 1.95; }
         .legal-content h2 { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; color: #0f172a; font-size: 1.35rem; font-weight: 900; line-height: 1.45; }
         .legal-content h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }

@@ -18,7 +18,7 @@
             <section class="mt-6 rounded bg-white p-5 shadow">
                 <form method="POST" action="{{ route('products.imports.commit', $batch) }}">
                     @csrf
-                    <button class="rounded bg-cyan-500 px-4 py-2 text-sm font-black text-slate-950 hover:bg-cyan-400" onclick="return confirm('このCSVの{{ $batch->success_rows }}件を確定登録しますか？')">{{ $batch->success_rows }}件を確定登録</button>
+                    <button class="rounded bg-cyan-500 px-4 py-2 text-sm font-black text-slate-950 hover:bg-cyan-400" data-confirm="このCSVの{{ $batch->success_rows }}件を確定登録しますか？">{{ $batch->success_rows }}件を確定登録</button>
                 </form>
             </section>
         @endif

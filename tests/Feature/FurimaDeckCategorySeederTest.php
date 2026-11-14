@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\CategoryAttribute;
 use App\Models\ProductCategory;
 use Database\Seeders\FurimaDeckCategorySeeder;
 use Illuminate\Support\Facades\DB;
@@ -10,7 +9,7 @@ use Tests\TestCase;
 
 class FurimaDeckCategorySeederTest extends TestCase
 {
-    public function test_it_creates_categories_and_attributes_without_duplicate_records(): void
+    public function test_it_installs_the_full_offline_rakuma_category_snapshot_idempotently(): void
     {
         $connection = config('database.connections.sqlite');
         $connection['database'] = ':memory:';
@@ -26,13 +25,14 @@ class FurimaDeckCategorySeederTest extends TestCase
             '--path' => 'database/migrations/furimadeck',
         ])->assertSuccessful();
 
-        app(FurimaDeckCategorySeeder::class)->run();
-        app(FurimaDeckCategorySeeder::class)->run();
+        $this->seed(FurimaDeckCategorySeeder::class);
+        $this->seed(FurimaDeckCategorySeeder::class);
 
-        $this->assertSame(4, ProductCategory::query()->whereNull('parent_id')->count());
-        $this->assertSame(1, ProductCategory::query()->where('name', 'ゲーム機本体')->count());
-        $this->assertSame(4, CategoryAttribute::query()
-            ->whereHas('category', fn ($query) => $query->where('name', 'ゲーム機本体'))
-            ->count());
+        $this->assertSame(1686, ProductCategory::query()->count());
+        $this->assertSame(14, ProductCategory::query()->whereNull('parent_id')->count());
+        $this->assertDatabaseHas('product_categories', [
+            'name' => 'メンズ',
+            'source_path' => 'rakuma/10005',
+        ], 'furimadeck');
     }
 }

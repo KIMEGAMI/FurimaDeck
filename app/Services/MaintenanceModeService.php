@@ -14,7 +14,7 @@ class MaintenanceModeService
         }
 
         try {
-            return SystemSetting::query() // nosemgrep: php.lang.security.exec-use.exec-use -- Eloquent database query only; no shell command execution.
+            return SystemSetting::query() // nosemgrep: php.lang.security.exec-use.exec-use -- Eloquent scalar read; no process execution.
                 ->where('key', SystemSetting::KEY_MAINTENANCE_ENABLED)
                 ->value('value') === '1';
         } catch (Throwable) {
@@ -24,7 +24,7 @@ class MaintenanceModeService
 
     public function setEnabled(bool $enabled): void
     {
-        SystemSetting::query()->updateOrCreate( // nosemgrep: php.lang.security.exec-use.exec-use -- Eloquent database update only; no shell command execution.
+        SystemSetting::query()->updateOrCreate( // nosemgrep: php.lang.security.exec-use.exec-use -- Eloquent persistence; no process execution.
             ['key' => SystemSetting::KEY_MAINTENANCE_ENABLED],
             ['value' => $enabled ? '1' : '0']
         );

@@ -46,7 +46,7 @@ class SeoController extends Controller
             ];
         }
 
-        $xml = view('seo.sitemap', ['urls' => $urls])->render();
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'."\n".view('seo.sitemap', ['urls' => $urls])->render();
 
         return response($xml, 200, [
             'Content-Type' => 'application/xml; charset=UTF-8',

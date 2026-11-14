@@ -10,29 +10,22 @@
         <title>{{ config('app.name', 'FurimaDeck') }}</title>
 
         <x-pwa-head />
-        <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
-        <link rel="shortcut icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=2">
-
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+        <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
+        <link rel="shortcut icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=3">
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
 
-    <body class="font-sans text-cyan-50 antialiased">
-        <div
-            class="flex min-h-screen flex-col items-center pt-6 text-white sm:justify-center sm:pt-0"
-            style="background-image: linear-gradient(rgba(2, 6, 23, 0.28), rgba(2, 6, 23, 0.52)), url('{{ asset('images/bg.png') }}?v={{ time() }}'); background-size: cover; background-position: center; background-attachment: fixed;"
-        >
+    <body class="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
+        <div class="flex min-h-screen flex-col items-center justify-center px-4 py-8 sm:px-6">
             <div>
-                <a href="/" class="text-3xl font-black tracking-[0.22em] text-white drop-shadow-2xl">
+                <a href="/" class="text-2xl font-black tracking-tight text-slate-900">
                     FurimaDeck
                 </a>
             </div>
 
-            <div class="mt-6 w-full overflow-hidden bg-slate-950/45 px-6 py-4 text-white shadow-2xl backdrop-blur-md sm:max-w-md sm:rounded-3xl border border-cyan-300/20">
+            <div class="mt-6 w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white px-5 py-6 text-slate-900 shadow-lg sm:px-8 sm:py-8">
                 {{ $slot }}
             </div>
         </div>

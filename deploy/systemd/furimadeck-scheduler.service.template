@@ -9,4 +9,3 @@ User=www-data
 Group=www-data
 WorkingDirectory=@APP_DIR@
 ExecStart=/usr/bin/php artisan schedule:run --no-interaction
-

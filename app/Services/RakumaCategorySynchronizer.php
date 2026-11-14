@@ -19,7 +19,16 @@ class RakumaCategorySynchronizer
      */
     public function synchronize(): array
     {
-        $tree = $this->fetchTree();
+        return $this->synchronizeTree($this->fetchTree());
+    }
+
+    /**
+     * @param  list<array{name: string, source_id: int, source_path: string, children: list<array<string, mixed>>}>  $tree
+     * @return array{created: int, updated: int, deactivated: int, total: int}
+     */
+    public function synchronizeTree(array $tree): array
+    {
+        $this->validateTree($tree);
         $result = ['created' => 0, 'updated' => 0, 'deactivated' => 0, 'total' => 0];
 
         DB::transaction(function () use ($tree, &$result): void {
@@ -31,6 +40,43 @@ class RakumaCategorySynchronizer
         });
 
         return $result;
+    }
+
+    /** @param list<array<string, mixed>> $tree */
+    private function validateTree(array $tree): void
+    {
+        if ($tree === [] || ! array_is_list($tree)) {
+            throw new \UnexpectedValueException('Rakumaカテゴリスナップショットの形式が不正です。');
+        }
+
+        $seenSourceIds = [];
+        $visit = function (array $nodes) use (&$visit, &$seenSourceIds): void {
+            if (! array_is_list($nodes)) {
+                throw new \UnexpectedValueException('Rakumaカテゴリスナップショットの階層形式が不正です。');
+            }
+
+            foreach ($nodes as $node) {
+                if (! is_array($node)
+                    || ! is_int($node['source_id'] ?? null)
+                    || $node['source_id'] < 1
+                    || ($node['source_path'] ?? null) !== 'rakuma/'.$node['source_id']
+                    || ! is_string($node['name'] ?? null)
+                    || trim($node['name']) === ''
+                    || ! is_array($node['children'] ?? null)
+                    || ! array_is_list($node['children'])) {
+                    throw new \UnexpectedValueException('Rakumaカテゴリスナップショットに不正なカテゴリがあります。');
+                }
+
+                if (isset($seenSourceIds[$node['source_id']])) {
+                    throw new \UnexpectedValueException('RakumaカテゴリスナップショットにカテゴリIDの重複があります。');
+                }
+
+                $seenSourceIds[$node['source_id']] = true;
+                $visit($node['children']);
+            }
+        };
+
+        $visit($tree);
     }
 
     /** @return list<array{name: string, source_id: int, source_path: string, children: list<array<string, mixed>>}> */

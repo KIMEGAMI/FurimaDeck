@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 #[Fillable([
     'name',
@@ -100,7 +101,9 @@ class User extends Authenticatable implements MustVerifyEmail
             return false;
         }
 
-        return is_string($demoEmail) && $demoEmail !== '' && $this->email === $demoEmail;
+        return is_string($demoEmail)
+            && $demoEmail !== ''
+            && Str::lower($this->email) === Str::lower($demoEmail);
     }
 
     public function hasComplimentaryPremiumAccess(): bool
@@ -110,7 +113,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function hasVerifiedEmail(): bool
     {
-        return $this->isAdmin() || $this->isDemoUser() || parent::hasVerifiedEmail();
+        return parent::hasVerifiedEmail();
     }
 
     /** @return HasMany<AuctionItem, User> */
@@ -149,9 +152,24 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(AccountingConnection::class);
     }
 
+    public function accountingPurchaseCapReviews(): HasMany
+    {
+        return $this->hasMany(AccountingPurchaseCapReview::class);
+    }
+
     public function accountingEntries(): HasMany
     {
         return $this->hasMany(AccountingEntry::class);
+    }
+
+    public function manualProductPurchaseReconciliations(): HasMany
+    {
+        return $this->hasMany(ManualProductPurchaseReconciliation::class);
+    }
+
+    public function accountingSyncBatches(): HasMany
+    {
+        return $this->hasMany(AccountingSyncBatch::class);
     }
 
     /** @return HasMany<AiUsageLog, User> */

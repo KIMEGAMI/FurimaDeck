@@ -116,26 +116,63 @@ class FurimaDeckSalesAnalysisService
         $sales = $this->salesForMonth($user, $month);
         $groups = $sales->groupBy(fn (Sale $sale): string => $this->rootCategoryName($sale->product?->category).'|'.($sale->marketplace?->name ?? '未設定'));
 
-        return $groups->map(function (Collection $items, string $key): array {
+        $rows = $groups->map(function (Collection $items, string $key): array {
             [$category, $marketplace] = explode('|', $key, 2);
             $days = $items->map(fn (Sale $sale): ?int => $this->saleDaysFor($sale))->filter()->values();
-            $salesAmount = (int) $items->sum('sold_price');
-            $profits = $items->pluck('net_profit')->map(fn ($value): int => (int) $value);
+            $prices = $items->map(fn (Sale $sale): ?int => $sale->sold_price === null ? null : (int) $sale->sold_price)
+                ->filter(fn (?int $price): bool => $price !== null)->values();
+            $profits = $items->map(fn (Sale $sale): ?int => $sale->net_profit === null ? null : (int) $sale->net_profit)
+                ->filter(fn (?int $profit): bool => $profit !== null)->values();
+            $margins = $items->map(function (Sale $sale): ?float {
+                $price = (int) $sale->sold_price;
+
+                return $price <= 0 || $sale->net_profit === null ? null : round((int) $sale->net_profit / $price * 100, 1);
+            })->filter(fn (?float $margin): bool => $margin !== null)->values();
             $medianProfit = $this->median($profits);
             $medianDays = $this->median($days);
+            $medianMargin = $this->median($margins);
 
             return [
                 'category' => $category,
                 'marketplace' => $marketplace,
                 'sample_count' => $items->count(),
-                'median_sale_price' => $this->median($items->pluck('sold_price')->map(fn ($value): int => (int) $value)),
+                'price_sample_count' => $prices->count(),
+                'profit_sample_count' => $profits->count(),
+                'sale_days_sample_count' => $days->count(),
+                'median_sale_price' => $this->median($prices),
                 'median_profit' => $medianProfit,
-                'median_profit_margin' => $salesAmount === 0 ? 0.0 : round($items->sum('net_profit') / $salesAmount * 100, 1),
+                'median_profit_margin' => $medianMargin,
                 'median_sale_days' => $medianDays,
                 'profit_velocity' => $medianProfit === null || $medianDays === null ? null : round($medianProfit / max(1, $medianDays), 1),
-                'comparable' => $items->count() >= 3 && $medianDays !== null,
+                'comparable' => $items->count() >= 3 && $prices->count() >= 3 && $profits->count() >= 3 && $days->count() >= 3 && $margins->count() >= 3,
             ];
         })->sortByDesc('sample_count')->values()->all();
+
+        $recommendations = collect($rows)
+            ->filter(fn (array $row): bool => $row['comparable'])
+            ->groupBy('category')
+            ->map(function (Collection $categoryRows, string $category): ?array {
+                if ($categoryRows->pluck('marketplace')->unique()->count() < 2) {
+                    return null;
+                }
+                $profitChoice = $categoryRows->sortByDesc('median_profit')->first();
+                $speedChoice = $categoryRows->sortBy('median_sale_days')->first();
+
+                return [
+                    'category' => $category,
+                    'profit_marketplace' => $profitChoice['marketplace'],
+                    'median_profit' => $profitChoice['median_profit'],
+                    'profit_sample_count' => $profitChoice['sample_count'],
+                    'speed_marketplace' => $speedChoice['marketplace'],
+                    'median_sale_days' => $speedChoice['median_sale_days'],
+                    'speed_sample_count' => $speedChoice['sample_count'],
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+
+        return ['rows' => $rows, 'recommendations' => $recommendations];
     }
 
     /** @return array<string, int> */

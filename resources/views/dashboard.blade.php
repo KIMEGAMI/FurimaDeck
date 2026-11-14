@@ -14,7 +14,7 @@
         ];
     @endphp
 
-    <div class="min-h-screen bg-slate-950 bg-cover bg-center bg-fixed text-white" style="background-image: linear-gradient(rgba(2, 6, 23, 0.42), rgba(2, 6, 23, 0.68)), url('{{ asset('images/bg.png') }}');">
+    <div class="furimadeck-page-background furimadeck-legacy-dashboard-page-background min-h-screen bg-slate-950 bg-cover bg-center bg-fixed text-white">
         <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
             <div class="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-12">
                 <section class="rounded-2xl border border-amber-300 bg-black p-4 text-white shadow-2xl lg:col-span-4">
@@ -63,7 +63,7 @@
                             <span>{{ number_format($insights['monthly_target_progress'] ?? 0, 1) }}%</span>
                         </div>
                         <div class="h-2 overflow-hidden rounded-full bg-slate-800">
-                            <div class="h-full rounded-full bg-emerald-400" style="width: {{ min(100, max(0, $insights['monthly_target_progress'] ?? 0)) }}%"></div>
+                            <div class="furimadeck-progress-width h-full rounded-full bg-emerald-400" data-progress-width="{{ min(100, max(0, $insights['monthly_target_progress'] ?? 0)) }}"></div>
                         </div>
                     </div>
 
@@ -248,12 +248,15 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script nonce="{{ Vite::cspNonce() }}">
         const monthlyChartLabels = @json($monthlyChartLabels);
         const monthlyChartSales = @json($monthlyChartSales);
         const monthlyChartProfit = @json($monthlyChartProfit);
         const monthlySalesProfitLineCanvas = document.getElementById('monthlySalesProfitLineChart');
+        const legacyChartTextColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-muted').trim() || '#cbd5e1';
+        const legacyChartLegendColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-muted').trim() || '#e2e8f0';
+        const legacyChartGridColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-grid').trim() || 'rgba(148, 163, 184, 0.16)';
         const yenTickCallback = function(value) { return '¥' + Number(value).toLocaleString(); };
         const yenTooltipLabel = function(context) { return context.dataset.label + ': ¥' + Number(context.raw).toLocaleString(); };
 
@@ -272,12 +275,12 @@
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { labels: { color: '#e2e8f0', font: { weight: 'bold' } } },
+                        legend: { labels: { color: legacyChartLegendColor, font: { weight: 'bold' } } },
                         tooltip: { callbacks: { label: yenTooltipLabel } }
                     },
                     scales: {
-                        x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(148, 163, 184, 0.16)' } },
-                        y: { beginAtZero: true, ticks: { color: '#cbd5e1', callback: yenTickCallback }, grid: { color: 'rgba(148, 163, 184, 0.16)' } }
+                        x: { ticks: { color: legacyChartTextColor }, grid: { color: legacyChartGridColor } },
+                        y: { beginAtZero: true, ticks: { color: legacyChartTextColor, callback: yenTickCallback }, grid: { color: legacyChartGridColor } }
                     }
                 }
             });

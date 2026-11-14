@@ -46,6 +46,7 @@ final class ProductCsvSchema
         'sold_price',
         'sold_at',
         'sales_fee',
+        'sales_fee_rate',
         'shipping_fee',
         'sale_purchase_shipping_cost',
         'packing_cost',

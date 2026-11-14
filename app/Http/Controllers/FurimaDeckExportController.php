@@ -38,7 +38,7 @@ class FurimaDeckExportController extends Controller
 
     public function listings(Request $request): StreamedResponse
     {
-        return $this->stream('listings.csv', ['product_name', 'marketplace', 'title', 'price', 'status'], $request->user()->listings()->with(['product', 'marketplace'])->cursor(), fn ($listing) => [$listing->product->product_name, $listing->marketplace->name, $listing->listing_title, $listing->listing_price, $listing->status]);
+        return $this->stream('listings.csv', ['product_name', 'marketplace', 'title', 'price', 'status'], $request->user()->listings()->with(['product', 'marketplace'])->lazy(), fn ($listing) => [$listing->product->product_name, $listing->marketplace->name, $listing->listing_title, $listing->listing_price, $listing->status]);
     }
 
     public function sales(Request $request): StreamedResponse
@@ -54,7 +54,7 @@ class FurimaDeckExportController extends Controller
             ->where('status', 'completed')
             ->whereNotNull('sold_at')
             ->orderByDesc('sold_at')
-            ->cursor();
+            ->lazy();
 
         return $this->stream('furimadeck-sales.csv', $headers, $rows, function ($sale): array {
             $listing = $sale->listing;
@@ -85,7 +85,7 @@ class FurimaDeckExportController extends Controller
         $rows = $request->user()->products()
             ->with(['category.parent', 'images', 'listings.marketplace', 'sales.marketplace'])
             ->orderByDesc('updated_at')
-            ->cursor();
+            ->lazy();
 
         return $this->stream('furimadeck-backup.csv', $headers, $rows, function ($product): array {
             $listing = $product->listings->sortByDesc('updated_at')->first();
@@ -121,31 +121,80 @@ class FurimaDeckExportController extends Controller
     {
         $headers = ['management_id', 'title', 'comment', 'platform', 'parent_category', 'category', 'purchase_price', 'sold_price', 'sales_fee_rate', 'shipping_fee', 'status', 'sold_at'];
         $rows = $request->user()->products()
-            ->with(['category.parent', 'listings.marketplace', 'sales.marketplace'])
+            ->with(['category.parent', 'listings.marketplace', 'sales.marketplace', 'sales.listing'])
             ->orderBy('id')
-            ->cursor();
+            ->lazy()
+            ->flatMap(function ($product): array {
+                $activeListings = $product->listings
+                    ->where('status', 'active')
+                    ->sortBy('id');
 
-        return $this->stream('furimadeck-restore.csv', $headers, $rows, function ($product): array {
-            $sale = $product->sales->sortByDesc('sold_at')->first(fn ($sale) => $sale->status === 'completed');
-            $listing = $product->listings->sortByDesc('updated_at')->first();
-            $marketplace = $sale?->marketplace ?? $listing?->marketplace;
-            $rate = $sale?->listing?->expected_fee_rate ?? $listing?->expected_fee_rate ?? $marketplace?->default_fee_rate ?? 0;
+                if ($activeListings->isNotEmpty()) {
+                    $listingRows = $activeListings->map(fn ($listing): array => [
+                        $product->internal_sku,
+                        $listing->listing_title ?: $product->product_name,
+                        $listing->listing_description ?: ($product->memo ?? $product->description_base ?? ''),
+                        $this->marketplaceLabel($listing->marketplace?->name),
+                        $product->category?->parent?->name ?? '',
+                        $product->category?->name ?? '',
+                        (int) $product->purchase_unit_cost,
+                        (int) $listing->listing_price,
+                        $this->formatRate($listing->expected_fee_rate ?? $listing->marketplace?->default_fee_rate ?? 0),
+                        (int) $listing->shipping_fee,
+                        'selling',
+                        '',
+                    ])->values()->all();
 
-            return [
-                $product->internal_sku,
-                $product->product_name,
-                $product->memo ?? $product->description_base ?? '',
-                $this->marketplaceLabel($marketplace?->name),
-                $product->category?->parent?->name ?? '',
-                $product->category?->name ?? '',
-                (int) $product->purchase_unit_cost,
-                (int) ($sale?->sold_price ?? $listing?->listing_price ?? 0),
-                $this->formatRate($rate),
-                (int) ($sale?->shipping_fee ?? $listing?->shipping_fee ?? 0),
-                $sale !== null ? 'sold' : 'selling',
-                $sale?->sold_at?->format('Y-m-d') ?? '',
-            ];
-        });
+                    $sale = $product->sales->sortByDesc('sold_at')->first(fn ($sale) => $sale->status === 'completed');
+                    if ($sale === null) {
+                        return $listingRows;
+                    }
+
+                    $marketplace = $sale->marketplace;
+                    $rate = $sale->sales_fee_rate ?? $sale->listing?->expected_fee_rate ?? $marketplace?->default_fee_rate ?? 0;
+                    $listingRows[] = [
+                        $product->internal_sku,
+                        $product->product_name,
+                        $product->memo ?? $product->description_base ?? '',
+                        $this->marketplaceLabel($marketplace?->name),
+                        $product->category?->parent?->name ?? '',
+                        $product->category?->name ?? '',
+                        (int) $product->purchase_unit_cost,
+                        (int) $sale->sold_price,
+                        $this->formatRate($rate),
+                        (int) $sale->shipping_fee,
+                        'sold',
+                        $sale->sold_at?->format('Y-m-d') ?? '',
+                    ];
+
+                    return $listingRows;
+                }
+
+                $sale = $product->sales->sortByDesc('sold_at')->first(fn ($sale) => $sale->status === 'completed');
+                if ($sale === null) {
+                    return [];
+                }
+
+                $marketplace = $sale->marketplace;
+                $rate = $sale->sales_fee_rate ?? $sale->listing?->expected_fee_rate ?? $marketplace?->default_fee_rate ?? 0;
+
+                return [[
+                    $product->internal_sku,
+                    $product->product_name,
+                    $product->memo ?? $product->description_base ?? '',
+                    $this->marketplaceLabel($marketplace?->name),
+                    $product->category?->parent?->name ?? '',
+                    $product->category?->name ?? '',
+                    (int) $product->purchase_unit_cost,
+                    (int) $sale->sold_price,
+                    $this->formatRate($rate),
+                    (int) $sale->shipping_fee,
+                    'sold',
+                    $sale->sold_at?->format('Y-m-d') ?? '',
+                ]];
+            });
+
+        return $this->stream('furimadeck-restore.csv', $headers, $rows, fn (array $row): array => $row);
     }
 
     public function activeListingsSpec(Request $request): StreamedResponse
@@ -155,7 +204,7 @@ class FurimaDeckExportController extends Controller
             ->with(['product.category.parent', 'marketplace'])
             ->where('status', 'active')
             ->orderBy('id')
-            ->cursor();
+            ->lazy();
 
         return $this->stream('furimadeck-active-listings.csv', $headers, $rows, function ($listing): array {
             return [
@@ -212,17 +261,25 @@ class FurimaDeckExportController extends Controller
                 fputcsv($output, $this->sanitizeRow($map($row)));
             }
             fclose($output);
-        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /**
      * @param  array<int, mixed>  $row
-     * @return array<int, string>
+     * @return array<int, string|int>
      */
     private function sanitizeRow(array $row): array
     {
-        return array_map(function (mixed $value): string {
-            $value = (string) $value;
+        return array_map(function (mixed $value): string|int {
+            if (is_int($value)) {
+                return $value;
+            }
+
+            $value = (string) ($value ?? '');
 
             return preg_match(self::CSV_FORMULA_PREFIX_PATTERN, $value) === 1
                 ? "'".$value

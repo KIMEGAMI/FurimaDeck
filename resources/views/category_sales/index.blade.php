@@ -81,14 +81,14 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script nonce="{{ Vite::cspNonce() }}">
         const categoryLabels = @json($chartLabels);
         const categorySalesData = @json($chartSalesData);
         const categoryProfitData = @json($chartProfitData);
         const categoryCountData = @json($chartCountData);
-        const chartTextColor = '#f8fafc';
-        const chartGridColor = 'rgba(148, 163, 184, 0.22)';
+        const chartTextColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-muted').trim() || '#f8fafc';
+        const chartGridColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-grid').trim() || 'rgba(148, 163, 184, 0.22)';
         const yen = function(value) { return '¥' + Number(value).toLocaleString(); };
         const commonOptions = {
             responsive: true,

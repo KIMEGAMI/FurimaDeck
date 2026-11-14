@@ -9,6 +9,7 @@ use App\Services\ListingLifecycleService;
 use App\Services\ListingProfitEstimator;
 use App\Services\MarketplaceFeeService;
 use App\Services\MarketplaceListingReadinessService;
+use App\Services\SaleProfitCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -62,6 +63,64 @@ class ListingController extends Controller
         return back()->with('success', '出品情報を更新しました。');
     }
 
+    public function updateMarketplaceAndPrice(Request $request, Listing $listing, ListingLifecycleService $lifecycle, ListingProfitEstimator $profitEstimator, AuditLogger $auditLogger): RedirectResponse
+    {
+        $this->ensureOwner($request, $listing);
+        $validated = $request->validate([
+            'marketplace_id' => ['required', Rule::exists('marketplaces', 'id')->where(fn ($query) => $query->where('is_active', true)->orWhere('id', $listing->marketplace_id))],
+            'listing_price' => ['present', 'nullable', 'integer', 'min:0', 'max:'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT],
+            'expected_fee_rate' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:100'],
+            'shipping_fee' => ['required', 'integer', 'min:0', 'max:'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT],
+            'marketplace_other_name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $marketplace = Marketplace::query()->findOrFail($validated['marketplace_id']);
+        if ($marketplace->code === 'other' && blank($validated['marketplace_other_name'] ?? $listing->marketplace_other_name)) {
+            throw ValidationException::withMessages([
+                'marketplace_other_name' => 'その他の販売先名を入力してください。',
+            ]);
+        }
+
+        $before = $listing->getAttributes();
+        $values = [
+            'marketplace_id' => $marketplace->id,
+            'marketplace_other_name' => $marketplace->code === 'other'
+            ? ($validated['marketplace_other_name'] ?? $listing->marketplace_other_name)
+            : null,
+            'listing_price' => $validated['listing_price'] ?? null,
+            'expected_fee_rate' => $validated['expected_fee_rate'],
+            'shipping_fee' => $validated['shipping_fee'],
+        ];
+
+        if ($values['listing_price'] === null || ! $listing->product->purchase_info_confirmed) {
+            $values['expected_profit'] = null;
+            $values['expected_margin'] = null;
+        } else {
+            try {
+                $estimate = $profitEstimator->estimate(
+                    $listing->product,
+                    max(1, (int) $listing->listing_quantity),
+                    (int) $values['listing_price'],
+                    (string) $values['expected_fee_rate'],
+                    (int) $values['shipping_fee'],
+                );
+            } catch (\RuntimeException $exception) {
+                return back()->withInput()->withErrors(['listing_price' => $exception->getMessage()]);
+            }
+            $values = [...$values, ...$estimate];
+        }
+
+        try {
+            $listing = $lifecycle->update($request->user(), $listing, $values);
+        } catch (\RuntimeException $exception) {
+            return back()->withInput()->withErrors(['listing_price' => $exception->getMessage()]);
+        }
+
+        $auditLogger->log($request->user(), Listing::class, $listing->id, 'listing.marketplace_price_updated', $before, $listing->fresh()->getAttributes());
+
+        return back()->with('success', '出品先と出品価格を更新しました。外部フリマサイトの掲載内容は別途変更してください。');
+    }
+
     public function destroy(Request $request, Listing $listing, AuditLogger $auditLogger): RedirectResponse
     {
         $this->ensureOwner($request, $listing);
@@ -104,7 +163,7 @@ class ListingController extends Controller
             ],
             'listing_title' => ['required', 'string', 'max:255'],
             'listing_description' => ['nullable', 'string', 'max:10000'],
-            'listing_price' => ['nullable', 'integer', 'min:0'],
+            'listing_price' => ['nullable', 'integer', 'min:0', 'max:'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT],
             'expected_fee_rate' => ['required', 'decimal:0,2', 'min:0', 'max:100'],
             'marketplace_category' => ['nullable', 'string', 'max:255'],
             'marketplace_condition' => ['nullable', 'string', 'max:255'],
@@ -118,7 +177,7 @@ class ListingController extends Controller
             'listing_period_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'return_policy' => ['nullable', 'string', 'max:1000'],
             'purchase_application' => ['nullable', Rule::in(Listing::PURCHASE_APPLICATIONS)],
-            'shipping_fee' => ['nullable', 'integer', 'min:0'],
+            'shipping_fee' => ['nullable', 'integer', 'min:0', 'max:'.SaleProfitCalculator::MAX_UNSIGNED_AMOUNT],
             'external_listing_url' => ['nullable', 'url:https', 'max:2048'],
             'external_listing_id' => ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(Listing::USER_SETTABLE_STATUSES)],
@@ -145,6 +204,12 @@ class ListingController extends Controller
         }
 
         $product = $request->user()->products()->findOrFail($values['product_id']);
+        if (! $product->purchase_info_confirmed) {
+            $values['expected_profit'] = null;
+            $values['expected_margin'] = null;
+
+            return $values;
+        }
         $estimate = $profitEstimator->estimate(
             $product,
             1,

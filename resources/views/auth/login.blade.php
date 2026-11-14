@@ -10,9 +10,9 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
-<body class="min-h-screen bg-slate-100">
-    <main class="flex min-h-screen items-center justify-center bg-cover bg-center p-4 lg:bg-none" style="background-image: linear-gradient(rgba(240, 255, 253, 0.78), rgba(240, 255, 253, 0.9)), url('{{ asset('images/furimadeck-hero.png') }}');">
-        <div class="grid min-h-[720px] w-full max-w-7xl grid-cols-1 overflow-hidden rounded-lg bg-white shadow-2xl lg:grid-cols-2">
+<body class="min-h-screen bg-slate-50 text-slate-900">
+    <main class="flex min-h-screen items-start justify-center bg-slate-50 p-4 sm:p-6 lg:items-center lg:p-8">
+        <div class="grid min-h-0 w-full max-w-6xl grid-cols-1 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl lg:min-h-[680px] lg:grid-cols-2">
             <section class="relative hidden bg-blue-900 lg:block">
                 <img
                     src="{{ asset('images/furimadeck-hero.png') }}"
@@ -26,7 +26,7 @@
                 </div>
             </section>
 
-            <section class="flex items-center justify-center px-6 py-10 lg:px-16">
+            <section class="flex items-center justify-center px-5 py-8 sm:px-8 sm:py-10 lg:px-14">
                 <div class="w-full max-w-xl">
                     <div class="mb-10 text-center">
                         <a href="{{ route('home') }}" class="mb-6 inline-flex text-3xl font-black tracking-[0.22em] text-cyan-700">
@@ -39,23 +39,17 @@
                         <div class="mx-auto mt-6 h-1 w-16 rounded-full bg-blue-600"></div>
                     </div>
 
-                    <button
-                        type="button"
-                        data-pwa-install
-                        hidden
-                        disabled
-                        class="mb-6 w-full rounded-md border border-cyan-300 bg-cyan-50 px-5 py-4 text-center text-sm font-black text-cyan-900 shadow-sm transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        FurimaDeckをアプリとして追加
-                    </button>
+                    <div class="mb-6">
+                        <x-pwa-install-options />
+                    </div>
 
                     @if (session('status'))
                         <div class="mb-6 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                            {{ session('status') }}
+                            {{ session('status') === 'email-verified-login' ? __('メールアドレスの認証が完了しました。ログインしてください。') : session('status') }}
                         </div>
                     @endif
 
-                    <form method="POST" action="{{ route('login') }}" class="rounded-lg border border-slate-200 bg-white p-8 shadow-xl">
+                    <form method="POST" action="{{ route('login') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
                         @csrf
 
                         <div>

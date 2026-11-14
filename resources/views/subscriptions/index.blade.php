@@ -51,7 +51,7 @@
                                 {{ session('upgrade_title', 'Premiumプランで制限を解除できます。') }}
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm font-bold leading-7 text-slate-600">
-                                {{ session('upgrade_description', 'Premiumは7日間無料お試し後、月額'.number_format($price).'円（税込）です。商品登録数とカテゴリ数の制限なし、CSV登録、売上分析、ジャンル別分析、重複チェックをまとめて使えます。') }}
+                                {{ session('upgrade_description', 'Premiumは7日間無料お試し後、月額'.number_format($price).'円（税込）です。商品登録数の上限なし、CSV登録、売上分析、ジャンル別分析、重複チェックをまとめて使えます。') }}
                             </p>
                         </div>
                         <form method="POST" action="{{ route('subscriptions.checkout') }}" class="shrink-0">
@@ -66,7 +66,6 @@
                     <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         @foreach (session('upgrade_features', [
                             '商品登録数の制限なし',
-                            'カテゴリ数の制限なし',
                             'CSV登録・CSV変換登録',
                             '売上CSV・バックアップCSV',
                             'ジャンル別売上分析',

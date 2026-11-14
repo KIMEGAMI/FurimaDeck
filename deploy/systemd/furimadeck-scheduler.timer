@@ -9,4 +9,3 @@ Unit=furimadeck-scheduler.service
 
 [Install]
 WantedBy=timers.target
-

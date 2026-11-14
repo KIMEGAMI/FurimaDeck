@@ -2,8 +2,12 @@
 
 namespace Tests\Unit;
 
+use App\Models\CategoryAttribute;
 use App\Models\Marketplace;
 use App\Models\Product;
+use App\Models\ProductCategory;
+use App\Models\ProductInventoryEvent;
+use App\Models\Sale;
 use App\Models\User;
 use App\Services\FurimaDeckAdvancedAnalyticsService;
 use Carbon\CarbonImmutable;
@@ -94,6 +98,60 @@ class FurimaDeckAdvancedAnalyticsServiceTest extends TestCase
         $this->assertContains($report['matrix']['rows'][0]['quadrant'], ['高利益率・高速回転', '高利益率・低速回転', '低利益率・高速回転', '低利益率・低速回転']);
     }
 
+    public function test_profit_matrix_includes_genre_brand_and_supplier_dimensions(): void
+    {
+        $user = User::factory()->create();
+        $marketplace = $this->marketplace();
+        foreach (['衣類', '靴', 'バッグ'] as $index => $genre) {
+            $category = ProductCategory::query()->create(['name' => $genre, 'slug' => 'matrix-genre-'.$index]);
+            $brandAttribute = CategoryAttribute::query()->create([
+                'category_id' => $category->id,
+                'key' => 'brand',
+                'label' => 'ブランド',
+                'input_type' => 'text',
+                'is_required' => false,
+                'is_active' => true,
+            ]);
+            $supplier = $user->suppliers()->create(['name' => '仕入先'.($index + 1), 'type' => 'store']);
+            $product = $this->product($user, 'MATRIX-DIM-'.$index, 100, '2026-09-01');
+            $product->update(['category_id' => $category->id, 'supplier_id' => $supplier->id]);
+            $product->attributeValues()->create(['category_attribute_id' => $brandAttribute->id, 'value_text' => 'ブランド'.($index + 1)]);
+            $sale = $this->recordSale($user, $marketplace, $product, '2026-09-'.str_pad((string) (10 + $index), 2, '0', STR_PAD_LEFT).' 12:00:00', 1000 * ($index + 1), 300 * ($index + 1));
+            if ($index === 0) {
+                $historicalSupplier = $user->suppliers()->create(['name' => '販売時の仕入先', 'type' => 'store']);
+                ProductInventoryEvent::query()->create([
+                    'user_id' => $user->id,
+                    'product_id' => $product->id,
+                    'event_type' => ProductInventoryEvent::TYPE_SALE,
+                    'quantity_delta' => -1,
+                    'source_type' => 'sale',
+                    'source_id' => $sale->id,
+                    'idempotency_key' => hash('sha256', 'matrix-supplier-'.$sale->id),
+                    'occurred_at' => $sale->sold_at,
+                    'before_state' => ['supplier_id' => $historicalSupplier->id, 'supplier_name' => $historicalSupplier->name],
+                    'after_state' => ['supplier_id' => $supplier->id, 'supplier_name' => $supplier->name],
+                    'actor_user_id' => $user->id,
+                    'reason' => 'test fixture',
+                ]);
+            }
+        }
+
+        $matrix = app(FurimaDeckAdvancedAnalyticsService::class)->report(
+            $user,
+            CarbonImmutable::parse('2026-09-01'),
+            CarbonImmutable::parse('2026-10-01'),
+        )['matrix'];
+
+        foreach (['genre', 'brand', 'supplier'] as $dimension) {
+            $this->assertTrue($matrix['dimensions'][$dimension]['available'], $dimension);
+            $this->assertCount(3, $matrix['dimensions'][$dimension]['rows'], $dimension);
+        }
+        $this->assertSame('靴', $matrix['dimensions']['genre']['rows'][1]['product_name']);
+        $this->assertContains('ブランド1', collect($matrix['dimensions']['brand']['rows'])->pluck('product_name'));
+        $this->assertContains('販売時の仕入先', collect($matrix['dimensions']['supplier']['rows'])->pluck('product_name'));
+        $this->assertNotContains('仕入先1', collect($matrix['dimensions']['supplier']['rows'])->pluck('product_name'));
+    }
+
     public function test_inventory_capital_uses_purchase_date_and_includes_exact_boundaries(): void
     {
         $user = User::factory()->create();
@@ -148,6 +206,141 @@ class FurimaDeckAdvancedAnalyticsServiceTest extends TestCase
         $this->assertSame(1, $report['sale_days']['excluded_count']);
         $this->assertNull($report['sale_days']['average']);
         $this->assertSame(0, $report['profit_velocity']['included_count']);
+    }
+
+    public function test_brand_and_monthly_genre_analysis_include_unset_values_and_reference_label(): void
+    {
+        $user = User::factory()->create();
+        $marketplace = $this->marketplace();
+        $top = ProductCategory::query()->create(['name' => 'ファッション', 'slug' => 'analytics-fashion']);
+        $middle = ProductCategory::query()->create(['parent_id' => $top->id, 'name' => 'メンズ', 'slug' => 'analytics-mens']);
+        $leaf = ProductCategory::query()->create(['parent_id' => $middle->id, 'name' => '靴', 'slug' => 'analytics-shoes']);
+        $brandAttribute = CategoryAttribute::query()->create([
+            'category_id' => $leaf->id,
+            'key' => 'brand',
+            'label' => 'ブランド',
+            'input_type' => 'text',
+            'is_required' => false,
+            'is_active' => true,
+        ]);
+        $branded = $this->product($user, 'BRAND-001', 1000, '2026-09-01');
+        $branded->update(['category_id' => $leaf->id]);
+        $branded->attributeValues()->create(['category_attribute_id' => $brandAttribute->id, 'value_text' => 'Sample Brand']);
+        $unset = $this->product($user, 'BRAND-002', 500, '2026-09-01');
+        $this->recordSale($user, $marketplace, $branded, '2026-09-10 12:00:00', 3000, 1000);
+        $this->recordSale($user, $marketplace, $unset, '2026-09-12 12:00:00', 1000, 300);
+
+        $report = app(FurimaDeckAdvancedAnalyticsService::class)->report(
+            $user,
+            CarbonImmutable::parse('2026-09-01'),
+            CarbonImmutable::parse('2026-10-01'),
+        );
+
+        $brands = collect($report['brand'])->keyBy('name');
+        $this->assertSame(3000, $brands['Sample Brand']['sales_amount']);
+        $this->assertSame(1000, $brands['Sample Brand']['profit']);
+        $this->assertSame(3000, $brands['Sample Brand']['average_sold_price']);
+        $this->assertSame(1000, $brands['未設定']['sales_amount']);
+        $this->assertTrue($report['seasonality'][0]['is_reference']);
+        $this->assertSame(2, $report['seasonality'][0]['sale_count']);
+        $this->assertSame(4000, $report['seasonality'][0]['sales_amount']);
+        $this->assertSame('ファッション > メンズ > 靴', $report['seasonality'][0]['genres'][0]['name']);
+        $this->assertSame(1, $report['seasonality'][0]['genres'][0]['sale_count']);
+    }
+
+    public function test_seasonality_is_not_marked_as_reference_when_twelve_sale_months_are_available(): void
+    {
+        $user = User::factory()->create();
+        $marketplace = $this->marketplace();
+        $firstMonth = CarbonImmutable::parse('2025-10-01');
+        for ($index = 0; $index < 12; $index++) {
+            $month = $firstMonth->addMonths($index);
+            $product = $this->product($user, 'SEASON-'.str_pad((string) $index, 2, '0', STR_PAD_LEFT), 100, '2025-09-01');
+            $this->recordSale($user, $marketplace, $product, $month->format('Y-m-15 12:00:00'), 1000, 500);
+        }
+
+        $seasonality = app(FurimaDeckAdvancedAnalyticsService::class)->report(
+            $user,
+            $firstMonth,
+            CarbonImmutable::parse('2026-10-01'),
+        )['seasonality'];
+
+        $this->assertCount(12, $seasonality);
+        $this->assertFalse($seasonality[0]['is_reference']);
+        $this->assertFalse($seasonality[11]['is_reference']);
+    }
+
+    public function test_supplier_analysis_includes_purchase_count_cost_and_supplier_at_sale_snapshot(): void
+    {
+        $user = User::factory()->create();
+        $marketplace = $this->marketplace();
+        $purchaseSupplier = $user->suppliers()->create(['name' => '仕入先A', 'type' => 'store']);
+        $currentSupplier = $user->suppliers()->create(['name' => '仕入先B', 'type' => 'online_shop']);
+        $product = $this->product($user, 'SUPPLIER-001', 800, '2026-09-01');
+        $product->update(['supplier_id' => $currentSupplier->id]);
+        $sale = $this->recordSale($user, $marketplace, $product, '2026-09-10 12:00:00', 3000, 500, [
+            'cost_basis' => 1200,
+            'sales_fee' => 200,
+        ]);
+        ProductInventoryEvent::query()->create([
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'event_type' => ProductInventoryEvent::TYPE_SALE,
+            'quantity_delta' => -1,
+            'source_type' => 'sale',
+            'source_id' => $sale->id,
+            'idempotency_key' => hash('sha256', 'supplier-analytics-'.$sale->id),
+            'occurred_at' => $sale->sold_at,
+            'before_state' => ['supplier_id' => $purchaseSupplier->id, 'supplier_name' => $purchaseSupplier->name],
+            'after_state' => ['supplier_id' => $currentSupplier->id, 'supplier_name' => $currentSupplier->name],
+            'actor_user_id' => $user->id,
+            'reason' => 'test fixture',
+        ]);
+
+        $supplierRows = collect(app(FurimaDeckAdvancedAnalyticsService::class)->report(
+            $user,
+            CarbonImmutable::parse('2026-09-01'),
+            CarbonImmutable::parse('2026-10-01'),
+        )['supplier'])->keyBy('supplier_id');
+
+        $historical = $supplierRows[$purchaseSupplier->id];
+        $this->assertSame('仕入先A', $historical['name']);
+        $this->assertSame(3000, $historical['sales_amount']);
+        $this->assertSame(1200, $historical['sale_cost']);
+        $this->assertSame(500, $historical['profit']);
+        $this->assertSame(0, $historical['purchase_count']);
+
+        $current = $supplierRows[$currentSupplier->id];
+        $this->assertSame(1, $current['purchase_count']);
+        $this->assertSame(800, $current['inventory_capital']);
+        $this->assertSame(0, $current['sale_count']);
+    }
+
+    /** @param array<string, int> $overrides */
+    private function recordSale(User $user, Marketplace $marketplace, Product $product, string $soldAt, int $price, int $profit, array $overrides = []): Sale
+    {
+        $listing = $user->listings()->create([
+            'product_id' => $product->id,
+            'marketplace_id' => $marketplace->id,
+            'listing_title' => $product->product_name,
+            'status' => 'sold',
+            'listed_at' => '2026-09-01 12:00:00',
+        ]);
+
+        return $user->sales()->create($overrides + [
+            'product_id' => $product->id,
+            'listing_id' => $listing->id,
+            'marketplace_id' => $marketplace->id,
+            'internal_sku_snapshot' => $product->internal_sku,
+            'product_name_snapshot' => $product->product_name,
+            'quantity' => 1,
+            'sold_price' => $price,
+            'sales_fee' => 0,
+            'cost_basis' => 0,
+            'sold_at' => $soldAt,
+            'status' => 'completed',
+            'net_profit' => $profit,
+        ]);
     }
 
     private function marketplace(): Marketplace

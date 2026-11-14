@@ -3,9 +3,10 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\View;
-use RuntimeException;
+use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
 
 class ContactFormTest extends TestCase
@@ -18,6 +19,7 @@ class ContactFormTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('お問い合わせフォーム', false);
+        $response->assertSee(config('legal.contact_email'), false);
         $response->assertSee('name="message"', false);
     }
 
@@ -44,9 +46,10 @@ class ContactFormTest extends TestCase
         $response->assertSessionHasErrors('message');
     }
 
-    public function test_contact_form_accepts_clean_message_without_logging_mail(): void
+    public function test_contact_form_accepts_clean_message_after_sending_mail(): void
     {
-        Mail::fake();
+        config(['mail.default' => 'smtp']);
+        Mail::shouldReceive('send')->once();
 
         $response = $this->from('/contact')->post('/contact', [
             'name' => 'Test User',
@@ -58,10 +61,78 @@ class ContactFormTest extends TestCase
         $response->assertRedirect('/contact');
         $response->assertSessionHasNoErrors();
         $response->assertSessionHas('success');
-        Mail::assertNothingSent();
+        $this->get('/contact')->assertOk()->assertSee('お問い合わせを受け付けました。内容を確認し、必要に応じて返信します。');
         $this->assertDatabaseHas('contact_inquiries', [
             'email' => 'sender@example.com',
             'status' => 'open',
+        ]);
+    }
+
+    public function test_contact_form_accepts_clean_message_with_resend_api_mailer(): void
+    {
+        config([
+            'contact.to_address' => 'admin@example.com',
+            'mail.default' => 'resend',
+        ]);
+        Mail::shouldReceive('send')->once();
+
+        $response = $this->from('/contact')->post('/contact', [
+            'name' => 'Test User',
+            'email' => 'sender@example.com',
+            'subject' => 'Resend API確認',
+            'message' => 'お問い合わせメールを確認したいです。',
+        ]);
+
+        $response->assertRedirect('/contact');
+        $response->assertSessionHasNoErrors();
+        $response->assertSessionHas('success');
+        $this->assertDatabaseHas('contact_inquiries', [
+            'email' => 'sender@example.com',
+            'subject' => 'Resend API確認',
+            'status' => 'open',
+        ]);
+    }
+
+    public function test_contact_submissions_are_throttled_before_an_extra_inquiry_is_saved(): void
+    {
+        config(['mail.default' => 'smtp']);
+        Mail::shouldReceive('send')->once();
+        config(['furimadeck.public_rate_limits.contact_per_minute' => 1]);
+
+        $payload = [
+            'name' => 'Test User',
+            'email' => 'sender@example.com',
+            'subject' => '使い方について',
+            'message' => '商品登録について確認したいです。',
+        ];
+
+        $this->from('/contact')->post('/contact', $payload)->assertRedirect('/contact');
+        $this->from('/contact')->post('/contact', $payload)->assertTooManyRequests();
+
+        $this->assertDatabaseCount('contact_inquiries', 1);
+    }
+
+    public function test_contact_form_does_not_claim_success_when_mailer_is_unsafe(): void
+    {
+        config(['contact.to_address' => 'admin@example.com']);
+        Mail::shouldReceive('send')->never();
+
+        foreach (['array', 'log', 'failover'] as $mailer) {
+            config(['mail.default' => $mailer]);
+            $response = $this->from('/contact')->followingRedirects()->post('/contact', [
+                'name' => 'Test User',
+                'email' => 'sender@example.com',
+                'subject' => '送信設定確認',
+                'message' => '問い合わせ送信設定を確認したいです。',
+            ]);
+
+            $response->assertOk()->assertSee('お問い合わせの送信設定が未完了です。時間をおいて再度お試しください。');
+            $response->assertSessionMissing('success');
+        }
+
+        $this->assertDatabaseMissing('contact_inquiries', [
+            'email' => 'sender@example.com',
+            'subject' => '送信設定確認',
         ]);
     }
 
@@ -76,9 +147,9 @@ class ContactFormTest extends TestCase
             ],
         ])->render();
 
-        $this->assertStringContainsString('1行目<br>', $html);
-        $this->assertStringContainsString('2行目<br>', $html);
-        $this->assertMatchesRegularExpression('/<br>\s*&lt;script&gt;/', $html);
+        $this->assertStringContainsString('white-space:pre-wrap', $html);
+        $this->assertStringContainsString("1行目\n2行目", $html);
+        $this->assertStringContainsString("2行目\n\n&lt;script&gt;", $html);
         $this->assertStringContainsString('&lt;script&gt;alert(&#039;xss&#039;)&lt;/script&gt;', $html);
         $this->assertStringNotContainsString("<script>alert('xss')</script>", $html);
     }
@@ -92,7 +163,14 @@ class ContactFormTest extends TestCase
 
         Mail::shouldReceive('send')
             ->once()
-            ->andThrow(new RuntimeException('smtp unavailable'));
+            ->andThrow(new TransportException('SMTP rejected sender@example.test password=do-not-log', 450));
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->with('Contact mail notification failed.', [
+                'error_class' => TransportException::class,
+                'transport_response_code' => 450,
+            ]);
 
         $response = $this->from('/contact')->post('/contact', [
             'name' => 'Test User',

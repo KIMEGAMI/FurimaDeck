@@ -28,7 +28,7 @@
                         <h3 class="mt-2 text-2xl font-black">{{ $monthlyReport['title'] }}</h3>
                         <p class="mt-2 text-sm font-bold text-slate-600">印刷画面からPDF保存できます。月次報告、振り返り、仕入れ判断用の控えとして使えます。</p>
                     </div>
-                    <button type="button" onclick="window.print()" class="no-print inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow hover:bg-slate-800">
+                    <button type="button" data-print class="no-print inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow hover:bg-slate-800">
                         PDF保存 / 印刷
                     </button>
                 </div>
@@ -156,7 +156,7 @@
         </div>
     </div>
 
-    <style>
+    <style nonce="{{ Vite::cspNonce() }}">
         @media print {
             body {
                 background: #ffffff !important;
@@ -185,8 +185,8 @@
         }
     </style>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script nonce="{{ Vite::cspNonce() }}">
         const monthlyLabels = @json($monthlyChartLabels);
         const monthlySales = @json($monthlyChartSales);
         const monthlyProfit = @json($monthlyChartProfit);
@@ -194,8 +194,8 @@
         const platformSales = @json($platformChartSales);
         const monthlyCanvas = document.getElementById('monthlySalesChart');
         const platformCanvas = document.getElementById('platformSalesChart');
-        const chartTextColor = '#f8fafc';
-        const chartGridColor = 'rgba(148, 163, 184, 0.22)';
+        const chartTextColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-muted').trim() || '#f8fafc';
+        const chartGridColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fd-grid').trim() || 'rgba(148, 163, 184, 0.22)';
         const yen = function(value) { return '¥' + Number(value).toLocaleString(); };
         const percentage = function(value, data) {
             const total = data.reduce((sum, current) => sum + Number(current), 0);

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ProductCategory;
 use App\Models\User;
+use Database\Seeders\FurimaDeckCategorySeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -73,6 +74,31 @@ class SyncRakumaCategoriesTest extends TestCase
         $this->assertSame('rakuma/300', $detail->parent->source_path);
         $this->assertTrue($legacyLeaf->fresh()->is_active);
         $this->assertTrue($legacyRoot->fresh()->is_active);
+    }
+
+    public function test_the_offline_category_seeder_installs_the_bundled_public_catalog_idempotently(): void
+    {
+        $this->artisan('db:seed', [
+            '--database' => 'furimadeck',
+            '--class' => FurimaDeckCategorySeeder::class,
+        ])->assertSuccessful();
+
+        $this->assertDatabaseCount('product_categories', 1686, 'furimadeck');
+        $men = ProductCategory::query()->where('source_path', 'rakuma/10005')->firstOrFail();
+        $tops = $men->children()->where('name', 'トップス')->firstOrFail();
+        $tee = $tops->children()->where('name', 'Tシャツ/カットソー(半袖/袖なし)')->firstOrFail();
+
+        $this->assertSame('メンズ', $men->name);
+        $this->assertSame('rakuma/10005', $men->source_path);
+        $this->assertSame('トップス', $tops->name);
+        $this->assertSame('Tシャツ/カットソー(半袖/袖なし)', $tee->name);
+
+        $this->artisan('db:seed', [
+            '--database' => 'furimadeck',
+            '--class' => FurimaDeckCategorySeeder::class,
+        ])->assertSuccessful();
+
+        $this->assertDatabaseCount('product_categories', 1686, 'furimadeck');
     }
 
     private function categoryPage(): string
