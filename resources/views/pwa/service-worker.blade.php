@@ -42,10 +42,10 @@ self.addEventListener('fetch', (event) => {
     if (request.mode === 'navigate') {
         event.respondWith(
             fetch(request).catch(() => new Response(
-                `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${OFFLINE_TITLE}</title></head><body style="font-family:sans-serif;padding:32px;background:#0f172a;color:#f8fafc"><main><h1>${OFFLINE_TITLE}</h1><p>${OFFLINE_MESSAGE}</p><button type="button" id="offline-retry">${OFFLINE_RETRY_LABEL}</button></main><script nonce="${OFFLINE_CSP_NONCE}">const retry=document.getElementById('offline-retry');retry.addEventListener('click',()=>window.location.reload());window.addEventListener('online',()=>window.location.reload());</script></body></html>`,
+                `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${OFFLINE_TITLE}</title><style nonce="${OFFLINE_CSP_NONCE}">body{font-family:sans-serif;padding:32px;background:#0f172a;color:#f8fafc}</style></head><body><main><h1>${OFFLINE_TITLE}</h1><p>${OFFLINE_MESSAGE}</p><button type="button" id="offline-retry">${OFFLINE_RETRY_LABEL}</button></main><script nonce="${OFFLINE_CSP_NONCE}">const retry=document.getElementById('offline-retry');retry.addEventListener('click',()=>window.location.reload());window.addEventListener('online',()=>window.location.reload());</script></body></html>`,
                 { headers: {
                     'Content-Type': 'text/html; charset=UTF-8',
-                    'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${OFFLINE_CSP_NONCE}'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+                    'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${OFFLINE_CSP_NONCE}'; style-src 'nonce-${OFFLINE_CSP_NONCE}'; style-src-attr 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
                 } }
             ))
         );

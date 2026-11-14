@@ -10,7 +10,7 @@
         $improvementSectionIds = ['stagnant_stock' => 'stagnant-stock', 'price_review' => 'price-review', 'relist' => 'relist', 'marketplace_change' => 'marketplace-change', 'rebuy' => 'rebuy'];
     @endphp
 
-    <style>
+    <style nonce="{{ Vite::cspNonce() }}">
         #furimadeck-dashboard .dashboard-mobile-summary { display: none; }
         .dashboard-mobile-footer { display: none; }
         @media (max-width: 639px) {
@@ -47,7 +47,7 @@
         }
     </style>
 
-    <div id="furimadeck-dashboard" class="min-h-screen bg-slate-950/70 py-8 text-white" style="background-image: linear-gradient(rgba(2, 6, 23, 0.42), rgba(2, 6, 23, 0.76)), url('{{ asset('images/bg.png') }}'); background-attachment: fixed; background-position: center; background-size: cover;">
+    <div id="furimadeck-dashboard" class="furimadeck-page-background furimadeck-dashboard-page-background min-h-screen bg-slate-950/70 py-8 text-white">
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <h1 class="sr-only">FurimaDeck Dashboard</h1>
 
@@ -63,7 +63,7 @@
 
                     <div class="mt-4">
                         <div class="mb-2 flex items-center justify-between text-xs font-bold text-white"><span>目標進捗</span><span>{{ number_format($dashboard['monthly_target_progress'], 1) }}%</span></div>
-                        <div class="h-2 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-emerald-400" style="width: {{ $dashboard['monthly_target_progress'] }}%"></div></div>
+                        <div class="h-2 overflow-hidden rounded-full bg-slate-800"><div class="furimadeck-progress-width h-full rounded-full bg-emerald-400" data-progress-width="{{ $dashboard['monthly_target_progress'] }}"></div></div>
                     </div>
 
                     @if (! $summary['sales_data_available'])

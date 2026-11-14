@@ -12,7 +12,7 @@
 
 </section>
 
-<style>
+<style nonce="{{ Vite::cspNonce() }}">
     .product-image-camera-control { display: none; }
     .product-image-camera-help { display: none; }
 

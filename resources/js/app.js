@@ -180,6 +180,11 @@ document.querySelectorAll('[data-flash-dismiss]').forEach((message) => {
     }, 2000);
 });
 
+document.querySelectorAll('[data-progress-width]').forEach((progress) => {
+    const width = Number(progress.dataset.progressWidth);
+    progress.style.width = `${Number.isFinite(width) ? Math.min(100, Math.max(0, width)) : 0}%`;
+});
+
 document.addEventListener('click', (event) => {
     const target = event.target instanceof Element ? event.target : null;
     const confirmButton = target?.closest('[data-confirm]');

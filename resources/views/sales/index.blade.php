@@ -156,7 +156,7 @@
         </div>
     </div>
 
-    <style>
+    <style nonce="{{ Vite::cspNonce() }}">
         @media print {
             body {
                 background: #ffffff !important;

@@ -14,7 +14,7 @@
         ];
     @endphp
 
-    <div class="min-h-screen bg-slate-950 bg-cover bg-center bg-fixed text-white" style="background-image: linear-gradient(rgba(2, 6, 23, 0.42), rgba(2, 6, 23, 0.68)), url('{{ asset('images/bg.png') }}');">
+    <div class="furimadeck-page-background furimadeck-legacy-dashboard-page-background min-h-screen bg-slate-950 bg-cover bg-center bg-fixed text-white">
         <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
             <div class="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-12">
                 <section class="rounded-2xl border border-amber-300 bg-black p-4 text-white shadow-2xl lg:col-span-4">
@@ -63,7 +63,7 @@
                             <span>{{ number_format($insights['monthly_target_progress'] ?? 0, 1) }}%</span>
                         </div>
                         <div class="h-2 overflow-hidden rounded-full bg-slate-800">
-                            <div class="h-full rounded-full bg-emerald-400" style="width: {{ min(100, max(0, $insights['monthly_target_progress'] ?? 0)) }}%"></div>
+                            <div class="furimadeck-progress-width h-full rounded-full bg-emerald-400" data-progress-width="{{ min(100, max(0, $insights['monthly_target_progress'] ?? 0)) }}"></div>
                         </div>
                     </div>
 

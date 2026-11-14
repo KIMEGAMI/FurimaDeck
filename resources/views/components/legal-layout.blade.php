@@ -129,7 +129,7 @@
             </div>
         </article>
     </main>
-    <style>
+    <style nonce="{{ Vite::cspNonce() }}">
         .legal-content { color: #334155; font-size: 1rem; line-height: 1.95; }
         .legal-content h2 { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; color: #0f172a; font-size: 1.35rem; font-weight: 900; line-height: 1.45; }
         .legal-content h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }

@@ -22,7 +22,12 @@ class SecurityHeadersTest extends TestCase
         $this->assertNotEmpty($nonceMatch[1] ?? null);
         $this->assertStringContainsString('nonce="'.$nonceMatch[1].'"', $response->getContent());
         $this->assertStringNotContainsString("'unsafe-eval'", $response->headers->get('Content-Security-Policy'));
-        $this->assertStringNotContainsString("'unsafe-inline'", explode('style-src', $response->headers->get('Content-Security-Policy'))[0]);
+        $this->assertStringNotContainsString("'unsafe-inline'", $response->headers->get('Content-Security-Policy'));
+        $this->assertStringContainsString("style-src 'self' 'nonce-{$nonceMatch[1]}'", $response->headers->get('Content-Security-Policy'));
+        $this->assertStringContainsString("style-src-attr 'none'", $response->headers->get('Content-Security-Policy'));
+        $this->assertStringNotContainsString("img-src 'self' data: blob: https:", $response->headers->get('Content-Security-Policy'));
+        $this->assertStringNotContainsString("font-src 'self' data: https:", $response->headers->get('Content-Security-Policy'));
+        $this->assertStringNotContainsString("form-action 'self' https:", $response->headers->get('Content-Security-Policy'));
 
         $anotherResponse = $this->get(route('login'));
         preg_match("/script-src 'self' 'nonce-([^']+)' 'strict-dynamic'/", $anotherResponse->headers->get('Content-Security-Policy'), $anotherNonceMatch);

@@ -143,7 +143,11 @@ class ExampleTest extends TestCase
         $response->assertSee('furimadeck-pwa-v3', false);
         preg_match("/script-src 'self' 'nonce-([^']+)' 'strict-dynamic'/", $response->headers->get('Content-Security-Policy'), $nonceMatch);
         $this->assertNotEmpty($nonceMatch[1] ?? null);
+        $this->assertStringContainsString("style-src 'self' 'nonce-{$nonceMatch[1]}'", $response->headers->get('Content-Security-Policy'));
+        $this->assertStringNotContainsString("'unsafe-inline'", $response->headers->get('Content-Security-Policy'));
         $response->assertSee('const OFFLINE_CSP_NONCE = '.json_encode($nonceMatch[1]).';', false);
+        $response->assertSee("style-src 'nonce-\${OFFLINE_CSP_NONCE}'; style-src-attr 'none'", false);
+        $response->assertSee('<style nonce="${OFFLINE_CSP_NONCE}">', false);
         $response->assertSee('<script nonce="${OFFLINE_CSP_NONCE}">', false);
         $encodedRetryLabel = json_encode('再接続する');
         $this->assertIsString($encodedRetryLabel);

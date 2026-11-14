@@ -15,7 +15,7 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
-    <style>
+    <style nonce="{{ Vite::cspNonce() }}">
         @media (max-width: 639px) {
         .furimadeck-app-shell {
             background-color: var(--color-fd-canvas);
@@ -43,7 +43,7 @@
             color: var(--color-fd-muted) !important;
         }
 
-        .furimadeck-app-shell main [style*="background-image"] {
+        .furimadeck-app-shell main .furimadeck-page-background {
             background-color: var(--color-fd-canvas) !important;
             background-image: none !important;
             background-attachment: scroll !important;
