@@ -356,8 +356,10 @@ jobs:
           fi
 
           curl --fail --silent --show-error --dump-header "$headers_file" --output /dev/null "$APP_URL/login"
-          if ! awk 'tolower($0) ~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/ && line ~ /;[[:space:]]*secure([;[:space:]]|$)/ && line ~ /;[[:space:]]*samesite=lax([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
-            echo 'The XSRF token cookie is missing HttpOnly, Secure, or SameSite=Lax.' >&2
+          # Laravel intentionally leaves XSRF-TOKEN readable to JavaScript clients.
+          # Keep Secure and SameSite=Lax mandatory; require HttpOnly on the session cookie below.
+          if ! awk 'tolower($0) ~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*secure([;[:space:]]|$)/ && line ~ /;[[:space:]]*samesite=lax([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
+            echo 'The XSRF token cookie is missing Secure or SameSite=Lax.' >&2
             exit 1
           fi
           if ! awk 'tolower($0) ~ /^set-cookie:/ && tolower($0) !~ /^set-cookie:[[:space:]]*xsrf-token=/ { line = tolower($0); if (line ~ /;[[:space:]]*httponly([;[:space:]]|$)/ && line ~ /;[[:space:]]*secure([;[:space:]]|$)/ && line ~ /;[[:space:]]*samesite=lax([;[:space:]]|$)/) found = 1 } END { exit !found }' "$headers_file"; then
