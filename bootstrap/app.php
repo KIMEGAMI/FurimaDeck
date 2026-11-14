@@ -18,12 +18,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append(SecurityHeaders::class);
+
         $middleware->web(prepend: [
             MaintenanceMode::class,
         ]);
 
         $middleware->web(append: [
-            SecurityHeaders::class,
             RedirectLegacyDashboardDuringFurimaDeckCutover::class,
         ]);
 

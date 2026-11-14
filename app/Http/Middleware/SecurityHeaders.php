@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 class SecurityHeaders
@@ -12,6 +13,13 @@ class SecurityHeaders
     {
         /** @var Response $response */
         $response = $next($request);
+
+        if ($response instanceof RedirectResponse) {
+            // The Location header is enough for user agents to follow a redirect.
+            // Symfony's fallback HTML repeats the target URL in the response body,
+            // which can disclose transient OAuth state and inflate redirect responses.
+            $response->setContent('');
+        }
 
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-Frame-Options', 'DENY');
