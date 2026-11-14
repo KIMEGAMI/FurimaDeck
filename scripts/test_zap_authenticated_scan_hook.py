@@ -97,11 +97,32 @@ class FakePassiveScan:
         self.records_to_scan = records_to_scan
 
 
+class FakeReplacer:
+    def __init__(self, *, readback=True, apply_changes=True):
+        self.readback = readback
+        self.apply_changes = apply_changes
+        self.rule = None
+
+    def add_rule(self, description, enabled, match_type, match_regex, match_string, replacement=None, url=None):
+        if self.apply_changes:
+            self.rule = {
+                "description": description, "enabled": enabled,
+                "matchType": match_type, "matchRegex": match_regex,
+                "matchString": match_string, "replacement": replacement, "url": url,
+            }
+        return "OK"
+
+    @property
+    def rules(self):
+        return {"rules": [self.rule] if self.readback and self.rule else []}
+
+
 class FakeZap:
-    def __init__(self, *, spider=None, context=None, passive_scan=None):
+    def __init__(self, *, spider=None, context=None, passive_scan=None, replacer=None):
         self.spider = spider or FakeSpider()
         self.context = context or FakeContext()
         self.pscan = passive_scan or FakePassiveScan()
+        self.replacer = replacer or FakeReplacer()
 
 
 class AuthenticatedZapHookTest(unittest.TestCase):
@@ -149,6 +170,9 @@ class AuthenticatedZapHookTest(unittest.TestCase):
         self.assertFalse(self.context_file.exists())
         self.assertIn("preflight session cookie supplies authentication", output.getvalue())
         self.assertNotIn("cookie-value", output.getvalue())
+        self.assertEqual(zap.replacer.rule["url"], r"^https://127\.0\.0\.1:8443/")
+        self.assertEqual(zap.replacer.rule["matchString"], "Cookie")
+        self.assertEqual(zap.replacer.rule["replacement"], "app_session=synthetic-cookie")
         self.assertFalse(hasattr(zap, "users"))
         self.assertFalse(hasattr(zap, "authentication"))
 
@@ -224,6 +248,13 @@ class AuthenticatedZapHookTest(unittest.TestCase):
                     if variable == "ZAP_AUTH_HEADER_VALUE"
                     else "127.0.0.1:8443"
                 )
+
+    def test_fails_closed_if_scoped_cookie_rule_cannot_be_verified(self):
+        zap = FakeZap(replacer=FakeReplacer(readback=False))
+        HOOK.zap_started(zap, "https://127.0.0.1:8443")
+        with self.assertRaisesRegex(RuntimeError, "header rule failed read-back verification"):
+            HOOK.zap_import_context_wrap("3")
+        self.assertFalse(self.context_file.exists())
 
     def test_rejects_invalid_imported_context_identifier(self):
         zap = FakeZap()

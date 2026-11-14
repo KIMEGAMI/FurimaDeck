@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 CONTEXT_NAME = "FurimaDeck CI authenticated scan"
 AUTH_CONTEXT_FILE_ENV = "ZAP_AUTH_CONTEXT_FILE"
+AUTH_COOKIE_RULE_DESCRIPTION = "FurimaDeck authenticated scan session"
 _ZAP = None
 _TARGET_ORIGIN = None
 
@@ -75,6 +76,43 @@ def _new_id(response, *names):
 
 def _login_exclusion_pattern(origin):
     return re.escape(origin) + r"/login/?(?:\?.*)?"
+
+
+def _add_authenticated_cookie_rule(zap, origin, cookie):
+    """Apply the preflight session cookie only to the exact scanned origin."""
+    url_pattern = "^" + re.escape(origin) + r"/"
+    _api_ok(
+        zap.replacer.add_rule(
+            AUTH_COOKIE_RULE_DESCRIPTION,
+            "true",
+            "REQ_HEADER",
+            "false",
+            "Cookie",
+            replacement=cookie,
+            url=url_pattern,
+        ),
+        "add the scoped authenticated-session header",
+    )
+    rules_response = zap.replacer.rules
+    rules = _value(rules_response, "rules")
+    if rules is None and isinstance(rules_response, list):
+        rules = rules_response
+    if not isinstance(rules, list):
+        raise RuntimeError("ZAP authenticated-session header rule failed read-back verification.")
+    for rule in rules:
+        if _value(rule, "description") != AUTH_COOKIE_RULE_DESCRIPTION:
+            continue
+        if (
+            str(_value(rule, "enabled")).lower() == "true"
+            and str(_value(rule, "matchType", "matchtype")).upper() == "REQ_HEADER"
+            and str(_value(rule, "matchRegex", "matchregex")).lower() == "false"
+            and _value(rule, "matchString", "matchstring") == "Cookie"
+            and _value(rule, "replacement") == cookie
+            and _value(rule, "url") == url_pattern
+        ):
+            return
+        break
+    raise RuntimeError("ZAP authenticated-session header rule failed read-back verification.")
 
 
 def zap_started(zap, target):
@@ -152,6 +190,7 @@ def zap_import_context_wrap(context_id):
         exclude_regexes = _ZAP.context.exclude_regexs(CONTEXT_NAME)
         if not isinstance(exclude_regexes, list) or login_exclusion not in exclude_regexes:
             raise RuntimeError("ZAP imported login-form exclusion failed read-back verification.")
+        _add_authenticated_cookie_rule(_ZAP, origin, auth_cookie)
     except Exception as error:
         if isinstance(error, RuntimeError) and str(error).startswith("ZAP "):
             raise
