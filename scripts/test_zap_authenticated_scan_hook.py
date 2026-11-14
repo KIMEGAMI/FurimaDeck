@@ -33,13 +33,22 @@ class FakeSpider:
 
 
 class FakeContext:
-    def __init__(self, *, export=True, apply_scope=True, include_readback=True):
+    def __init__(
+        self,
+        *,
+        export=True,
+        apply_scope=True,
+        include_readback=True,
+        exclude_readback=True,
+    ):
         self.export = export
         self.apply_scope = apply_scope
         self.include_readback = include_readback
+        self.exclude_readback = exclude_readback
         self.created = False
         self.removed = False
         self.include_pattern = None
+        self.exclude_pattern = None
         self.in_scope = "false"
 
     def new_context(self, name):
@@ -49,6 +58,10 @@ class FakeContext:
 
     def include_in_context(self, name, pattern):
         self.include_pattern = pattern
+        return "OK"
+
+    def exclude_from_context(self, name, pattern):
+        self.exclude_pattern = pattern
         return "OK"
 
     def set_context_in_scope(self, name, enabled):
@@ -63,6 +76,11 @@ class FakeContext:
         if not self.include_readback or self.include_pattern is None:
             return []
         return [self.include_pattern]
+
+    def exclude_regexs(self, name):
+        if not self.exclude_readback or self.exclude_pattern is None:
+            return []
+        return [self.exclude_pattern]
 
     def export_context(self, name, path):
         if self.export:
@@ -113,6 +131,10 @@ class AuthenticatedZapHookTest(unittest.TestCase):
         HOOK.zap_started(zap, "https://127.0.0.1:8443/furimadeck-dashboard")
         self.assertTrue(zap.context.removed)
         self.assertEqual(zap.context.include_pattern, r"https://127\.0\.0\.1:8443/.*")
+        self.assertEqual(
+            zap.context.exclude_pattern,
+            r"https://127\.0\.0\.1:8443/login/?(?:\?.*)?",
+        )
         self.assertEqual(zap.context.in_scope, "true")
         self.assertTrue(self.context_file.is_file())
         HOOK.zap_import_context_wrap("3")
@@ -159,6 +181,11 @@ class AuthenticatedZapHookTest(unittest.TestCase):
 
         zap = FakeZap(context=FakeContext(include_readback=False))
         with self.assertRaisesRegex(RuntimeError, "scope failed read-back"):
+            HOOK.zap_started(zap, "https://127.0.0.1:8443")
+        self.assertTrue(zap.context.removed)
+
+        zap = FakeZap(context=FakeContext(exclude_readback=False))
+        with self.assertRaisesRegex(RuntimeError, "login-form exclusion failed read-back"):
             HOOK.zap_started(zap, "https://127.0.0.1:8443")
         self.assertTrue(zap.context.removed)
 

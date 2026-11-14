@@ -73,6 +73,10 @@ def _new_id(response, *names):
     raise RuntimeError("ZAP did not return the identifier required for authenticated scanning.")
 
 
+def _login_exclusion_pattern(origin):
+    return re.escape(origin) + r"/login/?(?:\?.*)?"
+
+
 def zap_started(zap, target):
     """Export an in-scope context skeleton and prevent Spider from following logout."""
     global _ZAP, _TARGET_ORIGIN
@@ -95,11 +99,19 @@ def zap_started(zap, target):
             zap.context.include_in_context(CONTEXT_NAME, scope_pattern),
             "scope the isolated application",
         )
+        login_exclusion = _login_exclusion_pattern(origin)
+        _api_ok(
+            zap.context.exclude_from_context(CONTEXT_NAME, login_exclusion),
+            "exclude the login form from the authenticated scan",
+        )
         _api_ok(zap.context.set_context_in_scope(CONTEXT_NAME, "true"), "mark the scan context in scope")
         _require_value(zap.context.context(CONTEXT_NAME), "true", "inScope")
         include_regexes = zap.context.include_regexs(CONTEXT_NAME)
         if not isinstance(include_regexes, list) or scope_pattern not in include_regexes:
             raise RuntimeError("ZAP scan context scope failed read-back verification.")
+        exclude_regexes = zap.context.exclude_regexs(CONTEXT_NAME)
+        if not isinstance(exclude_regexes, list) or login_exclusion not in exclude_regexes:
+            raise RuntimeError("ZAP login-form exclusion failed read-back verification.")
         _api_ok(zap.context.export_context(CONTEXT_NAME, str(context_file)), "export the scan context")
         if not context_file.is_file() or context_file.stat().st_size == 0:
             raise RuntimeError("ZAP did not create the authenticated scan context file.")
@@ -131,11 +143,15 @@ def zap_import_context_wrap(context_id):
         ):
             raise RuntimeError("ZAP authenticated-session header configuration is missing or unsafe.")
         scope_pattern = origin.replace(".", r"\.") + r"/.*"
+        login_exclusion = _login_exclusion_pattern(origin)
         context_state = _ZAP.context.context(CONTEXT_NAME)
         _require_value(context_state, "true", "inScope")
         include_regexes = _ZAP.context.include_regexs(CONTEXT_NAME)
         if not isinstance(include_regexes, list) or scope_pattern not in include_regexes:
             raise RuntimeError("ZAP imported scan context scope failed read-back verification.")
+        exclude_regexes = _ZAP.context.exclude_regexs(CONTEXT_NAME)
+        if not isinstance(exclude_regexes, list) or login_exclusion not in exclude_regexes:
+            raise RuntimeError("ZAP imported login-form exclusion failed read-back verification.")
     except Exception as error:
         if isinstance(error, RuntimeError) and str(error).startswith("ZAP "):
             raise
