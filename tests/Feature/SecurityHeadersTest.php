@@ -10,6 +10,8 @@ class SecurityHeadersTest extends TestCase
     {
         $this->get(route('login'))
             ->assertOk()
-            ->assertHeader('X-Frame-Options', 'DENY');
+            ->assertHeader('X-Frame-Options', 'DENY')
+            ->assertHeader('Cross-Origin-Opener-Policy', 'same-origin')
+            ->assertHeader('Cross-Origin-Resource-Policy', 'same-origin');
     }
 }

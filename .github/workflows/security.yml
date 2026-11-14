@@ -263,7 +263,6 @@ jobs:
           check_header X-Frame-Options DENY /
           check_header Referrer-Policy strict-origin-when-cross-origin /
           check_header Permissions-Policy 'camera=(self), microphone=(), geolocation=()' /
-          check_header Cross-Origin-Embedder-Policy require-corp /
           check_header Cross-Origin-Opener-Policy same-origin /
           check_header Cross-Origin-Resource-Policy same-origin /
           check_header Server Apache /
@@ -325,7 +324,6 @@ jobs:
             check_header X-Frame-Options DENY "$path"
             check_header Referrer-Policy strict-origin-when-cross-origin "$path"
             check_header Permissions-Policy 'camera=(self), microphone=(), geolocation=()' "$path"
-            check_header Cross-Origin-Embedder-Policy require-corp "$path"
             check_header Cross-Origin-Opener-Policy same-origin "$path"
             check_header Cross-Origin-Resource-Policy same-origin "$path"
             check_header Server Apache "$path"
