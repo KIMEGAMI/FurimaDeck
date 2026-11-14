@@ -172,11 +172,48 @@ export async function prepareAuthenticatedZapSession({
     throw new Error('The protected dashboard did not return its authenticated page marker.');
   }
 
+  // Use the cookie jar after processing the protected response. Laravel may refresh
+  // the session cookie on this response, so the earlier login-response value is
+  // not necessarily the latest value to hand to ZAP.
+  const finalSessionCookie = cookies.get(sessionCookieName);
+  if (
+    !finalSessionCookie?.httpOnly
+    || !finalSessionCookie.secure
+    || !finalSessionCookie.value
+    || !['lax', 'strict'].includes(finalSessionCookie.sameSite)
+    || finalSessionCookie.path !== '/'
+    || !finalSessionCookie.hostOnly
+  ) {
+    throw new Error('The verified dashboard response did not retain a secure authenticated session cookie.');
+  }
+
+  const finalProtectedPage = await request(new URL('/furimadeck-dashboard', app.origin));
+  collectCookies(finalProtectedPage, cookies);
+  if (finalProtectedPage.status !== 200) {
+    throw new Error('The final authenticated session cookie could not reach the protected dashboard.');
+  }
+  const finalProtectedBody = await finalProtectedPage.text();
+  if (!finalProtectedBody.includes(authenticatedDashboardMarker)) {
+    throw new Error('The final authenticated session cookie did not return the protected dashboard.');
+  }
+
+  const verifiedSessionCookie = cookies.get(sessionCookieName);
+  if (
+    !verifiedSessionCookie?.httpOnly
+    || !verifiedSessionCookie.secure
+    || !verifiedSessionCookie.value
+    || !['lax', 'strict'].includes(verifiedSessionCookie.sameSite)
+    || verifiedSessionCookie.path !== '/'
+    || !verifiedSessionCookie.hostOnly
+  ) {
+    throw new Error('The final dashboard response did not retain a secure authenticated session cookie.');
+  }
+
   return {
     loginStatus: loginResponse.status,
     protectedStatus: protectedPage.status,
     sessionRotated: true,
-    authCookieHeader: `${sessionCookieName}=${sessionCookie.value}`,
+    authCookieHeader: `${sessionCookieName}=${verifiedSessionCookie.value}`,
   };
 }
 

@@ -51,6 +51,15 @@ function authenticatedFetch({
     }
     assert.equal(calls[3].url, 'https://127.0.0.1:8443/furimadeck-dashboard');
     assert.equal(calls[3].options.headers.cookie, `app_session=${rotateSession ? 'authenticated' : 'anonymous'}; XSRF-TOKEN=csrf-cookie`);
+    if (calls.length === 4) {
+      return new Response(protectedBody, {
+        status: protectedStatus,
+        headers: { 'set-cookie': 'app_session=refreshed-authenticated; Path=/; Secure; HttpOnly; SameSite=Lax' },
+      });
+    }
+    assert.equal(calls.length, 5);
+    assert.equal(calls[4].url, 'https://127.0.0.1:8443/furimadeck-dashboard');
+    assert.equal(calls[4].options.headers.cookie, 'app_session=refreshed-authenticated; XSRF-TOKEN=csrf-cookie');
     return new Response(protectedBody, { status: protectedStatus });
   };
   return { calls, fetchImpl };
@@ -71,9 +80,9 @@ test('authenticates a disposable CI account, rotates its session, and verifies a
     loginStatus: 302,
     protectedStatus: 200,
     sessionRotated: true,
-    authCookieHeader: 'app_session=authenticated',
+    authCookieHeader: 'app_session=refreshed-authenticated',
   });
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
 });
 
 test('writes the generated authenticated cookie only to a new mode-600 file', async () => {
