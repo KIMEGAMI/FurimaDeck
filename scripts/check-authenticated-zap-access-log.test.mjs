@@ -42,15 +42,15 @@ test('fails when the authenticated scan never requests the protected dashboard',
   );
 });
 
-test('fails when the protected page is reachable but ZAP never completes a login POST', () => {
-  assert.throws(
-    () => summarizeAuthenticatedZapAccessLog([
-      'GET /furimadeck-dashboard 200 1',
-      'GET /login 200 -',
-      'POST /login 419 1',
-    ].join('\n')),
-    /did not record a successful disposable-account login response/,
-  );
+test('accepts preflight-authenticated cookie scans without ZAP form-login attempts', () => {
+  const summary = summarizeAuthenticatedZapAccessLog([
+    'GET /furimadeck-dashboard 200 1',
+    'GET /furimadeck-dashboard 200 1',
+    'GET /products 200 1',
+  ].join('\n'));
+
+  assert.match(summary, /total=2; session-cookie-present=2; HTTP statuses=200:2/);
+  assert.match(summary, /successful-posts=0/);
 });
 
 test('fails closed on malformed access-log records', () => {

@@ -73,10 +73,6 @@ export function summarizeAuthenticatedZapAccessLog(logText) {
   if (dashboardRequests !== (statusCounts.get('200') ?? 0)) {
     throw new Error(`${summary}\nOne or more authenticated requests to the protected dashboard did not return HTTP 200.`);
   }
-  if (successfulLoginPosts === 0) {
-    throw new Error(`${summary}\nAuthenticated ZAP did not record a successful disposable-account login response.`);
-  }
-
   return summary;
 }
 

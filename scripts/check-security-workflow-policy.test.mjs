@@ -20,18 +20,20 @@ test('both ZAP scans restrict the API to the exact scanner and loopback hosts', 
   assert.doesNotMatch(workflow, /api\.disablekey=false/);
 });
 
-test('the disposable ZAP credential file is private and removed on exit', () => {
-  assert.match(workflow, /auth_credentials_file=""/);
-  assert.ok(workflow.includes('auth_credentials_file="$(mktemp '));
-  assert.ok(workflow.includes('chmod 600 "$auth_credentials_file"'));
-  assert.ok(workflow.includes("stat -c '%a' -- \"$auth_credentials_file\""));
-  assert.ok(workflow.includes('rm -f -- "$auth_credentials_file"'));
-  assert.ok(workflow.includes('unset zap_auth_email zap_auth_password'));
-  assert.ok(workflow.includes('auth_runtime_credentials_file=""'));
-  assert.ok(workflow.includes("sudo install -o \"$zap_container_uid\" -g \"$zap_container_gid\" -m 600 -- \"$auth_credentials_file\" \"$auth_runtime_credentials_file\""));
-  assert.ok(workflow.includes("stat -c '%a:%u:%g' -- \"$auth_runtime_credentials_file\""));
-  assert.ok(workflow.includes('ZAP_AUTH_CREDENTIALS_FILE=/zap/wrk/furimadeck-zap-auth-credentials'));
+test('the disposable ZAP session cookie is private, host-scoped, and removed on exit', () => {
+  assert.ok(workflow.includes('auth_cookie_file=""'));
+  assert.ok(workflow.includes('ZAP_TEST_AUTH_COOKIE_FILE="$auth_cookie_file"'));
+  assert.ok(workflow.includes("stat -c '%a' -- \"$auth_cookie_file\""));
+  assert.ok(workflow.includes('auth_header_env_file="$(mktemp '));
+  assert.ok(workflow.includes('chmod 600 "$auth_header_env_file"'));
+  assert.ok(workflow.includes('ZAP_AUTH_HEADER=Cookie'));
+  assert.ok(workflow.includes('ZAP_AUTH_HEADER_VALUE=%s'));
+  assert.ok(workflow.includes('ZAP_AUTH_HEADER_SITE=%s'));
+  assert.ok(workflow.includes('--env-file "$auth_header_env_file"'));
+  assert.ok(workflow.includes('rm -f -- "$auth_cookie_file"'));
+  assert.ok(workflow.includes('rm -f -- "$auth_header_env_file"'));
   assert.ok(workflow.includes('--hook=/zap/wrk/furimadeck-zap-authenticated-scan-hook.py'));
+  assert.doesNotMatch(workflow, /ZAP_AUTH_CREDENTIALS_FILE|-U "FurimaDeck CI scanner"/);
   assert.ok(workflow.includes("docker run --rm --entrypoint /bin/sh \"$zap_image\" -c 'id -u; id -g'"));
 });
 

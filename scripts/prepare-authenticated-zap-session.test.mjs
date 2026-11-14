@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { prepareAuthenticatedZapSession } from './prepare-authenticated-zap-session.mjs';
+import { prepareAuthenticatedZapSession, writePrivateCookieFile } from './prepare-authenticated-zap-session.mjs';
 
 const email = 'furimadeck-zap-12345.2@example.invalid';
 const password = 'a'.repeat(64);
@@ -65,9 +67,48 @@ test('authenticates a disposable CI account, rotates its session, and verifies a
     fetchImpl,
   });
 
-  assert.deepEqual(result, { loginStatus: 302, protectedStatus: 200, sessionRotated: true });
+  assert.deepEqual(result, {
+    loginStatus: 302,
+    protectedStatus: 200,
+    sessionRotated: true,
+    authCookieHeader: 'app_session=authenticated',
+  });
   assert.equal(calls.length, 4);
 });
+
+test('writes the generated authenticated cookie only to a new mode-600 file', async () => {
+  const testingRoot = resolve('storage/framework/testing');
+  const directory = await mkdtemp(join(testingRoot, 'zap-cookie-'));
+  const outputPath = join(directory, 'session-cookie');
+
+  try {
+    await writePrivateCookieFile(outputPath, 'app_session=generated-cookie');
+    assert.equal(await readFile(outputPath, 'utf8'), 'app_session=generated-cookie\n');
+    if (process.platform !== 'win32') {
+      assert.equal((await stat(outputPath)).mode & 0o777, 0o600);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('does not overwrite or delete an existing authenticated-cookie output file', async () => {
+  const testingRoot = resolve('storage/framework/testing');
+  const directory = await mkdtemp(join(testingRoot, 'zap-cookie-existing-'));
+  const outputPath = join(directory, 'session-cookie');
+
+  try {
+    await writeFile(outputPath, 'keep-existing-file');
+    await assert.rejects(writePrivateZapCookieFileForTest(outputPath), /EEXIST/);
+    assert.equal(await readFile(outputPath, 'utf8'), 'keep-existing-file');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+function writePrivateZapCookieFileForTest(path) {
+  return writePrivateCookieFile(path, 'app_session=generated-cookie');
+}
 
 test('fails if the protected dashboard accepts an unauthenticated request', async () => {
   const { calls, fetchImpl } = authenticatedFetch({ preAuthStatus: 200, preAuthLocation: null });

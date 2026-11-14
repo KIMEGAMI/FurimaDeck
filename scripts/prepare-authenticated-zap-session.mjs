@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { open, lstat, unlink } from 'node:fs/promises';
+import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const authenticatedDashboardMarker = '<h1 class="sr-only">FurimaDeck Dashboard</h1>';
@@ -157,6 +158,9 @@ export async function prepareAuthenticatedZapSession({
   if (sessionCookie.value === initialSessionCookie.value) {
     throw new Error('The login flow did not rotate the session identifier.');
   }
+  if (!/^[A-Za-z0-9+/_=%-]+$/.test(sessionCookie.value)) {
+    throw new Error('The authenticated session cookie has an unsupported format.');
+  }
 
   const protectedPage = await request(new URL('/furimadeck-dashboard', app.origin));
   collectCookies(protectedPage, cookies);
@@ -168,16 +172,50 @@ export async function prepareAuthenticatedZapSession({
     throw new Error('The protected dashboard did not return its authenticated page marker.');
   }
 
-  return { loginStatus: loginResponse.status, protectedStatus: protectedPage.status, sessionRotated: true };
+  return {
+    loginStatus: loginResponse.status,
+    protectedStatus: protectedPage.status,
+    sessionRotated: true,
+    authCookieHeader: `${sessionCookieName}=${sessionCookie.value}`,
+  };
+}
+
+export async function writePrivateCookieFile(path, cookieHeader) {
+  if (typeof path !== 'string' || !isAbsolute(path) || path.includes('\n') || path.includes('\r')) {
+    throw new Error('An absolute authenticated-session output path is required.');
+  }
+
+  let file;
+  let created = false;
+  try {
+    file = await open(path, 'wx', 0o600);
+    created = true;
+    await file.writeFile(`${cookieHeader}\n`, { encoding: 'utf8' });
+    await file.sync();
+    const metadata = await lstat(path);
+    if (
+      !metadata.isFile()
+      || metadata.isSymbolicLink()
+      || (process.platform !== 'win32' && (metadata.mode & 0o777) !== 0o600)
+    ) {
+      throw new Error('The authenticated-session output file has unsafe permissions.');
+    }
+  } catch (error) {
+    if (created) await unlink(path).catch(() => {});
+    throw error;
+  } finally {
+    await file?.close();
+  }
 }
 
 async function main() {
-  await prepareAuthenticatedZapSession({
+  const result = await prepareAuthenticatedZapSession({
     appUrl: process.env.ZAP_TEST_APP_URL,
     email: process.env.ZAP_TEST_EMAIL,
     password: process.env.ZAP_TEST_PASSWORD,
     sessionCookieName: process.env.ZAP_TEST_SESSION_COOKIE_NAME,
   });
+  await writePrivateCookieFile(process.env.ZAP_TEST_AUTH_COOKIE_FILE, result.authCookieHeader);
   process.stdout.write('Disposable CI account authenticated, rotated its session, and reached the protected dashboard (HTTP 200).\n');
 }
 
