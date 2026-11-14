@@ -131,8 +131,10 @@ jobs:
           MAIL_MAILER: array
           FURIMADECK_CUTOVER_ENABLED: false
           FURIMADECK_PRODUCT_MANAGEMENT_ENABLED: false
-          FURIMADECK_DEMO_USER_ENABLED: false
-          FURIMADECK_DEMO_USER_EMAIL: ""
+          # Keep demo-identity authorization tests active while avoiding any
+          # dependency on the E2E-generated password or persistent browser state.
+          FURIMADECK_DEMO_USER_ENABLED: true
+          FURIMADECK_DEMO_USER_EMAIL: demo@example.com
           FURIMADECK_DEMO_USER_PASSWORD: ""
         run: composer test
 

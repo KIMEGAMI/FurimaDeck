@@ -17,6 +17,8 @@ class AdminBulkMailTest extends TestCase
             'is_admin' => true,
         ]);
 
+        $expectedFromAddress = config('admin_mail.from_address');
+
         $response = $this
             ->actingAs($admin)
             ->get(route('admin.bulk-mail.index'));
@@ -24,7 +26,7 @@ class AdminBulkMailTest extends TestCase
         $response
             ->assertOk()
             ->assertSee('一斉メール送信', false)
-            ->assertSee('info@kimegami.jp', false);
+            ->assertSee($expectedFromAddress, false);
     }
 
     public function test_regular_user_cannot_view_bulk_mail_page(): void
