@@ -97,6 +97,9 @@ jobs:
           database_file="$GITHUB_WORKSPACE/storage/framework/testing/furimadeck-zap-${suffix}.sqlite"
           storage_root="$RUNNER_TEMP/furimadeck-zap-${suffix}"
           auth_credentials_file=""
+          auth_runtime_credentials_file=""
+          auth_hook_file=""
+          zap_image="docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238"
           static_root="/var/www/furimadeck-zap-static-${suffix}"
           storage_public_root="/var/www/furimadeck-zap-storage-${suffix}"
           mkdir -p "$(dirname "$database_file")" "$storage_root/framework/views" "$storage_root/framework/cache/data" "$storage_root/framework/sessions" "$storage_root/logs" "$storage_root/app/private" "$storage_root/app/public" "$RUNNER_TEMP/zap"
@@ -107,7 +110,15 @@ jobs:
           printf 'PUBLIC_STORAGE_CONTROL_SENTINEL\n' | sudo tee "$storage_public_root/security-static-control.txt" >/dev/null
           printf 'PRIVATE_PRODUCT_IMAGE_SENTINEL\n' | sudo tee "$storage_public_root/products/2147483647/ci-private-image-sentinel.txt" >/dev/null
           sudo ln -s "$storage_public_root" "$static_root/storage"
-          sudo chown 1000:1000 "$RUNNER_TEMP/zap"
+          zap_runtime_identity="$(docker run --rm --entrypoint /bin/sh "$zap_image" -c 'id -u; id -g')"
+          mapfile -t zap_runtime_ids <<< "$zap_runtime_identity"
+          if [ "${#zap_runtime_ids[@]}" -ne 2 ] || ! [[ "${zap_runtime_ids[0]}" =~ ^[0-9]+$ ]] || ! [[ "${zap_runtime_ids[1]}" =~ ^[0-9]+$ ]] || [ "${zap_runtime_ids[0]}" = 0 ]; then
+            echo 'The pinned ZAP image returned an invalid non-root runtime identity.' >&2
+            exit 1
+          fi
+          zap_container_uid="${zap_runtime_ids[0]}"
+          zap_container_gid="${zap_runtime_ids[1]}"
+          sudo chown "$zap_container_uid:$zap_container_gid" "$RUNNER_TEMP/zap"
           touch "$database_file"
           export FURIMADECK_DB_DATABASE="$database_file"
           export LARAVEL_STORAGE_PATH="$storage_root"
@@ -117,7 +128,7 @@ jobs:
           php artisan migrate --database=furimadeck --path=database/migrations/furimadeck --force --no-interaction
           setsid php artisan serve --host=127.0.0.1 --port=8003 > "$RUNNER_TEMP/furimadeck-zap-app.log" 2>&1 &
           app_pid=$!
-          trap 'sudo systemctl stop apache2 2>/dev/null || true; kill -- -"$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; if [ -n "$auth_credentials_file" ]; then rm -f -- "$auth_credentials_file"; fi; rm -f -- "$RUNNER_TEMP/zap/furimadeck-zap-auth-context.xml"' EXIT
+          trap 'sudo systemctl stop apache2 2>/dev/null || true; kill -- -"$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; if [ -n "$auth_credentials_file" ]; then rm -f -- "$auth_credentials_file"; fi; if [ -n "$auth_runtime_credentials_file" ]; then sudo rm -f -- "$auth_runtime_credentials_file"; fi; if [ -n "$auth_hook_file" ]; then sudo rm -f -- "$auth_hook_file"; fi; rm -f -- "$RUNNER_TEMP/zap/furimadeck-zap-auth-context.xml"' EXIT
           for attempt in $(seq 1 60); do
             if curl --fail --silent --output /dev/null http://127.0.0.1:8003/up; then
               break
@@ -370,7 +381,7 @@ jobs:
             --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
             --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
             --entrypoint /bin/sh \
-            docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
+            "$zap_image" \
             -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py -t "$1" -m 5 -T 10 -z "-config api.addrs.addr.name=^(zap|localhost|127[.]0[.]0[.]1|::1|0:0:0:0:0:0:0:1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$ -config api.addrs.addr.regex=true" -J furimadeck-zap-report.json -r furimadeck-zap-report.html' \
             sh "$APP_URL"
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-report.json"
@@ -417,20 +428,25 @@ jobs:
             exit 1
           fi
           unset zap_auth_email zap_auth_password
-          hook_file="$RUNNER_TEMP/zap-authenticated-scan-hook.py"
-          cp scripts/zap-authenticated-scan-hook.py "$hook_file"
-          test -r "$hook_file"
+          auth_runtime_credentials_file="$RUNNER_TEMP/zap/furimadeck-zap-auth-credentials"
+          auth_hook_file="$RUNNER_TEMP/zap/furimadeck-zap-authenticated-scan-hook.py"
+          sudo install -o "$zap_container_uid" -g "$zap_container_gid" -m 600 -- "$auth_credentials_file" "$auth_runtime_credentials_file"
+          sudo install -o "$zap_container_uid" -g "$zap_container_gid" -m 644 -- scripts/zap-authenticated-scan-hook.py "$auth_hook_file"
+          rm -f -- "$auth_credentials_file"
+          auth_credentials_file=""
+          if [ "$(stat -c '%a:%u:%g' -- "$auth_runtime_credentials_file")" != "600:$zap_container_uid:$zap_container_gid" ] || [ "$(stat -c '%a:%u:%g' -- "$auth_hook_file")" != "644:$zap_container_uid:$zap_container_gid" ]; then
+            echo 'Authenticated ZAP runtime files have unsafe owner or mode.' >&2
+            exit 1
+          fi
           docker run --rm --network host \
             --volume "$RUNNER_TEMP/zap:/zap/wrk/:rw" \
-            --volume "$hook_file:/tmp/zap-authenticated-scan-hook.py:ro" \
-            --volume "$auth_credentials_file:/tmp/zap-auth-credentials:ro" \
             --volume "$tls_root/ca.pem:/tmp/furimadeck-ci-ca.pem:ro" \
             --env ZAP_AUTH_CONTEXT_FILE=/zap/wrk/furimadeck-zap-auth-context.xml \
-            --env ZAP_AUTH_CREDENTIALS_FILE=/tmp/zap-auth-credentials \
+            --env ZAP_AUTH_CREDENTIALS_FILE=/zap/wrk/furimadeck-zap-auth-credentials \
             --env "APP_URL=$APP_URL" \
             --entrypoint /bin/sh \
-            docker.io/zaproxy/zap-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
-            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-auth-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-auth-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py --hook=/tmp/zap-authenticated-scan-hook.py -n /zap/wrk/furimadeck-zap-auth-context.xml -U "FurimaDeck CI scanner" -t "$1" -m 5 -T 10 -z "-config api.addrs.addr.name=^(zap|localhost|127[.]0[.]0[.]1|::1|0:0:0:0:0:0:0:1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$ -config api.addrs.addr.regex=true" -J furimadeck-zap-authenticated-report.json -r furimadeck-zap-authenticated-report.html' \
+            "$zap_image" \
+            -ec 'keytool -importcert -noprompt -alias furimadeck-ci-ca -file /tmp/furimadeck-ci-ca.pem -keystore /zap/wrk/furimadeck-zap-auth-truststore.p12 -storetype PKCS12 -storepass changeit && export JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/zap/wrk/furimadeck-zap-auth-truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12" && exec zap-full-scan.py --hook=/zap/wrk/furimadeck-zap-authenticated-scan-hook.py -n /zap/wrk/furimadeck-zap-auth-context.xml -U "FurimaDeck CI scanner" -t "$1" -m 5 -T 10 -z "-config api.addrs.addr.name=^(zap|localhost|127[.]0[.]0[.]1|::1|0:0:0:0:0:0:0:1|::ffff:127[.]0[.]0[.]1)(:[0-9]+)?$ -config api.addrs.addr.regex=true" -J furimadeck-zap-authenticated-report.json -r furimadeck-zap-authenticated-report.html' \
             sh "$APP_URL/furimadeck-dashboard"
           test -s "$RUNNER_TEMP/zap/furimadeck-zap-authenticated-report.json"
           node scripts/check-authenticated-zap-access-log.mjs "$auth_log" "$auth_log_offset"

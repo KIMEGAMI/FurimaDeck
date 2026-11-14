@@ -27,4 +27,10 @@ test('the disposable ZAP credential file is private and removed on exit', () => 
   assert.ok(workflow.includes("stat -c '%a' -- \"$auth_credentials_file\""));
   assert.ok(workflow.includes('rm -f -- "$auth_credentials_file"'));
   assert.ok(workflow.includes('unset zap_auth_email zap_auth_password'));
+  assert.ok(workflow.includes('auth_runtime_credentials_file=""'));
+  assert.ok(workflow.includes("sudo install -o \"$zap_container_uid\" -g \"$zap_container_gid\" -m 600 -- \"$auth_credentials_file\" \"$auth_runtime_credentials_file\""));
+  assert.ok(workflow.includes("stat -c '%a:%u:%g' -- \"$auth_runtime_credentials_file\""));
+  assert.ok(workflow.includes('ZAP_AUTH_CREDENTIALS_FILE=/zap/wrk/furimadeck-zap-auth-credentials'));
+  assert.ok(workflow.includes('--hook=/zap/wrk/furimadeck-zap-authenticated-scan-hook.py'));
+  assert.ok(workflow.includes("docker run --rm --entrypoint /bin/sh \"$zap_image\" -c 'id -u; id -g'"));
 });
